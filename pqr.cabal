@@ -28,8 +28,8 @@ library
       Circuit.Checking
       Circuit.Syntax
       Index
-      Language
-      TypeChecking
+      Language.Checking
+      Language.Syntax
       Wire.Checking
       Wire.Syntax
   other-modules:
