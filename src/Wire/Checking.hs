@@ -1,10 +1,14 @@
-module Wire.Checking where
+module Wire.Checking (
+    LabelContext,
+    synthesizeLabelContext,
+    synthesizeBundleType,
+    checkBundleType
+) where
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Wire.Syntax
 import Control.Monad.State.Lazy
 import Control.Monad.Except
-import Index
 
 -- Corresponds to Q in the paper
 type LabelContext = Map LabelId WireType
@@ -17,20 +21,23 @@ labelContextLookup id = do
     put labelContext'
     return result
 
-inferBundleType :: Bundle -> StateT LabelContext (Either String) BundleType
-inferBundleType UnitValue = return UnitType
-inferBundleType (Label id) = do
+-- Q ⊢ l => T
+synthesizeBundleType :: Bundle -> StateT LabelContext (Either String) BundleType
+synthesizeBundleType UnitValue = return UnitType
+synthesizeBundleType (Label id) = do
     ty <- labelContextLookup id
     return $ WireType ty
 
-inferLabelContext :: Bundle -> BundleType -> Either String LabelContext
-inferLabelContext UnitValue UnitType = Right Map.empty
-inferLabelContext (Label id) (WireType w) = Right $ Map.fromList [(id,w)]
-inferLabelContext _ _ = Left "Bundle and type do not match"
+synthesizeLabelContext :: Bundle -> BundleType -> Either String LabelContext
+synthesizeLabelContext UnitValue UnitType = Right Map.empty
+synthesizeLabelContext (Label id) (WireType w) = Right $ Map.fromList [(id,w)]
+synthesizeLabelContext _ _ = Left "Bundle and type do not match"
 
+-- Q ⊢ l <= T
+-- return value is True iff the linear contexts are empty at the return site
 checkBundleType :: Bundle -> BundleType -> StateT LabelContext (Either String) Bool
 checkBundleType l t = do
-    t' <- inferBundleType l
+    t' <- synthesizeBundleType l
     lc <- get
     if t == t'
         then return (Map.null lc)

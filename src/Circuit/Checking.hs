@@ -2,7 +2,6 @@ module Circuit.Checking where
 import Circuit.Syntax
 import Wire.Checking
 import Wire.Syntax
-import Data.Either.Extra
 
 sig :: QuantumOperation -> (BundleType,BundleType)
 sig Init = (UnitType, WireType Qubit)
@@ -14,7 +13,7 @@ sig PauliX = (WireType Qubit, WireType Qubit)
 inferCircuitSignature :: Circuit -> Either String (LabelContext,LabelContext)
 inferCircuitSignature (Op g l k) = do
     let (t,u) = sig g
-    q1 <- inferLabelContext l t
-    q2 <- inferLabelContext k u
+    q1 <- synthesizeLabelContext l t
+    q2 <- synthesizeLabelContext k u
     return (q1,q2)
 

@@ -1,7 +1,6 @@
 module Language.Checking where
 import Language.Syntax
 import Data.Map (Map)
-import qualified Data.Map as Map
 import Circuit.Checking
 import Wire.Checking
 import Index
@@ -13,16 +12,21 @@ import Control.Monad (when)
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
 
-embed :: StateT LabelContext (Either String) a -> StateT (IndexContext, TypingContext, LabelContext) (Either String) a
-embed comp = do
+-- turns a bundle type derivation (which only has a label context)
+-- into a typing derivation that does not use the index or typing context
+embedBundleDerivation :: StateT LabelContext (Either String) a
+                        -> StateT (IndexContext, TypingContext, LabelContext) (Either String) a
+embedBundleDerivation comp = do
     (ic, tc, lc) <- get
     case runStateT comp lc of
         Left err -> throwError err
         Right (x,remainingLc) -> put (ic, tc, remainingLc) >> return x
 
+-- Θ;Γ;Q ⊢ V <= A
+-- return value is True iff the linear contexts are empty at the return site
 checkValueType :: Value -> Type -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
 checkValueType (Bundle l) t = case t of 
-    BundleType t -> embed $ checkBundleType l t
+    BundleType t -> embedBundleDerivation $ checkBundleType l t
     _ -> throwError $ "Cannot give type " ++ show t ++ " to a bundle of wires"
 checkValueType (BoxedCircuit l c k) t = case t of
     Circ i t u -> if Number (width c) <= i 
@@ -34,20 +38,23 @@ checkValueType (BoxedCircuit l c k) t = case t of
         else throwError $ "Cannot conclude width (" ++ show c ++ ") <= " ++ show i
     _ -> throwError $ "Cannot give type " ++ show t ++ " to a boxed circuit"
 
-inferValueType :: Value -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Type
-inferValueType (Bundle l) = do
-    t <- embed $ inferBundleType l
+-- Θ;Γ;Q ⊢ V => A
+synthesizeValueType :: Value -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Type
+synthesizeValueType (Bundle l) = do
+    t <- embedBundleDerivation $ synthesizeBundleType l
     return $ BundleType t
-inferValueType (BoxedCircuit l c k) = lift $ do
+synthesizeValueType (BoxedCircuit l c k) = lift $ do
         (ql, qk) <- inferCircuitSignature c
-        t <- evalStateT (inferBundleType l) ql
-        u <- evalStateT (inferBundleType k) qk
+        t <- evalStateT (synthesizeBundleType l) ql
+        u <- evalStateT (synthesizeBundleType k) qk
         return $ Circ (Number $ width c) t u
 
+-- Θ;Γ;Q ⊢ M <= A ; I
+-- return value is True iff the linear contexts are empty at the return site
 checkTermType :: Term -> Type -> Index -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
 checkTermType (Apply c l) ty i = case ty of
     BundleType u -> do
-        cty <- inferValueType c
+        cty <- synthesizeValueType c
         case cty of
             Circ i' t u' -> do
                 domainCheck <- checkValueType l (BundleType t)
