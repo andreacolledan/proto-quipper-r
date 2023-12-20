@@ -8,9 +8,11 @@ type VariableId = String
 data Value
     = Bundle Bundle
     | BoxedCircuit Bundle Circuit Bundle
+    deriving Show
 
 data Term
-    = Apply Bundle Bundle
+    = Apply Value Value
+    deriving Show
 
 data Type
     = BundleType BundleType
