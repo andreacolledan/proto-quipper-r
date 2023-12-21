@@ -10,7 +10,8 @@ import Circuit.Syntax
 import Index
 import qualified Data.Set as Set
 import Wire.Checking (LabelContext)
-
+-- import Language.PretyPrinter 
+ 
 -- ∅;∅;l:Qubit ⊢ Apply (Hadamard,l) : Qubit ; 1 (SUCCEEDS)
 test1 :: IO()
 test1 = do

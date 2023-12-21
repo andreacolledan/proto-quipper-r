@@ -52,17 +52,20 @@ synthesizeValueType (BoxedCircuit l c k) = lift $ do
 -- Θ;Γ;Q ⊢ M <= A ; I
 -- return value is True iff the linear contexts are empty at the return site
 checkTermType :: Term -> Type -> Index -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
-checkTermType (Apply c l) ty i = case ty of
+checkTermType (Apply v w) t i = case t of
     BundleType u -> do
-        cty <- synthesizeValueType c
+        cty <- synthesizeValueType v
         case cty of
             Circ i' t u' -> do
-                domainCheck <- checkValueType l (BundleType t)
+                domainCheck <- checkValueType w (BundleType t)
                 when (u /= u') (throwError "Type mismatch")
                 when (i < i') (throwError "Circuit too wide")
                 return domainCheck
             _ -> throwError  "First argument of apply is supposed to be a circuit"
-    _ -> throwError $ "Cannot give type " ++ show ty ++ " to an apply statement"
+    _ -> throwError $ "Cannot give type " ++ show t ++ " to an apply statement"
+
+
+-- checkTermType t _ _ = throwError $ "Cannot check type of " ++ show t
 
 
         

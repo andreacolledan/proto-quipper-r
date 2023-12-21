@@ -33,7 +33,7 @@ synthesizeLabelContext UnitValue UnitType = Right Map.empty
 synthesizeLabelContext (Label id) (WireType w) = Right $ Map.fromList [(id,w)]
 synthesizeLabelContext _ _ = Left "Bundle and type do not match"
 
--- Q ⊢ l <= T
+-- Q ⊢ l <= T (Fig 10)
 -- return value is True iff the linear contexts are empty at the return site
 checkBundleType :: Bundle -> BundleType -> StateT LabelContext (Either String) Bool
 checkBundleType l t = do
