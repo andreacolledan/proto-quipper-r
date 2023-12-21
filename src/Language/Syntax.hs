@@ -13,7 +13,7 @@ data Value
 
 instance Pretty Value where
     pretty (Bundle b) = pretty b
-    pretty (BoxedCircuit b c b') = "(" ++ pretty b ++ ", " ++ pretty c ++ ", " ++ pretty b' ++ ")"
+    pretty (BoxedCircuit b c b') = pretty c
 
 data Term
     = Apply Value Value

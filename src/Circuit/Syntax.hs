@@ -21,7 +21,7 @@ data Circuit
     deriving Show
 
 instance Pretty Circuit where
-    pretty (Op op b1 b2) = pretty op ++ "(" ++ pretty b1 ++ ") -> " ++ pretty b2
+    pretty (Op op _ _) = pretty op
 
 -- For now, all circuits have width 1
 width :: Circuit -> Int

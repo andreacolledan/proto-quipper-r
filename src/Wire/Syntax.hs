@@ -10,6 +10,8 @@ data WireType
     | Qubit
     deriving (Eq, Show)
 
+instance Pretty WireType
+
 data Bundle
     = UnitValue
     | Label LabelId
