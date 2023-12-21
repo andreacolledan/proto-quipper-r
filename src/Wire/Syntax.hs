@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Wire.Syntax where
 import Index
+import PrettyPrinter
 
 type LabelId = String
 
@@ -14,10 +15,19 @@ data Bundle
     | Label LabelId
     deriving Show
 
+instance Pretty Bundle where
+    pretty UnitValue = "*"
+    pretty (Label id) = id
+
 data BundleType
     = UnitType
     | WireType WireType
     deriving (Eq, Show)
+
+instance Pretty BundleType where
+    pretty UnitType = "Unit"
+    pretty (WireType Bit) = "Bit"
+    pretty (WireType Qubit) = "Qubit"
 
 class Wide a where
     wireCount :: a -> Index

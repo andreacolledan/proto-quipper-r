@@ -30,6 +30,7 @@ library
       Index
       Language.Checking
       Language.Syntax
+      PrettyPrinter
       Wire.Checking
       Wire.Syntax
   other-modules:

@@ -1,7 +1,4 @@
-module Language.PretyPrinter where
-
-import Language.Syntax
-
+module PrettyPrinter where
 
 class Show a => Pretty a where 
   pretty :: a -> String

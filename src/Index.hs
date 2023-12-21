@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Index where
 import Data.Set (Set)
+import PrettyPrinter
 
 type IndexVariableId = String
 
@@ -9,6 +10,12 @@ data Index
     | Number Int
     | Plus Index Index
     deriving Show
+
+instance Pretty Index where
+    pretty (IndexVariable id) = id
+    pretty (Number n) = show n
+    pretty (Plus i j) = "(" ++ pretty i ++ " + " ++ pretty j ++ ")"
+
 
 -- Corresponds to Θ in the paper
 type IndexContext = Set IndexVariableId
