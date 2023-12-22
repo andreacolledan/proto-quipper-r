@@ -13,14 +13,14 @@ data Value
 
 instance Pretty Value where
     pretty (Bundle b) = pretty b
-    pretty (BoxedCircuit b c b') = pretty c
+    pretty (BoxedCircuit _ c _) = pretty c
 
 data Term
     = Apply Value Value
     deriving Show
 
 instance Pretty Term where
-    pretty (Apply v w) = "apply(" ++pretty v ++ ", " ++ pretty w ++ ")"
+    pretty (Apply v w) = "apply(" ++ pretty v ++ ", " ++ pretty w ++ ")"
 
 data Type
     = BundleType BundleType
@@ -28,13 +28,13 @@ data Type
     deriving Show
 
 instance Pretty Type where
-    pretty (BundleType bt) = pretty bt
-    pretty (Circ i t u) = "Circ " ++ pretty i ++ " (" ++ pretty t ++ ", " ++ pretty u ++ ")"
+    pretty (BundleType btype) = pretty btype
+    pretty (Circ i inBtype outBtype) = "Circ " ++ pretty i ++ " (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
 
-linear :: Type -> Bool
-linear (BundleType _) = True
-linear (Circ {}) = False
+isLinear :: Type -> Bool
+isLinear (BundleType _) = True
+isLinear (Circ {}) = False
 
 instance Wide Type where
-    wireCount (BundleType bt) = wireCount bt
+    wireCount (BundleType btype) = wireCount btype
     wireCount (Circ {}) = Number 0

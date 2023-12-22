@@ -11,9 +11,9 @@ sig PauliX   = (WireType Qubit, WireType Qubit)
 
 -- Will change dramatically
 inferCircuitSignature :: Circuit -> Either String (LabelContext, LabelContext)
-inferCircuitSignature (Op g l k) = do
-    let (t,u) = sig g
-    q1 <- synthesizeLabelContext l t
-    q2 <- synthesizeLabelContext k u
-    return (q1,q2)
+inferCircuitSignature (Op op inB outB) = do
+    let (inBtype, outBtype) = sig op
+    inq <- synthesizeLabelContext inB inBtype
+    outq <- synthesizeLabelContext outB outBtype
+    return (inq, outq)
 
