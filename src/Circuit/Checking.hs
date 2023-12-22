@@ -1,7 +1,7 @@
 module Circuit.Checking where
 import Circuit.Syntax
-import Wire.Checking
-import Wire.Syntax
+import WireBundle.Checking
+import WireBundle.Syntax
 
 sig :: QuantumOperation -> (BundleType, BundleType)
 sig Init     = (UnitType, WireType Qubit)

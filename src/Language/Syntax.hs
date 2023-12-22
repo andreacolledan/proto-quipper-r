@@ -1,5 +1,5 @@
 module Language.Syntax where
-import Wire.Syntax
+import WireBundle.Syntax
 import Circuit.Syntax
 import Index
 import PrettyPrinter

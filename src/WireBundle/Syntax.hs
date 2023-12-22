@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-module Wire.Syntax where
+module WireBundle.Syntax where
 import Index
 import PrettyPrinter
 

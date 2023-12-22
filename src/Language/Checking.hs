@@ -2,7 +2,7 @@ module Language.Checking where
 import Language.Syntax
 import Data.Map (Map)
 import Circuit.Checking
-import Wire.Checking
+import WireBundle.Checking
 import Index
 import Control.Monad.State.Lazy
 import Control.Monad.Except

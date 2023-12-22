@@ -1,5 +1,5 @@
 module Circuit.Syntax where
-import Wire.Syntax
+import WireBundle.Syntax
 import PrettyPrinter
 
 data QuantumOperation

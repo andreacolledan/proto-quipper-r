@@ -1,5 +1,5 @@
 module Main (main) where
-import Wire.Syntax
+import WireBundle.Syntax
 import Data.Set (Set)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -8,7 +8,7 @@ import Circuit.Syntax
 import Index
 import qualified Data.Set as Set
 import PrettyPrinter 
-import Wire.Checking (LabelContext)
+import WireBundle.Checking (LabelContext)
 import Language.Checking (TypingContext, checkTermType)
 import Control.Monad.State.Lazy
 

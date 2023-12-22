@@ -1,4 +1,4 @@
-module Wire.Checking (
+module WireBundle.Checking (
     LabelContext,
     synthesizeLabelContext,
     synthesizeBundleType,
@@ -6,7 +6,7 @@ module Wire.Checking (
 ) where
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Wire.Syntax
+import WireBundle.Syntax
 import Control.Monad.State.Lazy
 import Control.Monad.Except
 

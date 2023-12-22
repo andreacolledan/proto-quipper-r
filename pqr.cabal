@@ -31,8 +31,8 @@ library
       Language.Checking
       Language.Syntax
       PrettyPrinter
-      Wire.Checking
-      Wire.Syntax
+      WireBundle.Checking
+      WireBundle.Syntax
   other-modules:
       Paths_pqr
   autogen-modules:
