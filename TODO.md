@@ -11,13 +11,13 @@
 
 ### Wire language
 
-- [ ] Implement pairs of labels
+- [x] Implement pairs of labels
 - [ ] Implement sized lists of labels
 
 ### Language
 
 - [ ] Implement remaining language constructs
-  - [ ] Tuples and destructuring let
+  - [x] Tuples and destructuring let
   - [ ] Functions
   - [ ] Lifting and forcing (boxing and unboxing linear values)
   - [ ] Lists and fold

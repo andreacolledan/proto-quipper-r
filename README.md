@@ -1,3 +1,2 @@
-# pqr
-
-Run with `stack run`
+# Proto-Quipper-R
+Run tests with `stack test`
