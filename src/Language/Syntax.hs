@@ -9,6 +9,7 @@ type VariableId = String
 data Value
     = UnitValue
     | Label LabelId
+    | Variable VariableId
     | Pair Value Value
     | BoxedCircuit Bundle Circuit Bundle
     deriving Show
@@ -16,15 +17,18 @@ data Value
 instance Pretty Value where
     pretty UnitValue = "*"
     pretty (Label id) = id
+    pretty (Variable id) = id
     pretty (Pair v w) = "(" ++ pretty v ++ ", " ++ pretty w ++ ")"
     pretty (BoxedCircuit _ c _) = pretty c
 
 data Term
     = Apply Value Value
+    | Dest VariableId VariableId Value Term
     deriving Show
 
 instance Pretty Term where
     pretty (Apply v w) = "apply(" ++ pretty v ++ ", " ++ pretty w ++ ")"
+    pretty (Dest x y v m) = "(let (" ++ x ++ ", " ++ y ++ ") = " ++ pretty v ++ " in " ++ pretty m ++ ")"
 
 data Type
     = UnitType

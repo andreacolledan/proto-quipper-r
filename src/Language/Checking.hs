@@ -17,6 +17,21 @@ import qualified WireBundle.Syntax as Bundle
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
 
+typingContextLookup :: VariableId -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Type
+typingContextLookup id = do
+    (theta,gamma,q) <- get
+    outcome <- maybe (throwError $ "Unbound variable " ++ id) return (Map.lookup id gamma)
+    let gamma' = if isLinear outcome then Map.delete id gamma else gamma
+    put (theta,gamma',q)
+    return outcome
+
+bindVariable :: VariableId -> Type -> StateT (IndexContext, TypingContext, LabelContext) (Either String) ()
+bindVariable id typ = do
+    (theta,gamma,q) <- get
+    when (Map.member id gamma) $ throwError $ "Cannot shadow existing variable " ++ id
+    let gamma' = Map.insert id typ gamma
+    put (theta,gamma',q)
+
 linearContextsNonempty :: StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
 linearContextsNonempty = do
     (_, gamma, q) <- get
@@ -57,9 +72,14 @@ checkValueType (Label id) typ = case typ of
             then linearContextsNonempty
             else throwError $ "Label " ++ id ++ "has type " ++ pretty wtype' ++ " but is required to have type " ++ pretty wtype
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to label " ++ id
+checkValueType (Variable id) typ = do
+    typ' <- typingContextLookup id
+    if typ == typ'
+        then linearContextsNonempty
+        else throwError $ "Variable " ++ id ++ " has type " ++ pretty typ' ++ " but is required to have type " ++ pretty typ
 checkValueType (Pair v w) typ = case typ of
     Tensor typ1 typ2 -> do
-        checkValueType v typ1
+        _ <- checkValueType v typ1
         checkValueType w typ2
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to pair " ++ pretty (Pair v w)
 checkValueType (BoxedCircuit inB circ outB) typ = case typ of
@@ -78,6 +98,7 @@ synthesizeValueType UnitValue = return UnitType
 synthesizeValueType (Label id) = do
     wtype <- embedBundleDerivation $ labelContextLookup id
     return $ WireType wtype
+synthesizeValueType (Variable id) = typingContextLookup id
 synthesizeValueType (Pair v w) = do
     typ1 <- synthesizeValueType v
     typ2 <- synthesizeValueType w
@@ -100,7 +121,15 @@ checkTermType (Apply v w) typ i = do
                     "Term " ++ pretty (Apply v w) ++ " has type " ++ pretty outBtype ++ " but is required to have type " ++ pretty typ)
                 when (i < i') (throwError $ "Circuit has width " ++ pretty i' ++ " but is required to have width at most " ++ pretty i)
                 return inputCheck
-            _ -> throwError  "First argument of apply is supposed to be a circuit"
+            _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a circuit, instead has type " ++ pretty ctype
+checkTermType (Dest x y v m) typ i = do
+        ltyp <- synthesizeValueType v
+        case ltyp of
+            Tensor ltyp1 ltyp2 -> do
+                bindVariable x ltyp1
+                bindVariable y ltyp2
+                checkTermType m typ i
+            _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
 
 
 -- checkTermType t _ _ = throwError $ "Cannot check type of " ++ show t

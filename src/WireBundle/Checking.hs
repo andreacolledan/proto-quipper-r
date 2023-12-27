@@ -32,11 +32,19 @@ synthesizeBundleType UnitValue = return UnitType
 synthesizeBundleType (Label id) = do
     btype <- labelContextLookup id
     return $ WireType btype
+synthesizeBundleType (Pair b1 b2) = do
+    btype1 <- synthesizeBundleType b1
+    btype2 <- synthesizeBundleType b2
+    return $ Tensor btype1 btype2
 
 
 synthesizeLabelContext :: Bundle -> BundleType -> Either String LabelContext
 synthesizeLabelContext UnitValue UnitType = Right Map.empty
 synthesizeLabelContext (Label id) (WireType wtype) = Right $ Map.fromList [(id,wtype)]
+synthesizeLabelContext (Pair b1 b2) (Tensor btype1 btype2) = do
+    q1 <- synthesizeLabelContext b1 btype1
+    q2 <- synthesizeLabelContext b2 btype2
+    return $ Map.union q1 q2
 synthesizeLabelContext b btype = Left $ "Cannot match structure of " ++ pretty b ++ " with structure of " ++ pretty btype
 
 -- Q ⊢ l <= T (Fig 10)
