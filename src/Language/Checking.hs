@@ -10,7 +10,7 @@ import Circuit.Syntax
 import Control.Monad (when)
 import PrettyPrinter
 import qualified Data.Map as Map
-import WireBundle.Syntax (Bundle, BundleType)
+import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
 import qualified WireBundle.Syntax as Bundle
 
 -- Corresponds to Γ in the paper
@@ -132,6 +132,13 @@ checkTermType (Dest x y v m) typ i = do
                 bindVariable y ltyp2
                 checkTermType m typ i
             _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
+checkTermType (Return v) typ i = do
+        (_, gamma, q) <- get
+        let contextCount = Plus (wireCount gamma) (wireCount q)
+        vtyp <- synthesizeValueType v
+        when (vtyp /= typ) (throwError $ "Return value " ++ pretty v ++ " has type " ++ pretty vtyp ++ " but is required to have type " ++ pretty typ)
+        when (i /= contextCount) (throwError $ "Return value has width " ++ pretty (Plus (wireCount gamma) (wireCount q)) ++ " but is required to have width " ++ pretty i)
+        linearContextsNonempty
 
 
 -- checkTermType t _ _ = throwError $ "Cannot check type of " ++ show t

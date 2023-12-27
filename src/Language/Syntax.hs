@@ -24,11 +24,13 @@ instance Pretty Value where
 data Term
     = Apply Value Value
     | Dest VariableId VariableId Value Term
+    | Return Value
     deriving Show
 
 instance Pretty Term where
     pretty (Apply v w) = "apply(" ++ pretty v ++ ", " ++ pretty w ++ ")"
     pretty (Dest x y v m) = "(let (" ++ x ++ ", " ++ y ++ ") = " ++ pretty v ++ " in " ++ pretty m ++ ")"
+    pretty (Return v) = "return " ++ pretty v
 
 data Type
     = UnitType

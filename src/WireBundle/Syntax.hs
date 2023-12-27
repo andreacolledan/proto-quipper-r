@@ -42,7 +42,11 @@ class Wide a where
 instance (Traversable t, Wide a) => Wide (t a) where
     wireCount x = let wirecounts = wireCount <$> x in foldr Plus (Number 0) wirecounts
 
+instance Wide WireType where
+    wireCount Bit = Number 1
+    wireCount Qubit = Number 1
+
 instance Wide BundleType where
     wireCount UnitType = Number 0
-    wireCount (WireType _) = Number 1
+    wireCount (WireType wtype) = wireCount wtype
     wireCount (Tensor b1 b2) = Plus (wireCount b1) (wireCount b2)

@@ -46,5 +46,6 @@ main = hspec $ do
         bundleSynthesisSpec
         bundleCheckingSpec
         primitiveGatesSpec
+        returnSpec
         destSpec
         assortedSpec

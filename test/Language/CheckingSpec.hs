@@ -8,7 +8,7 @@ import WireBundle.Checking (LabelContext)
 import Language.Checking (TypingContext, checkTermType, checkValueType)
 import Control.Monad.State.Lazy
 import Language.Syntax (VariableId, Value(..), Term(..), Type(..))
-import WireBundle.Syntax (LabelId, WireType (Qubit))
+import WireBundle.Syntax (LabelId, WireType (Qubit, Bit))
 import qualified WireBundle.Syntax as Bundle
 import Test.Hspec
 import qualified Data.Set as Set
@@ -90,24 +90,55 @@ primitiveGatesSpec = do
             valueCheckingTest cnot Set.empty Map.empty Map.empty desiredType
                 `shouldSatisfy` isRight
 
+returnSpec :: Spec
+returnSpec = do
+    describe "return typechecking" $ do
+        it "should succeed when the rule's premises hold" $ do
+            -- ∅;∅;∅ ⊢ return * <= Unit ; 0
+            let term = Return UnitValue
+            let (typ, index) = (UnitType, Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+            -- ∅;x:Qubit;∅ ⊢ return x <= Qubit ; 1
+            let term = Return $ Variable "x"
+            let (typ, index) = (WireType Qubit, Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit)],Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+            -- ∅;x:Qubit,y:Bit;∅ ⊢ return (x,y) <= Qubit ⊗ Bit ; 2
+            let term = Return $ Pair (Variable "x") (Variable "y")
+            let (typ, index) = (Tensor (WireType Qubit) (WireType Bit), Number 2)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit),("y",WireType Bit)],Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+        it "should fail when the type does not match" $ do
+            -- ∅;x:Qubit;∅ ⊢ return x <= Bit ; 1
+            let term = Return $ Variable "x"
+            let (typ, index) = (WireType Bit, Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit)],Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+        it "should fail when the index does not match the context's wire count" $ do
+            -- ∅;x:Qubit,y:Bit;∅ ⊢ return (x,y) <= Qubit ⊗ Bit ; 1
+            let term = Return $ Pair (Variable "x") (Variable "y")
+            let (typ, index) = (Tensor (WireType Qubit) (WireType Bit), Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit),("y",WireType Bit)],Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
 
 
 destSpec :: Spec
 destSpec = do
-    describe "destructuring let" $ do
-        it "should typecheck when the rule's premises hold" $ do
+    describe "destructuring let typechecking" $ do
+        it "should succeed when the rule's premises hold" $ do
             -- ∅;∅;∅ ⊢ let (c,u) = (Init,*) in apply(c,u) <= Qubit ; 1
             let term = Dest "c" "u" (Pair qinit UnitValue) (Apply (Variable "c") (Variable "u"))
             let (typ, index) = (WireType Qubit, Number 1)
             let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
             termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
-        it "should not typecheck when binding shadows existing variable" $ do
+        it "should fail when binding shadows existing variable" $ do
             -- ∅;c:Unit;∅ ⊢ let (c,u) = (Init,*) in apply(c,u) <= Qubit ; 1
             let term = Dest "c" "u" (Pair qinit UnitValue) (Apply (Variable "c") (Variable "u"))
             let (typ, index) = (WireType Qubit, Number 1)
             let (theta,gamma,q) = (Set.empty,Map.fromList [("c",UnitType)],Map.empty)
             termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
-        it "should not typecheck when the two variables shadow each other" $ do
+        it "should fail when the two variables shadow each other" $ do
             -- ∅;∅;∅ ⊢ let (c,c) = (Init,*) in apply(c,c) <= Qubit ; 1
             let term = Dest "c" "c" (Pair qinit UnitValue) (Apply (Variable "c") (Variable "c"))
             let (typ, index) = (WireType Qubit, Number 1)
