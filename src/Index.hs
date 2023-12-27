@@ -31,11 +31,14 @@ instance Indexed Index where
     wellFormed _ (Number _) = True
     wellFormed context (Plus i j) = wellFormed context i && wellFormed context j
 
+eval ::  Index -> Int
+eval (Number n) = n
+eval (Plus i j) = eval i + eval j
+eval _ = error "Cannot evaluate index variable"
+
 -- We only compare number indices for now
 instance Eq Index where
-    (Number n) == (Number m) = n == m
-    _ == _ = False
+    i == j = eval i == eval j
 
 instance Ord Index where
-    (Number n) <= (Number m) = n <= m
-    _ <= _ = False
+    i <= j = eval i <= eval j
