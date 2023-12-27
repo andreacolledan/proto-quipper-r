@@ -9,7 +9,6 @@ import Control.Monad.Except
 import Circuit.Syntax
 import Control.Monad (when)
 import PrettyPrinter
-import Control.Monad.Cont (label)
 import qualified Data.Map as Map
 import WireBundle.Syntax (Bundle, BundleType)
 import qualified WireBundle.Syntax as Bundle

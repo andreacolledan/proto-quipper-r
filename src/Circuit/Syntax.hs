@@ -7,6 +7,7 @@ data QuantumOperation
     | Discard 
     | Hadamard
     | PauliX 
+    | CNot
     deriving Show
 
 instance Pretty QuantumOperation where
@@ -14,6 +15,7 @@ instance Pretty QuantumOperation where
     pretty Discard = "Discard"
     pretty Hadamard = "H"
     pretty PauliX = "X"
+    pretty CNot = "CNot"
 
 -- For now, only primitive circuits corresponding to gates
 data Circuit

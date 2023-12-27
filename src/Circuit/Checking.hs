@@ -8,6 +8,7 @@ sig Init     = (UnitType, WireType Qubit)
 sig Discard  = (WireType Qubit, UnitType)
 sig Hadamard = (WireType Qubit, WireType Qubit)
 sig PauliX   = (WireType Qubit, WireType Qubit)
+sig CNot     = (Tensor (WireType Qubit) (WireType Qubit), Tensor (WireType Qubit) (WireType Qubit))
 
 -- Will change dramatically
 inferCircuitSignature :: Circuit -> Either String (LabelContext, LabelContext)
