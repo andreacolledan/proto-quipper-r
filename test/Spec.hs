@@ -5,62 +5,46 @@ import qualified Data.Set as Set
 import Language.Syntax (Value(..), Term(..), Type(..))
 import WireBundle.Syntax (WireType(..))
 import Test.Hspec
-import TestUtils
+import Language.CheckingSpec
+import WireBundle.CheckingSpec
+import Data.Either (isRight, isLeft)
 
--- ∅;∅;l:Qubit ⊢ Apply (Hadamard,l) : Qubit ; 1 (SUCCEEDS)
-test1 :: (Bool, String)
-test1 = let
-        term = Apply hadamard $ Label "l"
-        (theta,gamma,q) = (Set.empty, Map.empty, Map.fromList [("l",Qubit)])
-        (typ, index) = (WireType Qubit, Number 1)
-        in termCheckingTest term theta q gamma typ index
-
--- ∅;∅;l:Qubit,k:Qubit ⊢ Apply (Hadamard,l) : Qubit ; 1 (FAILS due to linearity)
-test2 :: (Bool, String)
-test2 = let
-        term = Apply hadamard $ Label "l"
-        (theta,gamma,q) = (Set.empty, Map.empty, Map.fromList [("l",Qubit),("k",Qubit)])
-        (typ, index) = (WireType Qubit, Number 1)
-        in termCheckingTest term theta q gamma typ index
-
--- ∅;∅;∅ ⊢ Apply (Init,*) : Qubit ; 1 (SUCCEEDS)
-test3 :: (Bool, String)
-test3 = let
-        term = Apply qinit UnitValue
-        (typ, index) = (WireType Qubit, Number 1)
-        (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
-        in termCheckingTest term theta q gamma typ index
-
--- ∅;∅;∅ ⊢ Apply (Init,*) : Qubit ; 2 (SUCCEEDS)
-test4 :: (Bool, String)
-test4 = let
-        term = Apply qinit UnitValue
-        (typ, index) = (WireType Qubit, Number 2)
-        (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
-        in termCheckingTest term theta q gamma typ index
-
--- ∅;∅;∅ ⊢ Apply (Init,*) : Qubit ; 0 (FAILS due to the produced circuit having width 1)
-test5 :: (Bool, String)
-test5 = let
-        term = Apply qinit UnitValue
-        (typ, index) = (WireType Qubit, Number 0)
-        (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
-        in termCheckingTest term theta q gamma typ index
-
--- ∅;x:A;∅ ⊢ Apply (Discard,l) : Unit ; 1 (SUCCEEDS)
-
-mainSpec :: Spec
-mainSpec = do describe "term checking" $ do
+assortedSpec :: Spec
+assortedSpec = do
+        describe "term checking" $ do
                 it "succeeds when the term is well-typed" $ do
-                        fst test1 `shouldBe` True
-                        fst test3 `shouldBe` True
-                        fst test4 `shouldBe` True
+                        -- ∅;∅;l:Qubit ⊢ Apply (Hadamard,l) <= Qubit ; 1
+                        let term = Apply hadamard $ Label "l"
+                        let (theta,gamma,q) = (Set.empty, Map.empty, Map.fromList [("l",Qubit)])
+                        let (typ, index) = (WireType Qubit, Number 1)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+                        -- ∅;∅;∅ ⊢ Apply (Init,*) <= Qubit ; 1
+                        let term = Apply qinit UnitValue
+                        let (typ, index) = (WireType Qubit, Number 1)
+                        let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+                        -- ∅;∅;∅ ⊢ Apply (Init,*) <= Qubit ; 2
+                        let term = Apply qinit UnitValue
+                        let (typ, index) = (WireType Qubit, Number 2)
+                        let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
                 it "fails when there are unused linear resources" $ do
-                        fst test2 `shouldBe` False
+                        -- ∅;∅;l:Qubit,k:Qubit ⊢ Apply (Hadamard,l) <=/= Qubit ; 1
+                        let term = Apply hadamard $ Label "l"
+                        let (theta,gamma,q) = (Set.empty, Map.empty, Map.fromList [("l",Qubit),("k",Qubit)])
+                        let (typ, index) = (WireType Qubit, Number 1)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
                 it "fails when the circuit produced by the term has width greater than the index" $ do
-                        fst test5 `shouldBe` False
+                        -- ∅;∅;∅ ⊢ Apply (Init,*) <=/= Qubit ; 0
+                        let term = Apply qinit UnitValue
+                        let (typ, index) = (WireType Qubit, Number 0)
+                        let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
 
 main :: IO ()
 main = hspec $ do
-        primitiveSpec
-        mainSpec
+        bundleSynthesisSpec
+        bundleCheckingSpec
+        primitiveGatesSpec
+        destSpec
+        assortedSpec

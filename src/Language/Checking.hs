@@ -31,10 +31,13 @@ bindVariable id typ = do
     let gamma' = Map.insert id typ gamma
     put (theta,gamma',q)
 
+containsLinearResource :: TypingContext -> Bool
+containsLinearResource = any isLinear . Map.elems
+
 linearContextsNonempty :: StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
 linearContextsNonempty = do
     (_, gamma, q) <- get
-    return $ not (Map.null gamma) || not (Map.null q)
+    return $ containsLinearResource gamma || not (Map.null q)
 
 -- Turns a wire bundle into an equivalent language-level value
 embedWireBundle :: Bundle -> Value
