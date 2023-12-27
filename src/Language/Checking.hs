@@ -9,9 +9,30 @@ import Control.Monad.Except
 import Circuit.Syntax
 import Control.Monad (when)
 import PrettyPrinter
+import Control.Monad.Cont (label)
+import qualified Data.Map as Map
+import WireBundle.Syntax (Bundle, BundleType)
+import qualified WireBundle.Syntax as Bundle
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
+
+linearContextsNonempty :: StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
+linearContextsNonempty = do
+    (_, gamma, q) <- get
+    return $ not (Map.null gamma) || not (Map.null q)
+
+-- Turns a wire bundle into an equivalent language-level value
+embedWireBundle :: Bundle -> Value
+embedWireBundle Bundle.UnitValue = UnitValue
+embedWireBundle (Bundle.Label id) = Label id
+embedWireBundle (Bundle.Pair b1 b2) = Pair (embedWireBundle b1) (embedWireBundle b2)
+
+-- Turns a wire bundle type into an equivalent language-level type
+embedBundleType :: BundleType -> Type
+embedBundleType Bundle.UnitType = UnitType
+embedBundleType (Bundle.WireType wtype) = WireType wtype
+embedBundleType (Bundle.Tensor b1 b2) = Tensor (embedBundleType b1) (embedBundleType b2)
 
 -- turns a bundle type derivation (which only has a label context)
 -- into a typing derivation that does not use the index or typing context
@@ -24,11 +45,23 @@ embedBundleDerivation der = do
         Right (x,q') -> put (theta, gamma, q') >> return x
 
 -- Θ;Γ;Q ⊢ V <= A
--- return value is True iff the linear contexts are empty at the return site
+-- returns True iff there are linear resources left in the typing contexts
 checkValueType :: Value -> Type -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
-checkValueType (Bundle b) typ = case typ of 
-    BundleType btype -> embedBundleDerivation $ checkBundleType b btype
-    _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a bundle of wires"
+checkValueType UnitValue typ = case typ of
+    UnitType -> linearContextsNonempty
+    _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to unit value '*'"
+checkValueType (Label id) typ = case typ of
+    WireType wtype -> do
+        wtype' <- embedBundleDerivation $ labelContextLookup id
+        if wtype == wtype'
+            then linearContextsNonempty
+            else throwError $ "Label " ++ id ++ "has type " ++ pretty wtype' ++ " but is required to have type " ++ pretty wtype
+    _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to label " ++ id
+checkValueType (Pair v w) typ = case typ of
+    Tensor typ1 typ2 -> do
+        checkValueType v typ1
+        checkValueType w typ2
+    _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to pair " ++ pretty (Pair v w)
 checkValueType (BoxedCircuit inB circ outB) typ = case typ of
     Circ i inBtype outBtype -> if Number (width circ) <= i 
         then lift $ do
@@ -41,9 +74,14 @@ checkValueType (BoxedCircuit inB circ outB) typ = case typ of
 
 -- Θ;Γ;Q ⊢ V => A
 synthesizeValueType :: Value -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Type
-synthesizeValueType (Bundle b) = do
-    btype <- embedBundleDerivation $ synthesizeBundleType b
-    return $ BundleType btype
+synthesizeValueType UnitValue = return UnitType
+synthesizeValueType (Label id) = do
+    wtype <- embedBundleDerivation $ labelContextLookup id
+    return $ WireType wtype
+synthesizeValueType (Pair v w) = do
+    typ1 <- synthesizeValueType v
+    typ2 <- synthesizeValueType w
+    return $ Tensor typ1 typ2
 synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
         (inQ, outQ) <- inferCircuitSignature circ
         inBtype <- evalStateT (synthesizeBundleType inB) inQ
@@ -51,19 +89,18 @@ synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
         return $ Circ (Number $ width circ) inBtype outBtype
 
 -- Θ;Γ;Q ⊢ M <= A ; I
--- return value is True iff the linear contexts are empty at the return site
+-- returns True iff there are linear resources left in the typing contexts
 checkTermType :: Term -> Type -> Index -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
-checkTermType (Apply v w) typ i = case typ of
-    BundleType btype -> do
+checkTermType (Apply v w) typ i = do
         ctype <- synthesizeValueType v
         case ctype of
             Circ i' inBtype outBtype -> do
-                inputCheck <- checkValueType w (BundleType inBtype)
-                when (btype /= outBtype) (throwError "Type mismatch")
-                when (i < i') (throwError "Circuit too wide")
+                inputCheck <- checkValueType w (embedBundleType inBtype)
+                when (embedBundleType outBtype /= typ) (throwError $
+                    "Term " ++ pretty (Apply v w) ++ " has type " ++ pretty outBtype ++ " but is required to have type " ++ pretty typ)
+                when (i < i') (throwError $ "Circuit has width " ++ pretty i' ++ " but is required to have width at most " ++ pretty i)
                 return inputCheck
             _ -> throwError  "First argument of apply is supposed to be a circuit"
-    _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to an apply statement"
 
 
 -- checkTermType t _ _ = throwError $ "Cannot check type of " ++ show t

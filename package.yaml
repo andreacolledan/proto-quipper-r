@@ -24,6 +24,7 @@ dependencies:
 - mtl
 - containers
 - extra
+- hspec
 
 ghc-options:
 - -Wall

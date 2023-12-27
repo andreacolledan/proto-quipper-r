@@ -44,6 +44,7 @@ library
       base >=4.7 && <5
     , containers
     , extra
+    , hspec
     , mtl
   default-language: Haskell2010
 
@@ -60,6 +61,7 @@ executable pqr-exe
       base >=4.7 && <5
     , containers
     , extra
+    , hspec
     , mtl
     , pqr
   default-language: Haskell2010
@@ -78,6 +80,7 @@ test-suite pqr-test
       base >=4.7 && <5
     , containers
     , extra
+    , hspec
     , mtl
     , pqr
   default-language: Haskell2010

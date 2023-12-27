@@ -1,5 +1,5 @@
 module Language.Syntax where
-import WireBundle.Syntax
+import WireBundle.Syntax(LabelId, Bundle, BundleType, WireType, Wide(..))
 import Circuit.Syntax
 import Index
 import PrettyPrinter
@@ -7,12 +7,16 @@ import PrettyPrinter
 type VariableId = String
 
 data Value
-    = Bundle Bundle
+    = UnitValue
+    | Label LabelId
+    | Pair Value Value
     | BoxedCircuit Bundle Circuit Bundle
     deriving Show
 
 instance Pretty Value where
-    pretty (Bundle b) = pretty b
+    pretty UnitValue = "*"
+    pretty (Label id) = id
+    pretty (Pair v w) = "(" ++ pretty v ++ ", " ++ pretty w ++ ")"
     pretty (BoxedCircuit _ c _) = pretty c
 
 data Term
@@ -23,18 +27,26 @@ instance Pretty Term where
     pretty (Apply v w) = "apply(" ++ pretty v ++ ", " ++ pretty w ++ ")"
 
 data Type
-    = BundleType BundleType
+    = UnitType
+    | WireType WireType
+    | Tensor Type Type
     | Circ Index BundleType BundleType
-    deriving Show
+    deriving (Show, Eq)
 
 instance Pretty Type where
-    pretty (BundleType btype) = pretty btype
+    pretty UnitType = "Unit"
+    pretty (WireType wt) = pretty wt
+    pretty (Tensor t1 t2) = "(" ++ pretty t1 ++ " ⊗ " ++ pretty t2 ++ ")"
     pretty (Circ i inBtype outBtype) = "Circ " ++ pretty i ++ " (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
 
 isLinear :: Type -> Bool
-isLinear (BundleType _) = True
+isLinear UnitType = False
+isLinear (WireType _) = True
+isLinear (Tensor typ1 typ2) = isLinear typ1 && isLinear typ2
 isLinear (Circ {}) = False
 
 instance Wide Type where
-    wireCount (BundleType btype) = wireCount btype
+    wireCount UnitType = Number 0
+    wireCount (WireType _) = Number 1
+    wireCount (Tensor t1 t2) = Plus (wireCount t1) (wireCount t2)
     wireCount (Circ {}) = Number 0

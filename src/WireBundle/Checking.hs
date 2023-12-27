@@ -2,7 +2,8 @@ module WireBundle.Checking (
     LabelContext,
     synthesizeLabelContext,
     synthesizeBundleType,
-    checkBundleType
+    checkBundleType,
+    labelContextLookup
 ) where
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -21,9 +22,9 @@ labelContextLookup id = do
     put $ Map.delete id q
     return outcome
 
-labelContextEmpty :: StateT LabelContext (Either String) Bool
-labelContextEmpty = do
-    Map.null <$> get
+labelContextNonempty :: StateT LabelContext (Either String) Bool
+labelContextNonempty = do
+    not . Map.null <$> get
 
 -- Q ⊢ l => T
 synthesizeBundleType :: Bundle -> StateT LabelContext (Either String) BundleType
@@ -39,10 +40,10 @@ synthesizeLabelContext (Label id) (WireType wtype) = Right $ Map.fromList [(id,w
 synthesizeLabelContext b btype = Left $ "Cannot match structure of " ++ pretty b ++ " with structure of " ++ pretty btype
 
 -- Q ⊢ l <= T (Fig 10)
--- return value is True iff the linear contexts are empty at the return site
+-- returns True iff there are linear resources left in the label context
 checkBundleType :: Bundle -> BundleType -> StateT LabelContext (Either String) Bool
 checkBundleType b btype = do
     synthesizedBtype <- synthesizeBundleType b
     if synthesizedBtype == btype
-        then labelContextEmpty
+        then labelContextNonempty
         else throwError "Type mismatch"
