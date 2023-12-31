@@ -144,3 +144,55 @@ destSpec = do
             let (typ, index) = (WireType Qubit, Number 1)
             let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
             termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+
+functionSpec :: Spec
+functionSpec = do
+    describe "function typechecking" $ do
+        it "succeeds when the rule's premises hold" $ do
+            -- ∅;∅;∅ ⊢ λx:Qubit. return x <= Qubit -o [1,0] Qubit
+            let term = Abs "x" (WireType Qubit) (Return $ Variable "x")
+            let typ = Arrow (WireType Qubit) (WireType Qubit) (Number 1) (Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+            -- ∅;∅;l:Qubit ⊢ λx:UnitType. return l <= Qubit-o [1,1] Qubit
+            let term = Abs "x" UnitType (Return $ Label "l")
+            let typ = Arrow UnitType (WireType Qubit) (Number 1) (Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Qubit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+            -- ∅;∅;l:Qubit ⊢ λc:Circ[3](Qubit,Qubit). apply(c,l) <= Circ[3](Qubit,Qubit) -o [3,1] Qubit
+            let term = Abs "c" (Circ (Number 3) (Bundle.WireType Qubit) (Bundle.WireType Qubit)) (Apply (Variable "c") (Label "l"))
+            let typ = Arrow (Circ (Number 3) (Bundle.WireType Qubit) (Bundle.WireType Qubit)) (WireType Qubit) (Number 3) (Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Qubit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+            -- ∅;x:Qubit;∅ ⊢ λy:Qubit. apply(CNOT,(x,y)) <= Qubit -o [2,1] (Qubit,Qubit)
+            let term = Abs "y" (WireType Qubit) (Apply cnot (Pair (Variable "x") (Variable "y")))
+            let typ = Arrow (WireType Qubit) (Tensor (WireType Qubit) (WireType Qubit)) (Number 2) (Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit)],Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+        it "fails when the function does not use its linear argument" $ do
+            -- ∅;∅;∅ ⊢ λx:Qubit. return * <= Qubit -o [1,0] Unit
+            let term = Abs "x" (WireType Qubit) (Return UnitValue)
+            let typ = Arrow (WireType Qubit) UnitType (Number 1) (Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when the function uses its linear argument more than once" $ do
+            -- ∅;∅;∅ ⊢ λx:Qubit. return (x,x) <= Qubit -o [1,0] (Qubit,Qubit)
+            let term = Abs "x" (WireType Qubit) (Return $ Pair (Variable "x") (Variable "x"))
+            let typ = Arrow (WireType Qubit) (Tensor (WireType Qubit) (WireType Qubit)) (Number 1) (Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when the function builds too large a circuit" $ do
+            -- ∅;∅;∅ ⊢ λx:Qubit⊗Qubit. apply(CNOT,x) <= (Qubit⊗Qubit) -o [1,0] (Qubit⊗Qubit)
+            let term = Abs "x" (Tensor (WireType Qubit) (WireType Qubit)) (Apply cnot (Variable "x"))
+            let typ = Arrow (Tensor (WireType Qubit) (WireType Qubit)) (Tensor (WireType Qubit) (WireType Qubit)) (Number 1) (Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when the type does not correctly reflect the amount of captured wires" $ do
+            -- ∅;∅;l:Qubit ⊢ λx:UnitType. return l <= Qubit-o [1,0] Qubit
+            let term = Abs "x" UnitType (Return $ Label "l")
+            let typ = Arrow UnitType (WireType Qubit) (Number 1) (Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Qubit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+            
+applicationSpec :: Spec
+applicationSpec = undefined

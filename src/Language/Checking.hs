@@ -12,6 +12,7 @@ import PrettyPrinter
 import qualified Data.Map as Map
 import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
 import qualified WireBundle.Syntax as Bundle
+import Control.Exception (throw)
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -30,6 +31,11 @@ bindVariable id typ = do
     when (Map.member id gamma) $ throwError $ "Cannot shadow existing variable " ++ id
     let gamma' = Map.insert id typ gamma
     put (theta,gamma',q)
+
+contextWireCount :: StateT (IndexContext, TypingContext, LabelContext) (Either String) Index
+contextWireCount = do
+    (_,gamma,q) <- get
+    return $ Plus (wireCount gamma) (wireCount q)
 
 containsLinearResource :: TypingContext -> Bool
 containsLinearResource = any isLinear . Map.elems
@@ -61,7 +67,7 @@ embedBundleDerivation der = do
         Left err -> throwError err
         Right (x,q') -> put (theta, gamma, q') >> return x
 
--- Θ;Γ;Q ⊢ V <= A
+-- Θ;Γ;Q ⊢ V <= A (Fig. 12)
 -- returns True iff there are linear resources left in the typing contexts
 checkValueType :: Value -> Type -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
 checkValueType UnitValue typ = case typ of
@@ -93,8 +99,19 @@ checkValueType (BoxedCircuit inB circ outB) typ = case typ of
         return $ inputCheck && outputCheck
         else throwError $ "Cannot conclude width (" ++ pretty circ ++ ") <= " ++ pretty i
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a boxed circuit"
+checkValueType (Abs x intyp m) typ = case typ of
+    Arrow intyp' outtyp i j | intyp' == intyp -> do
+        wireCountAnnotation <- contextWireCount
+        when (j /= wireCountAnnotation) (throwError $ "Function captures " ++ pretty wireCountAnnotation ++ " wires but is required to capture " ++ pretty j)
+        bindVariable x intyp
+        checkTermType m outtyp i
+    Arrow inTyp' _ _ _ -> throwError $ "Abstracted variable " ++ x ++ " is annotated with type " ++ pretty intyp ++ " but is required to have type " ++ pretty inTyp'
+    _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a function"
 
--- Θ;Γ;Q ⊢ V => A
+
+
+
+-- Θ;Γ;Q ⊢ V => A (Fig. 12)
 synthesizeValueType :: Value -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Type
 synthesizeValueType UnitValue = return UnitType
 synthesizeValueType (Label id) = do
@@ -110,8 +127,36 @@ synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
         inBtype <- evalStateT (synthesizeBundleType inB) inQ
         outBtype <- evalStateT (synthesizeBundleType outB) outQ
         return $ Circ (Number $ width circ) inBtype outBtype
+synthesizeValueType (Abs x intyp m) = do
+    j <- contextWireCount
+    bindVariable x intyp
+    (outtyp, i) <- synthesizeTermType m
+    return $ Arrow intyp outtyp i j
 
--- Θ;Γ;Q ⊢ M <= A ; I
+-- Θ;Γ;Q ⊢ M => A ; I (Fig. 12)
+synthesizeTermType :: Term -> StateT (IndexContext, TypingContext, LabelContext) (Either String) (Type, Index)
+synthesizeTermType (Apply v w) = do
+    ctype <- synthesizeValueType v
+    case ctype of
+        Circ i inBtype outBtype -> do
+            _ <- checkValueType w (embedBundleType inBtype)
+            return $ (embedBundleType outBtype, i)
+        _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a circuit, instead has type " ++ pretty ctype
+synthesizeTermType (Dest x y v m) = do
+    ltyp <- synthesizeValueType v
+    case ltyp of
+        Tensor ltyp1 ltyp2 -> do
+            bindVariable x ltyp1
+            bindVariable y ltyp2
+            synthesizeTermType m
+        _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
+synthesizeTermType (Return v) = do
+    effectAnnotation <- contextWireCount
+    vtyp <- synthesizeValueType v
+    return (vtyp, effectAnnotation)
+synthesizeTermType m = throwError $ "Cannot synthesize type of " ++ pretty m
+
+-- Θ;Γ;Q ⊢ M <= A ; I (Fig. 12)
 -- returns True iff there are linear resources left in the typing contexts
 checkTermType :: Term -> Type -> Index -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Bool
 checkTermType (Apply v w) typ i = do
@@ -134,13 +179,20 @@ checkTermType (Dest x y v m) typ i = do
             _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
 checkTermType (Return v) typ i = do
         (_, gamma, q) <- get
-        let contextCount = Plus (wireCount gamma) (wireCount q)
+        effectAnnotation <- contextWireCount
         vtyp <- synthesizeValueType v
         when (vtyp /= typ) (throwError $ "Return value " ++ pretty v ++ " has type " ++ pretty vtyp ++ " but is required to have type " ++ pretty typ)
-        when (i /= contextCount) (throwError $ "Return value has width " ++ pretty (Plus (wireCount gamma) (wireCount q)) ++ " but is required to have width " ++ pretty i)
+        when (i /= effectAnnotation) (throwError $ "Return value has width " ++ pretty effectAnnotation ++ " but is required to have width " ++ pretty i)
         linearContextsNonempty
-
-
+checkTermType (App v w) typ i = do
+        ftyp <- synthesizeValueType v
+        case ftyp of
+            Arrow intyp outtyp i' j -> do
+                argcheck <- checkValueType w intyp
+                when (outtyp /= typ) (throwError $ "Term " ++ pretty (App v w) ++ " has type " ++ pretty outtyp ++ " but is required to have type " ++ pretty typ)
+                when (i < i') (throwError $ "Function produces a circuit of width " ++ pretty i' ++ " but is required to produce a circuit of width at most " ++ pretty i)
+                return argcheck
+            _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a function, instead has type " ++ pretty ftyp
 -- checkTermType t _ _ = throwError $ "Cannot check type of " ++ show t
 
 

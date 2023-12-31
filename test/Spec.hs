@@ -50,4 +50,5 @@ main = hspec $ do
         widthSpec
         returnSpec
         destSpec
+        functionSpec
         assortedSpec

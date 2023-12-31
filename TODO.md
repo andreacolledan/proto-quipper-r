@@ -4,7 +4,7 @@
 
 ### Circuits
 
- - [ ] Decide how to represent circuits, circuits with input and circuit-building computations
+ - [x] Decide how to represent circuits, circuits with input and circuit-building computations
  - [ ] Decide how programs are meant to be executed: from a starting circuit or standalone. Consequently, choose whether $Q$ should appear in the implementation of the language type system or not.
 
 ## Implementation
