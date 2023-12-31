@@ -1,4 +1,15 @@
-module Language.CheckingSpec where
+module Language.CheckingSpec(
+    primitiveGatesSpec,
+    returnSpec,
+    destSpec,
+    functionSpec,
+    termCheckingTest,
+    hadamard,
+    pauliX,
+    qinit,
+    qdiscard,
+    cnot
+) where
 import Data.Set (Set)
 import Data.Map (Map)
 import Circuit.Syntax

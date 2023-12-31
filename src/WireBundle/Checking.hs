@@ -5,12 +5,12 @@ module WireBundle.Checking (
     checkBundleType,
     labelContextLookup
 ) where
+import Control.Monad.Except
+import Control.Monad.State.Lazy
 import Data.Map (Map)
 import qualified Data.Map as Map
-import WireBundle.Syntax
-import Control.Monad.State.Lazy
-import Control.Monad.Except
 import PrettyPrinter
+import WireBundle.Syntax
 
 -- Corresponds to Q in the paper
 type LabelContext = Map LabelId WireType

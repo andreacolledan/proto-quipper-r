@@ -1,5 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
-module WireBundle.Syntax where
+module WireBundle.Syntax(
+    Bundle(..),
+    BundleType(..),
+    WireType(..),
+    LabelId,
+    Wide(..)
+) where
 import Index
 import PrettyPrinter
 

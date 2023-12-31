@@ -1,9 +1,14 @@
-module Circuit.Syntax where
-import WireBundle.Syntax
+module Circuit.Syntax(
+    QuantumOperation(..),
+    sig,
+    net,
+    Circuit(..),
+    width
+) where
 import PrettyPrinter
 import WireBundle.Checking (LabelContext)
+import WireBundle.Syntax
 import qualified Data.Map as Map
-
 data QuantumOperation
     = Init 
     | Discard 

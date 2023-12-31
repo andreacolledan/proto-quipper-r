@@ -1,18 +1,28 @@
-module Language.Checking where
-import Language.Syntax
-import Data.Map (Map)
+module Language.Checking(
+    checkValueType,
+    synthesizeValueType,
+    synthesizeTermType,
+    checkTermType,
+    TypingContext,
+    typingContextLookup,
+    bindVariable,
+    embedWireBundle,
+    embedBundleType,
+    embedBundleDerivation
+) where
 import Circuit.Checking
-import WireBundle.Checking
-import Index
-import Control.Monad.State.Lazy
-import Control.Monad.Except
 import Circuit.Syntax
 import Control.Monad (when)
+import Control.Monad.Except
+import Control.Monad.State.Lazy
+import Data.Map (Map)
+import Index
+import Language.Syntax
 import PrettyPrinter
 import qualified Data.Map as Map
+import WireBundle.Checking
 import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
 import qualified WireBundle.Syntax as Bundle
-import Control.Exception (throw)
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -91,7 +101,7 @@ checkValueType (Pair v w) typ = case typ of
         checkValueType w typ2
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to pair " ++ pretty (Pair v w)
 checkValueType (BoxedCircuit inB circ outB) typ = case typ of
-    Circ i inBtype outBtype -> if Number (width circ) <= i 
+    Circ i inBtype outBtype -> if Number (width circ) <= i
         then lift $ do
         (inQ, outQ) <- inferCircuitSignature circ
         inputCheck <- evalStateT (checkBundleType inB inBtype) inQ
@@ -140,7 +150,7 @@ synthesizeTermType (Apply v w) = do
     case ctype of
         Circ i inBtype outBtype -> do
             _ <- checkValueType w (embedBundleType inBtype)
-            return $ (embedBundleType outBtype, i)
+            return (embedBundleType outBtype, i)
         _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a circuit, instead has type " ++ pretty ctype
 synthesizeTermType (Dest x y v m) = do
     ltyp <- synthesizeValueType v
@@ -178,7 +188,6 @@ checkTermType (Dest x y v m) typ i = do
                 checkTermType m typ i
             _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
 checkTermType (Return v) typ i = do
-        (_, gamma, q) <- get
         effectAnnotation <- contextWireCount
         vtyp <- synthesizeValueType v
         when (vtyp /= typ) (throwError $ "Return value " ++ pretty v ++ " has type " ++ pretty vtyp ++ " but is required to have type " ++ pretty typ)
@@ -196,4 +205,3 @@ checkTermType (App v w) typ i = do
 -- checkTermType t _ _ = throwError $ "Cannot check type of " ++ show t
 
 
-        

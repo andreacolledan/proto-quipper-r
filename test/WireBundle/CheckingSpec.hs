@@ -1,4 +1,7 @@
-module WireBundle.CheckingSpec where
+module WireBundle.CheckingSpec(
+    bundleSynthesisSpec,
+    bundleCheckingSpec
+) where
 import Control.Monad
 import Control.Monad.Error.Class
 import Control.Monad.State.Lazy (evalStateT)

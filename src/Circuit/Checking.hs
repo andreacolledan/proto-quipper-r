@@ -1,10 +1,10 @@
-module Circuit.Checking where
+module Circuit.Checking(
+    inferCircuitSignature
+) where
 import Circuit.Syntax
-import WireBundle.Checking
-import WireBundle.Syntax
-import qualified Data.Map as Map
 import Control.Monad.State.Lazy
-
+import WireBundle.Checking
+import qualified Data.Map as Map
 -- C => Q -> L (Fig. 10) 
 inferCircuitSignature :: Circuit -> Either String (LabelContext, LabelContext)
 inferCircuitSignature (Id q) = Right (q, q)

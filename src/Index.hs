@@ -1,5 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
-module Index where
+module Index(
+    Index(..),
+    IndexVariableId,
+    IndexContext,
+    Indexed(..),
+    eval
+) where
 import Data.Set (Set)
 import PrettyPrinter
 

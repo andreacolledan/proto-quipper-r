@@ -1,8 +1,14 @@
-module Language.Syntax where
-import WireBundle.Syntax(LabelId, Bundle, BundleType, WireType, Wide(..))
+module Language.Syntax(
+    Value(..),
+    Term(..),
+    Type(..),
+    isLinear,
+    VariableId
+) where
 import Circuit.Syntax
 import Index
 import PrettyPrinter
+import WireBundle.Syntax(LabelId, Bundle, BundleType, WireType, Wide(..))
 
 type VariableId = String
 
