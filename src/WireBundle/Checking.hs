@@ -26,7 +26,7 @@ labelContextNonempty :: StateT LabelContext (Either String) Bool
 labelContextNonempty = do
     not . Map.null <$> get
 
--- Q ⊢ l => T
+-- Q ⊢ l => T (Fig. 10)
 synthesizeBundleType :: Bundle -> StateT LabelContext (Either String) BundleType
 synthesizeBundleType UnitValue = return UnitType
 synthesizeBundleType (Label id) = do
@@ -47,7 +47,7 @@ synthesizeLabelContext (Pair b1 b2) (Tensor btype1 btype2) = do
     return $ Map.union q1 q2
 synthesizeLabelContext b btype = Left $ "Cannot match structure of " ++ pretty b ++ " with structure of " ++ pretty btype
 
--- Q ⊢ l <= T (Fig 10)
+-- Q ⊢ l <= T (Fig. 10)
 -- returns True iff there are linear resources left in the label context
 checkBundleType :: Bundle -> BundleType -> StateT LabelContext (Either String) Bool
 checkBundleType b btype = do

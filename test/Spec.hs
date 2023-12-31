@@ -5,6 +5,7 @@ import qualified Data.Set as Set
 import Language.Syntax (Value(..), Term(..), Type(..))
 import WireBundle.Syntax (WireType(..))
 import Test.Hspec
+import Circuit.SyntaxSpec
 import Language.CheckingSpec
 import WireBundle.CheckingSpec
 import Data.Either (isRight, isLeft)
@@ -46,6 +47,7 @@ main = hspec $ do
         bundleSynthesisSpec
         bundleCheckingSpec
         primitiveGatesSpec
+        widthSpec
         returnSpec
         destSpec
         assortedSpec

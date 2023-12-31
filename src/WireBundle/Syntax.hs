@@ -12,6 +12,7 @@ data WireType
 
 instance Pretty WireType
 
+-- Fig. 9
 data Bundle
     = UnitValue
     | Label LabelId
@@ -23,6 +24,7 @@ instance Pretty Bundle where
     pretty (Label id) = id
     pretty (Pair b1 b2) = "(" ++ pretty b1 ++ ", " ++ pretty b2 ++ ")"
 
+-- Fig. 9
 data BundleType
     = UnitType
     | WireType WireType

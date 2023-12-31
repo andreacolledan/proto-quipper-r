@@ -1,6 +1,8 @@
 module Circuit.Syntax where
 import WireBundle.Syntax
 import PrettyPrinter
+import WireBundle.Checking (LabelContext)
+import qualified Data.Map as Map
 
 data QuantumOperation
     = Init 
@@ -17,17 +19,33 @@ instance Pretty QuantumOperation where
     pretty PauliX = "X"
     pretty CNot = "CNot"
 
--- For now, only primitive circuits corresponding to gates
+sig :: QuantumOperation -> (BundleType, BundleType)
+sig Init     = (UnitType, WireType Qubit)
+sig Discard  = (WireType Qubit, UnitType)
+sig Hadamard = (WireType Qubit, WireType Qubit)
+sig PauliX   = (WireType Qubit, WireType Qubit)
+sig CNot     = (Tensor (WireType Qubit) (WireType Qubit), Tensor (WireType Qubit) (WireType Qubit))
+
+net :: QuantumOperation -> Int
+net Init    = 1
+net Discard = -1
+net _       = 0
+
 data Circuit
-    = Op QuantumOperation Bundle Bundle
+    = Id LabelContext
+    | Seq Circuit QuantumOperation Bundle Bundle
     deriving Show
 
 instance Pretty Circuit where
-    pretty (Op op _ _) = pretty op
+    pretty (Id q) = "Identity on " ++ pretty q
+    pretty (Seq circ op bin bout) = pretty circ ++ " ; " ++ pretty op ++ "(" ++ pretty bin ++ ") -> " ++ pretty bout
 
--- For now, all circuits have width 1
+
 width :: Circuit -> Int
-width _ = 1
+width (Id q) = Map.size q
+width (Seq circ op _ _) = width circ + max 0 (net op - discarded circ)
+    where discarded (Id _) = 0
+          discarded (Seq circ op _ _) = max 0 (discarded circ - net op)
 
 
 

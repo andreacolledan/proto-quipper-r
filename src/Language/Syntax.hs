@@ -6,6 +6,7 @@ import PrettyPrinter
 
 type VariableId = String
 
+-- Fig. 8
 data Value
     = UnitValue
     | Label LabelId
@@ -21,6 +22,7 @@ instance Pretty Value where
     pretty (Pair v w) = "(" ++ pretty v ++ ", " ++ pretty w ++ ")"
     pretty (BoxedCircuit _ c _) = pretty c
 
+-- Fig. 8
 data Term
     = Apply Value Value
     | Dest VariableId VariableId Value Term
@@ -32,6 +34,7 @@ instance Pretty Term where
     pretty (Dest x y v m) = "(let (" ++ x ++ ", " ++ y ++ ") = " ++ pretty v ++ " in " ++ pretty m ++ ")"
     pretty (Return v) = "return " ++ pretty v
 
+-- Fig. 8
 data Type
     = UnitType
     | WireType WireType

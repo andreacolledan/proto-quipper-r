@@ -70,6 +70,7 @@ test-suite pqr-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Circuit.SyntaxSpec
       Language.CheckingSpec
       WireBundle.CheckingSpec
       Paths_pqr

@@ -2,19 +2,17 @@ module Circuit.Checking where
 import Circuit.Syntax
 import WireBundle.Checking
 import WireBundle.Syntax
+import qualified Data.Map as Map
+import Control.Monad.State.Lazy
 
-sig :: QuantumOperation -> (BundleType, BundleType)
-sig Init     = (UnitType, WireType Qubit)
-sig Discard  = (WireType Qubit, UnitType)
-sig Hadamard = (WireType Qubit, WireType Qubit)
-sig PauliX   = (WireType Qubit, WireType Qubit)
-sig CNot     = (Tensor (WireType Qubit) (WireType Qubit), Tensor (WireType Qubit) (WireType Qubit))
-
--- Will change dramatically
+-- C => Q -> L (Fig. 10) 
 inferCircuitSignature :: Circuit -> Either String (LabelContext, LabelContext)
-inferCircuitSignature (Op op inB outB) = do
-    let (inBtype, outBtype) = sig op
-    inq <- synthesizeLabelContext inB inBtype
-    outq <- synthesizeLabelContext outB outBtype
-    return (inq, outq)
+inferCircuitSignature (Id q) = Right (q, q)
+inferCircuitSignature (Seq circ op bin bout) = do 
+    (qin, qmid) <- inferCircuitSignature circ
+    let (btype1, btype2) = sig op
+    qout1 <- execStateT (checkBundleType bin btype1) qmid
+    qout2 <- synthesizeLabelContext bout btype2
+    return (qin, Map.union qout1 qout2)
+    
 
