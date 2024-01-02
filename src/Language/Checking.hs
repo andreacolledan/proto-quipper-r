@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use uncurry" #-}
 module Language.Checking(
     checkValueType,
     synthesizeValueType,
@@ -12,7 +14,7 @@ module Language.Checking(
 ) where
 import Circuit.Checking
 import Circuit.Syntax
-import Control.Monad (when)
+import Control.Monad (when, void, forM_)
 import Control.Monad.Except
 import Control.Monad.State.Lazy
 import Data.Map (Map)
@@ -23,6 +25,7 @@ import qualified Data.Map as Map
 import WireBundle.Checking
 import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
 import qualified WireBundle.Syntax as Bundle
+import Test.Hspec (before)
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -41,6 +44,29 @@ bindVariable id typ = do
     when (Map.member id gamma) $ throwError $ "Cannot shadow existing variable " ++ id
     let gamma' = Map.insert id typ gamma
     put (theta,gamma',q)
+
+unbindVariable :: VariableId -> StateT (IndexContext, TypingContext, LabelContext) (Either String) ()
+unbindVariable id = do
+    (_,gamma,_) <- get
+    maybe
+        (return ())
+        (\t -> when (isLinear t) (throwError $ "Cannot unbind linear variable " ++ id))
+        (Map.lookup id gamma)
+
+withBoundVariable :: VariableId -> Type -> StateT (IndexContext, TypingContext, LabelContext) (Either String) a -> StateT (IndexContext, TypingContext, LabelContext) (Either String) a
+withBoundVariable x typ der = do
+    bindVariable x typ
+    outcome <- der
+    unbindVariable x
+    return outcome
+
+withNonLinearContext :: StateT (IndexContext, TypingContext, LabelContext) (Either String) a -> StateT (IndexContext, TypingContext, LabelContext) (Either String) a
+withNonLinearContext der = do
+    contextBefore <- get
+    outcome <- der
+    contextAfter <- get
+    when (contextBefore /= contextAfter) (throwError "Linear resources consumed in a lifted term")
+    return outcome
 
 contextWireCount :: StateT (IndexContext, TypingContext, LabelContext) (Either String) Index
 contextWireCount = do
@@ -113,17 +139,12 @@ checkValueType (Abs x intyp m) typ = case typ of
     Arrow intyp' outtyp i j | intyp' == intyp -> do
         wireCountAnnotation <- contextWireCount
         when (j /= wireCountAnnotation) (throwError $ "Function captures " ++ pretty wireCountAnnotation ++ " wires but is required to capture " ++ pretty j)
-        bindVariable x intyp
-        checkTermType m outtyp i
+        withBoundVariable x intyp $ checkTermType m outtyp i
     Arrow inTyp' _ _ _ -> throwError $ "Abstracted variable " ++ x ++ " is annotated with type " ++ pretty intyp ++ " but is required to have type " ++ pretty inTyp'
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a function"
 checkValueType (Lift m) typ = case typ of
     Bang typ' -> do
-        contextsBefore <- get
-        check <- checkTermType m typ' (Number 0)
-        contextsAfter <- get
-        when (contextsBefore /= contextsAfter) (throwError "Lifted term cannot contain linear resources")
-        return check
+        withNonLinearContext $ checkTermType m typ' (Number 0)
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a lifted term"
 
 
@@ -144,9 +165,7 @@ checkTermType (Dest x y v m) typ i = do
         ltyp <- synthesizeValueType v
         case ltyp of
             Tensor ltyp1 ltyp2 -> do
-                bindVariable x ltyp1
-                bindVariable y ltyp2
-                checkTermType m typ i
+                withBoundVariable x ltyp1 $ withBoundVariable y ltyp2 $ checkTermType m typ i
             _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
 checkTermType (Return v) typ i = do
         effectAnnotation <- contextWireCount
@@ -188,14 +207,10 @@ synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
         return $ Circ (Number $ width circ) inBtype outBtype
 synthesizeValueType (Abs x intyp m) = do
     j <- contextWireCount
-    bindVariable x intyp
-    (outtyp, i) <- synthesizeTermType m
+    (outtyp, i) <- withBoundVariable x intyp $ synthesizeTermType m
     return $ Arrow intyp outtyp i j
 synthesizeValueType (Lift m) = do
-    contextsBefore <- get
-    (typ, i) <- synthesizeTermType m
-    contextsAfter <- get
-    when (contextsBefore /= contextsAfter) (throwError "Lifted term cannot contain linear resources")
+    (typ, i) <- withNonLinearContext $ synthesizeTermType m
     when (i /= Number 0) (throwError $ "Lifted term produces a circuit of width " ++ pretty i ++ " but is required to produce a circuit of width 0")
     return $ Bang typ
 
@@ -214,7 +229,10 @@ synthesizeTermType (Dest x y v m) = do
         Tensor ltyp1 ltyp2 -> do
             bindVariable x ltyp1
             bindVariable y ltyp2
-            synthesizeTermType m
+            (typ,i) <- synthesizeTermType m
+            unbindVariable x
+            unbindVariable y
+            return (typ,i)
         _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
 synthesizeTermType (Return v) = do
     effectAnnotation <- contextWireCount
@@ -223,7 +241,7 @@ synthesizeTermType (Return v) = do
 synthesizeTermType (App v w) = do
     ftyp <- synthesizeValueType v
     case ftyp of
-        Arrow intyp outtyp i j -> do
+        Arrow intyp outtyp i _ -> do
             _ <- checkValueType w intyp
             return (outtyp, i)
         _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a function, instead has type " ++ pretty ftyp
