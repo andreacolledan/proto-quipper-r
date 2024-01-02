@@ -1,7 +1,4 @@
-module WireBundle.CheckingSpec(
-    bundleSynthesisSpec,
-    bundleCheckingSpec
-) where
+module WireBundle.CheckingSpec(spec) where
 import Control.Monad
 import Control.Monad.Error.Class
 import Control.Monad.State.Lazy (evalStateT)
@@ -57,3 +54,8 @@ bundleCheckingSpec = do
             bundleCheckingTest UnitValue (Map.fromList [("a",Qubit)]) UnitType `shouldSatisfy` isLeft
             -- a:Qubit,b:Qubit ⊢ a <=/= Qubit
             bundleCheckingTest (Label "a") (Map.fromList [("a",Qubit),("b",Qubit)]) (WireType Qubit) `shouldSatisfy` isLeft
+
+spec :: Spec
+spec = do
+    bundleSynthesisSpec
+    bundleCheckingSpec

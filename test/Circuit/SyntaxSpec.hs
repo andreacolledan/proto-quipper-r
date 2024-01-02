@@ -1,4 +1,4 @@
-module Circuit.SyntaxSpec where
+module Circuit.SyntaxSpec(spec) where
 import Test.Hspec
 import Circuit.Syntax
 import qualified Data.Map as Map
@@ -26,3 +26,7 @@ widthSpec = do
             width (Seq (Seq (Id $ Map.fromList [("q",Qubit)]) Hadamard (Label "q") (Label "q")) Init UnitValue (Label "r")) `shouldBe` 2
             -- width (ID_∅; Init(*) -> q; Init(*) -> r) = 2
             width (Seq (Seq (Id Map.empty) Init UnitValue (Label "q")) Init UnitValue (Label "r")) `shouldBe` 2
+
+spec :: Spec
+spec = do
+    widthSpec

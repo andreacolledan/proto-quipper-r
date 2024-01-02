@@ -1,22 +1,11 @@
-module Language.CheckingSpec(
-    primitiveGatesSpec,
-    returnSpec,
-    destSpec,
-    functionSpec,
-    termCheckingTest,
-    hadamard,
-    pauliX,
-    qinit,
-    qdiscard,
-    cnot
-) where
+module Language.CheckingSpec(spec) where
 import Data.Set (Set)
 import Data.Map (Map)
 import Circuit.Syntax
 import Index
 import PrettyPrinter
 import WireBundle.Checking (LabelContext)
-import Language.Checking (TypingContext, checkTermType, checkValueType)
+import Language.Checking (TypingContext,TypingEnvironment(..), checkTermType, checkValueType, containsLinearResources)
 import Control.Monad.State.Lazy
 import Language.Syntax (VariableId, Value(..), Term(..), Type(..))
 import WireBundle.Syntax (LabelId, WireType (Qubit, Bit))
@@ -31,14 +20,16 @@ import Data.Either (isRight, isLeft)
 -- HELPER FUNCTIONS --
 
 termCheckingTest :: Term -> IndexContext -> LabelContext -> TypingContext -> Type -> Index -> Either String ()
-termCheckingTest term theta q gamma typ index = case evalStateT (checkTermType term typ index) (theta, gamma, q) of
+termCheckingTest term theta q gamma typ index = let env = TypingEnvironment theta gamma q 0 in
+    case execStateT (checkTermType term typ index) env of
         Left err -> throwError err
-        Right linearResourcesRemaining -> when linearResourcesRemaining $ throwError "Unused resources in linear environments"
+        Right env' -> when (containsLinearResources env') $ throwError "Unused resources in linear environments"
 
 valueCheckingTest :: Value -> IndexContext -> LabelContext -> TypingContext -> Type -> Either String ()
-valueCheckingTest value theta q gamma typ = case evalStateT (checkValueType value typ) (theta, gamma, q) of
+valueCheckingTest value theta q gamma typ = let env = TypingEnvironment theta gamma q 0 in
+    case execStateT (checkValueType value typ) env of
         Left err -> throwError err
-        Right linearResourcesRemaining -> when linearResourcesRemaining $ throwError "Unused resources in linear environments"
+        Right env' -> when (containsLinearResources env') $ throwError "Unused resources in linear environments"
 
 
 printTestResults :: Term -> IndexContext -> LabelContext -> TypingContext -> Type -> Index -> Bool -> String -> IO()
@@ -100,6 +91,38 @@ primitiveGatesSpec = do
         it ("should have type " ++ pretty desiredType) $ do
             valueCheckingTest cnot Set.empty Map.empty Map.empty desiredType
                 `shouldSatisfy` isRight
+
+applySpec :: Spec
+applySpec = do
+        describe "apply checking" $ do
+                it "succeeds when the term is well-typed" $ do
+                        -- ∅;∅;l:Qubit ⊢ Apply (Hadamard,l) <= Qubit ; 1
+                        let term = Apply hadamard $ Label "l"
+                        let (theta,gamma,q) = (Set.empty, Map.empty, Map.fromList [("l",Qubit)])
+                        let (typ, index) = (WireType Qubit, Number 1)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+                        -- ∅;∅;∅ ⊢ Apply (Init,*) <= Qubit ; 1
+                        let term = Apply qinit UnitValue
+                        let (typ, index) = (WireType Qubit, Number 1)
+                        let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+                        -- ∅;∅;∅ ⊢ Apply (Init,*) <= Qubit ; 2
+                        let term = Apply qinit UnitValue
+                        let (typ, index) = (WireType Qubit, Number 2)
+                        let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+                it "fails when there are unused linear resources" $ do
+                        -- ∅;∅;l:Qubit,k:Qubit ⊢ Apply (Hadamard,l) <=/= Qubit ; 1
+                        let term = Apply hadamard $ Label "l"
+                        let (theta,gamma,q) = (Set.empty, Map.empty, Map.fromList [("l",Qubit),("k",Qubit)])
+                        let (typ, index) = (WireType Qubit, Number 1)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+                it "fails when the circuit produced by the term has width greater than the index" $ do
+                        -- ∅;∅;∅ ⊢ Apply (Init,*) <=/= Qubit ; 0
+                        let term = Apply qinit UnitValue
+                        let (typ, index) = (WireType Qubit, Number 0)
+                        let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+                        termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
 
 returnSpec :: Spec
 returnSpec = do
@@ -206,4 +229,26 @@ functionSpec = do
             valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
             
 applicationSpec :: Spec
-applicationSpec = undefined
+applicationSpec = do
+    describe "application type checking" $ do
+        it "succeeds when the rule's premises hold" $ do
+            -- ∅;∅;l:Qubit ⊢ (λx:Qubit.return x)l <= Qubit ; 1
+            let term = App (Abs "x" (WireType Qubit) (Return $ Variable "x")) (Label "l")
+            let (typ, index) = (WireType Qubit, Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Qubit)])
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+
+forceSpec :: Spec
+forceSpec = undefined
+
+liftSpec :: Spec
+liftSpec = undefined
+
+spec :: Spec
+spec = do
+    primitiveGatesSpec
+    applySpec
+    returnSpec
+    destSpec
+    functionSpec
+    applicationSpec
