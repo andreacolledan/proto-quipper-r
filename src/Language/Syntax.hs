@@ -20,6 +20,7 @@ data Value
     | Pair Value Value
     | BoxedCircuit Bundle Circuit Bundle
     | Abs VariableId Type Term
+    | Lift Term
     deriving Show
 
 instance Pretty Value where
@@ -29,6 +30,7 @@ instance Pretty Value where
     pretty (Pair v w) = "(" ++ pretty v ++ ", " ++ pretty w ++ ")"
     pretty (BoxedCircuit _ c _) = pretty c
     pretty (Abs x t m) = "(λ" ++ x ++ ":" ++ pretty t ++ ". " ++ pretty m ++ ")"
+    pretty (Lift m) = "lift(" ++ pretty m ++ ")"
 
 -- Fig. 8
 data Term
@@ -36,6 +38,7 @@ data Term
     | Dest VariableId VariableId Value Term
     | Return Value
     | App Value Value
+    | Force Value
     deriving Show
 
 instance Pretty Term where
@@ -43,6 +46,7 @@ instance Pretty Term where
     pretty (Dest x y v m) = "(let (" ++ x ++ ", " ++ y ++ ") = " ++ pretty v ++ " in " ++ pretty m ++ ")"
     pretty (Return v) = "return " ++ pretty v
     pretty (App m n) = "(" ++ pretty m ++ " " ++ pretty n ++ ")"
+    pretty (Force v) = "force(" ++ pretty v ++ ")"
 
 -- Fig. 8
 data Type
@@ -51,6 +55,7 @@ data Type
     | Tensor Type Type
     | Circ Index BundleType BundleType
     | Arrow Type Type Index Index
+    | Bang Type
     deriving (Show, Eq)
 
 instance Pretty Type where
@@ -59,6 +64,7 @@ instance Pretty Type where
     pretty (Tensor t1 t2) = "(" ++ pretty t1 ++ " ⊗ " ++ pretty t2 ++ ")"
     pretty (Circ i inBtype outBtype) = "Circ [" ++ pretty i ++ "] (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
     pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " ⊸ [" ++ pretty i ++ "," ++ pretty j ++ "]" ++ pretty typ2 ++ ")"
+    pretty (Bang typ) = "!" ++ pretty typ
 
 isLinear :: Type -> Bool
 isLinear UnitType = False
@@ -66,6 +72,7 @@ isLinear (WireType _) = True
 isLinear (Tensor typ1 typ2) = isLinear typ1 && isLinear typ2
 isLinear (Circ {}) = False
 isLinear (Arrow {}) = True
+isLinear (Bang _) = False
 
 
 instance Wide Type where
@@ -74,3 +81,4 @@ instance Wide Type where
     wireCount (Tensor t1 t2) = Plus (wireCount t1) (wireCount t2)
     wireCount (Circ {}) = Number 0
     wireCount (Arrow _ _ _ j) = j
+    wireCount (Bang _) = Number 0

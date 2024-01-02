@@ -117,54 +117,15 @@ checkValueType (Abs x intyp m) typ = case typ of
         checkTermType m outtyp i
     Arrow inTyp' _ _ _ -> throwError $ "Abstracted variable " ++ x ++ " is annotated with type " ++ pretty intyp ++ " but is required to have type " ++ pretty inTyp'
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a function"
+checkValueType (Lift m) typ = case typ of
+    Bang typ' -> do
+        contextsBefore <- get
+        check <- checkTermType m typ' (Number 0)
+        contextsAfter <- get
+        when (contextsBefore /= contextsAfter) (throwError "Lifted term cannot contain linear resources")
+        return check
+    _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a lifted term"
 
-
-
-
--- Θ;Γ;Q ⊢ V => A (Fig. 12)
-synthesizeValueType :: Value -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Type
-synthesizeValueType UnitValue = return UnitType
-synthesizeValueType (Label id) = do
-    wtype <- embedBundleDerivation $ labelContextLookup id
-    return $ WireType wtype
-synthesizeValueType (Variable id) = typingContextLookup id
-synthesizeValueType (Pair v w) = do
-    typ1 <- synthesizeValueType v
-    typ2 <- synthesizeValueType w
-    return $ Tensor typ1 typ2
-synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
-        (inQ, outQ) <- inferCircuitSignature circ
-        inBtype <- evalStateT (synthesizeBundleType inB) inQ
-        outBtype <- evalStateT (synthesizeBundleType outB) outQ
-        return $ Circ (Number $ width circ) inBtype outBtype
-synthesizeValueType (Abs x intyp m) = do
-    j <- contextWireCount
-    bindVariable x intyp
-    (outtyp, i) <- synthesizeTermType m
-    return $ Arrow intyp outtyp i j
-
--- Θ;Γ;Q ⊢ M => A ; I (Fig. 12)
-synthesizeTermType :: Term -> StateT (IndexContext, TypingContext, LabelContext) (Either String) (Type, Index)
-synthesizeTermType (Apply v w) = do
-    ctype <- synthesizeValueType v
-    case ctype of
-        Circ i inBtype outBtype -> do
-            _ <- checkValueType w (embedBundleType inBtype)
-            return (embedBundleType outBtype, i)
-        _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a circuit, instead has type " ++ pretty ctype
-synthesizeTermType (Dest x y v m) = do
-    ltyp <- synthesizeValueType v
-    case ltyp of
-        Tensor ltyp1 ltyp2 -> do
-            bindVariable x ltyp1
-            bindVariable y ltyp2
-            synthesizeTermType m
-        _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
-synthesizeTermType (Return v) = do
-    effectAnnotation <- contextWireCount
-    vtyp <- synthesizeValueType v
-    return (vtyp, effectAnnotation)
-synthesizeTermType m = throwError $ "Cannot synthesize type of " ++ pretty m
 
 -- Θ;Γ;Q ⊢ M <= A ; I (Fig. 12)
 -- returns True iff there are linear resources left in the typing contexts
@@ -202,6 +163,73 @@ checkTermType (App v w) typ i = do
                 when (i < i') (throwError $ "Function produces a circuit of width " ++ pretty i' ++ " but is required to produce a circuit of width at most " ++ pretty i)
                 return argcheck
             _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a function, instead has type " ++ pretty ftyp
--- checkTermType t _ _ = throwError $ "Cannot check type of " ++ show t
+checkTermType (Force v) typ i = do
+        when (i /= Number 0) (throwError $ "Forced term cannot produce a circuit of width " ++ pretty i)
+        --the check for the context to be non-linear is pushed down into the type check for the bang-typed value
+        checkValueType v (Bang typ)
 
 
+
+-- Θ;Γ;Q ⊢ V => A (Fig. 12)
+synthesizeValueType :: Value -> StateT (IndexContext, TypingContext, LabelContext) (Either String) Type
+synthesizeValueType UnitValue = return UnitType
+synthesizeValueType (Label id) = do
+    wtype <- embedBundleDerivation $ labelContextLookup id
+    return $ WireType wtype
+synthesizeValueType (Variable id) = typingContextLookup id
+synthesizeValueType (Pair v w) = do
+    typ1 <- synthesizeValueType v
+    typ2 <- synthesizeValueType w
+    return $ Tensor typ1 typ2
+synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
+        (inQ, outQ) <- inferCircuitSignature circ
+        inBtype <- evalStateT (synthesizeBundleType inB) inQ
+        outBtype <- evalStateT (synthesizeBundleType outB) outQ
+        return $ Circ (Number $ width circ) inBtype outBtype
+synthesizeValueType (Abs x intyp m) = do
+    j <- contextWireCount
+    bindVariable x intyp
+    (outtyp, i) <- synthesizeTermType m
+    return $ Arrow intyp outtyp i j
+synthesizeValueType (Lift m) = do
+    contextsBefore <- get
+    (typ, i) <- synthesizeTermType m
+    contextsAfter <- get
+    when (contextsBefore /= contextsAfter) (throwError "Lifted term cannot contain linear resources")
+    when (i /= Number 0) (throwError $ "Lifted term produces a circuit of width " ++ pretty i ++ " but is required to produce a circuit of width 0")
+    return $ Bang typ
+
+-- Θ;Γ;Q ⊢ M => A ; I (Fig. 12)
+synthesizeTermType :: Term -> StateT (IndexContext, TypingContext, LabelContext) (Either String) (Type, Index)
+synthesizeTermType (Apply v w) = do
+    ctype <- synthesizeValueType v
+    case ctype of
+        Circ i inBtype outBtype -> do
+            _ <- checkValueType w (embedBundleType inBtype)
+            return (embedBundleType outBtype, i)
+        _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a circuit, instead has type " ++ pretty ctype
+synthesizeTermType (Dest x y v m) = do
+    ltyp <- synthesizeValueType v
+    case ltyp of
+        Tensor ltyp1 ltyp2 -> do
+            bindVariable x ltyp1
+            bindVariable y ltyp2
+            synthesizeTermType m
+        _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
+synthesizeTermType (Return v) = do
+    effectAnnotation <- contextWireCount
+    vtyp <- synthesizeValueType v
+    return (vtyp, effectAnnotation)
+synthesizeTermType (App v w) = do
+    ftyp <- synthesizeValueType v
+    case ftyp of
+        Arrow intyp outtyp i j -> do
+            _ <- checkValueType w intyp
+            return (outtyp, i)
+        _ -> throwError $ "First argument of apply: " ++ pretty v ++ " is supposed to be a function, instead has type " ++ pretty ftyp
+synthesizeTermType (Force v) = do
+    --the check for the context to be non-linear is pushed down into the type synthesis for the bang-typed value
+    vtyp <- synthesizeValueType v
+    case vtyp of
+        Bang typ -> return (typ, Number 0)
+        _ -> throwError $ "Cannot force a value of type " ++ pretty vtyp
