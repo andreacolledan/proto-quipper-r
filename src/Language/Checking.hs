@@ -27,6 +27,7 @@ import WireBundle.Checking
 import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
 import qualified WireBundle.Syntax as Bundle
 import Control.Monad
+import qualified Data.Semigroup as Map
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -34,8 +35,7 @@ type TypingContext = Map VariableId Type
 data TypingEnvironment = TypingEnvironment {
     indexContext :: IndexContext,
     typingContext :: TypingContext,
-    labelContext :: LabelContext,
-    consumedResources :: Int
+    labelContext :: LabelContext
 }
 
 -- check if a typing context contains any linear variable. Corresponds to Γ being written Φ in the paper
@@ -45,10 +45,10 @@ containsLinearResources TypingEnvironment{typingContext = gamma, labelContext = 
 -- lookup a variable in the typing context, remove it if it is linear
 typingContextLookup :: VariableId -> StateT TypingEnvironment (Either String) Type
 typingContextLookup id = do
-    env@TypingEnvironment{typingContext = gamma, consumedResources = cs} <- get
-    outcome <- maybe (throwError $ "Unbound variable " ++ id) return (Map.lookup id gamma)
-    when (isLinear outcome) $ put env{typingContext = Map.delete id gamma, consumedResources = cs + 1}
-    return outcome
+    env@TypingEnvironment{typingContext = gamma} <- get
+    typ <- maybe (throwError $ "Unbound variable " ++ id) return (Map.lookup id gamma)
+    when (isLinear typ) $ put env{typingContext = Map.delete id gamma}
+    return typ
 
 -- add a new binding to the typing context, fail if the variable is already bound
 bindVariable :: VariableId -> Type -> StateT TypingEnvironment (Either String) ()
@@ -77,26 +77,20 @@ withBoundVariable x typ der = do
 -- make it so an existing derivation fails if it consumes any linear resources
 withNonLinearContext :: StateT TypingEnvironment (Either String) a -> StateT TypingEnvironment (Either String) a
 withNonLinearContext der = do
-    TypingEnvironment{consumedResources = before} <- get
-    outcome <- der
-    TypingEnvironment{consumedResources = after} <- get
-    when (after > before) (throwError "Linear resources consumed in a lifted term")
+    (outcome, resourceCount) <- withResourceCount der
+    when (resourceCount > Number 0) (throwError "Linear resources consumed in a lifted term")
     return outcome
 
 -- make it so an existing derivation also returns the amount of linear resources it makes use of
-withResourceCount :: StateT TypingEnvironment (Either String) a -> StateT TypingEnvironment (Either String) (a, Int)
+withResourceCount :: StateT TypingEnvironment (Either String) a -> StateT TypingEnvironment (Either String) (a, Index)
 withResourceCount der = do
-    TypingEnvironment{consumedResources = before} <- get
-    outcome <- der
-    TypingEnvironment{consumedResources = after} <- get
-    return (outcome, after - before)
-
--- return the number of wires in the typing context, corresponds to #(Γ) in the paper
-contextWireCount :: StateT TypingEnvironment (Either String) Index
-contextWireCount = do
     TypingEnvironment{typingContext = gamma, labelContext = q} <- get
-    return $ Plus (wireCount gamma) (wireCount q)
-
+    outcome <- der
+    TypingEnvironment{typingContext = gamma', labelContext = q'} <- get
+    let gammaDiff = Map.difference gamma gamma'
+    let qDiff = Map.difference q q'
+    let resourceCount = wireCount gammaDiff `Plus` wireCount qDiff
+    return (outcome, resourceCount)
 
 -- Turns a wire bundle into an equivalent language-level value
 embedWireBundle :: Bundle -> Value
@@ -115,11 +109,10 @@ embedBundleType (Bundle.Tensor b1 b2) = Tensor (embedBundleType b1) (embedBundle
 embedBundleDerivation :: StateT LabelContext (Either String) a
                         -> StateT TypingEnvironment (Either String) a
 embedBundleDerivation der = do
-    env@TypingEnvironment{labelContext = q, consumedResources = cs} <- get
+    env@TypingEnvironment{labelContext = q} <- get
     case runStateT der q of
         Left err -> throwError err
-        Right (x,q') -> let usedLabels = Map.size q - Map.size q'
-            in put env{labelContext=q', consumedResources = cs + usedLabels} >> return x
+        Right (x,q') -> put env{labelContext=q'} >> return x
 
 -- Θ;Γ;Q ⊢ V <= A (Fig. 12)
 -- returns True iff there are linear resources left in the typing contexts
@@ -152,9 +145,8 @@ checkValueType (BoxedCircuit inB circ outB) typ = case typ of
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a boxed circuit"
 checkValueType (Abs x intyp m) typ = case typ of
     Arrow intyp' outtyp i j | intyp' == intyp -> do
-        wireCountAnnotation <- contextWireCount
-        when (j /= wireCountAnnotation) (throwError $ "Function captures " ++ pretty wireCountAnnotation ++ " wires but is required to capture " ++ pretty j)
-        withBoundVariable x intyp $ checkTermType m outtyp i
+        ((),resourceCount) <- withResourceCount $ withBoundVariable x intyp $ checkTermType m outtyp i
+        when (j /= resourceCount) (throwError $ "Function captures " ++ pretty resourceCount ++ " wires but is required to capture " ++ pretty j)
     Arrow inTyp' _ _ _ -> throwError $ "Abstracted variable " ++ x ++ " is annotated with type " ++ pretty intyp ++ " but is required to have type " ++ pretty inTyp'
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a function"
 checkValueType (Lift m) typ = case typ of
@@ -185,7 +177,7 @@ checkTermType (Dest x y v m) typ i = do
 checkTermType (Return v) typ i = do
         (vtyp,resourceCount) <- withResourceCount $ synthesizeValueType v
         when (vtyp /= typ) (throwError $ "Return value " ++ pretty v ++ " has type " ++ pretty vtyp ++ " but is required to have type " ++ pretty typ)
-        when (i /= Number resourceCount) (throwError $ "Return value has width " ++ pretty resourceCount ++ " but is required to have width " ++ pretty i)
+        when (i /= resourceCount) (throwError $ "Return value has width " ++ pretty resourceCount ++ " but is required to have width " ++ pretty i)
 checkTermType (App v w) typ i = do
         ftyp <- synthesizeValueType v
         case ftyp of
@@ -221,8 +213,7 @@ synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
         unless (Map.null outQ') $ throwError $ "Output bundle " ++ pretty outB ++ " does not represent all of the circuits output wires"
         return $ Circ (Number $ width circ) inBtype outBtype
 synthesizeValueType (Abs x intyp m) = do
-    j <- contextWireCount
-    (outtyp, i) <- withBoundVariable x intyp $ synthesizeTermType m
+    ((outtyp, i), j) <- withResourceCount $ withBoundVariable x intyp $ synthesizeTermType m
     return $ Arrow intyp outtyp i j
 synthesizeValueType (Lift m) = do
     (typ, i) <- withNonLinearContext $ synthesizeTermType m
@@ -244,9 +235,7 @@ synthesizeTermType (Dest x y v m) = do
         Tensor ltyp1 ltyp2 -> do
             withBoundVariable x ltyp1 $ withBoundVariable y ltyp2 $ synthesizeTermType m
         _ -> throwError $ "Left hand side of destructuring let: " ++ pretty v ++ " is supposed to have tensor type, instead has type " ++ pretty ltyp
-synthesizeTermType (Return v) = do
-    (vtyp, resourceCount) <- withResourceCount $ synthesizeValueType v
-    return (vtyp, Number resourceCount)
+synthesizeTermType (Return v) = withResourceCount $ synthesizeValueType v
 synthesizeTermType (App v w) = do
     ftyp <- synthesizeValueType v
     case ftyp of
