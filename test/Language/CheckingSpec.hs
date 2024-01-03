@@ -16,6 +16,7 @@ import qualified Data.Map as Map
 import Control.Monad.Error.Class
 import Control.Monad
 import Data.Either (isRight, isLeft)
+import Test.Hspec.QuickCheck (prop)
 
 -- HELPER FUNCTIONS --
 
@@ -237,12 +238,98 @@ applicationSpec = do
             let (typ, index) = (WireType Qubit, Number 1)
             let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Qubit)])
             termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+            -- ∅;∅;l:Qubit,k:Bit ⊢ (λp:Qubit⊗Bit.let (x,y) = p in return (y,x)) (l,k) <= Bit⊗Qubit ; 2
+            let term = App
+                    (Abs "p" (Tensor (WireType Qubit) (WireType Bit))
+                        (Dest "x" "y" (Variable "p") (Return $ Pair (Variable "y") (Variable "x"))))
+                    (Pair (Label "l") (Label "k"))
+            let (typ, index) = (Tensor (WireType Bit) (WireType Qubit), Number 2)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Qubit),("k",Bit)])
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+        it "fails when the argument type does not match the function's input type" $ do
+            -- ∅;∅;l:Bit ⊢ (λx:Qubit.return x)l <=/= Bit ; 1
+            let term = App (Abs "x" (WireType Qubit) (Return $ Variable "x")) (Label "l")
+            let (typ, index) = (WireType Bit, Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Bit)])
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+        it "fails when the output type does not match the type checked against" $ do
+            -- ∅;∅;l:Qubit ⊢ (λx:Qubit.return x)l <=/= Bit ; 1
+            let term = App (Abs "x" (WireType Qubit) (Return $ Variable "x")) (Label "l")
+            let (typ, index) = (WireType Bit, Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Qubit)])
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+        it "fails when the function produces too large of a circuit" $ do
+            -- ∅;∅;l:Qubit,k:Qubit ⊢ (λx:Qubit. apply(CNOT,(x,l)))k <=/= (Qubit⊗Qubit) ; 1
+            let term = App (Abs "x" (WireType Qubit) (Apply cnot (Pair (Variable "x") (Label "l")))) (Label "k")
+            let (typ, index) = (Tensor (WireType Qubit) (WireType Qubit), Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("l",Qubit),("k",Qubit)])
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+        it "fails when the applicand is not a function" $ do
+            -- ∅;∅;∅ ⊢ lift(return *) * <=/= !Unit ; 0
+            let term = App (Lift $ Return UnitValue) UnitValue
+            let (typ,index) = (Bang UnitType, Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+            -- ∅;f:Qubit,q:Qubit;∅ ⊢ f q <=/= Qubit ; 2
+            let term = App (Variable "f") (Variable "q")
+            let (typ,index) = (WireType Qubit, Number 2)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("f",WireType Qubit),("q",WireType Qubit)],Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
 
 forceSpec :: Spec
-forceSpec = undefined
+forceSpec = do
+    describe "force type checking" $ do
+        it "succeeds against type A when the argument is a value of type !A" $ do
+            -- ∅;∅;∅ ⊢ force(lift(return *)) <= Unit ; 0
+            let term = Force $ Lift $ Return UnitValue
+            let (typ,index) = (UnitType,Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+            -- ∅;∅;∅ ⊢ force(lift(return λx:Qubit.return x)) <= Qubit -o [1,0] Qubit ; 0
+            let term = Force $ Lift $ Return $ Abs "x" (WireType Qubit) (Return $ Variable "x")
+            let (typ,index) = (Arrow (WireType Qubit) (WireType Qubit) (Number 1) (Number 0),Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isRight
+        it "fails when the argument is not of bang type" $ do
+            -- ∅;∅;∅ ⊢ force(*) <=/= Unit ; 0
+            let term = Force UnitValue
+            let (typ,index) = (UnitType,Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+            -- ∅;∅;∅ ⊢ force(λx:Qubit.return x) <=/= Qubit -o [1,0] Qubit ; 0
+            let term = Force $ Abs "x" (WireType Qubit) (Return $ Variable "x")
+            let (typ,index) = (Arrow (WireType Qubit) (WireType Qubit) (Number 1) (Number 0),Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
+
 
 liftSpec :: Spec
-liftSpec = undefined
+liftSpec = do
+    describe "lift type checking" $ do
+        it "succeeds when the rule premises hold" $ do
+            -- ∅;∅;∅ ⊢ lift(return(*)) <= !Unit
+            let term = Lift $ Return UnitValue
+            let typ = Bang UnitType
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+            -- ∅;∅;∅ ⊢ lift(return λx:Qubit.return x) <= !(Qubit -o [1,0] Qubit)
+            let term = Lift $ Return $ Abs "x" (WireType Qubit) (Return $ Variable "x")
+            let typ = Bang $ Arrow (WireType Qubit) (WireType Qubit) (Number 1) (Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+        it "fails when the term consumes linear resources" $ do
+            -- ∅;x:Qubit;∅ ⊢ lift(return λu:Unit.return x) <=/= !(Unit -o [1,1] Qubit)
+            let term = Lift $ Return $ Abs "u" UnitType (Return $ Variable "x")
+            let typ = Bang $ Arrow UnitType (WireType Qubit) (Number 1) (Number 1)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit)],Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when the term produces a circuit" $ do
+            -- ∅;∅;∅ ⊢ lift(apply(Init,*)) <=/= !Qubit
+            let term = Lift $ Apply qinit UnitValue
+            let typ = Bang $ WireType Qubit
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+
 
 spec :: Spec
 spec = do
@@ -252,3 +339,5 @@ spec = do
     destSpec
     functionSpec
     applicationSpec
+    liftSpec
+    forceSpec
