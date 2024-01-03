@@ -21,7 +21,7 @@ data Value
     | BoxedCircuit Bundle Circuit Bundle
     | Abs VariableId Type Term
     | Lift Term
-    deriving Show
+    deriving (Eq, Show)
 
 instance Pretty Value where
     pretty UnitValue = "*"
@@ -39,7 +39,7 @@ data Term
     | Return Value
     | App Value Value
     | Force Value
-    deriving Show
+    deriving (Eq, Show)
 
 instance Pretty Term where
     pretty (Apply v w) = "apply(" ++ pretty v ++ ", " ++ pretty w ++ ")"

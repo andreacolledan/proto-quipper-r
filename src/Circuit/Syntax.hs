@@ -15,7 +15,7 @@ data QuantumOperation
     | Hadamard
     | PauliX 
     | CNot
-    deriving Show
+    deriving (Eq,Show)
 
 instance Pretty QuantumOperation where
     pretty Init = "Init"
@@ -39,7 +39,7 @@ net _       = 0
 data Circuit
     = Id LabelContext
     | Seq Circuit QuantumOperation Bundle Bundle
-    deriving Show
+    deriving (Eq,Show)
 
 instance Pretty Circuit where
     pretty (Id q) = "Identity on " ++ pretty q

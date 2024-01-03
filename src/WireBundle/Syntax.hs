@@ -23,7 +23,7 @@ data Bundle
     = UnitValue
     | Label LabelId
     | Pair Bundle Bundle
-    deriving Show
+    deriving (Eq, Show)
 
 instance Pretty Bundle where
     pretty UnitValue = "*"

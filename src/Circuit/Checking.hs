@@ -5,8 +5,9 @@ import Circuit.Syntax
 import Control.Monad.State.Lazy
 import WireBundle.Checking
 import qualified Data.Map as Map
+
 -- C => Q -> L (Fig. 10) 
-inferCircuitSignature :: Circuit -> Either String (LabelContext, LabelContext)
+inferCircuitSignature :: Circuit -> Either WireTypingError (LabelContext, LabelContext)
 inferCircuitSignature (Id q) = Right (q, q)
 inferCircuitSignature (Seq circ op bin bout) = do 
     (qin, qmid) <- inferCircuitSignature circ

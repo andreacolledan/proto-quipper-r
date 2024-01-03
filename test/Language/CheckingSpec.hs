@@ -5,7 +5,7 @@ import Circuit.Syntax
 import Index
 import PrettyPrinter
 import WireBundle.Checking (LabelContext)
-import Language.Checking (TypingContext,TypingEnvironment(..), checkTermType, checkValueType, envIsLinear)
+import Language.Checking (TypingContext,TypingEnvironment(..), checkTermType, checkValueType, envIsLinear, TypingError(..))
 import Control.Monad.State.Lazy
 import Language.Syntax (VariableId, Value(..), Term(..), Type(..))
 import WireBundle.Syntax (LabelId, WireType (Qubit, Bit))
@@ -20,17 +20,20 @@ import Test.Hspec.QuickCheck (prop)
 
 -- HELPER FUNCTIONS --
 
-termCheckingTest :: Term -> IndexContext -> LabelContext -> TypingContext -> Type -> Index -> Either String ()
+termCheckingTest :: Term -> IndexContext -> LabelContext -> TypingContext -> Type -> Index -> Either TypingError ()
 termCheckingTest term theta q gamma typ index = let env = TypingEnvironment theta gamma q in
     case execStateT (checkTermType term typ index) env of
         Left err -> throwError err
-        Right env' -> when (envIsLinear env') $ throwError "Unused resources in linear environments"
+        Right env'@TypingEnvironment{typingContext=gamma, labelContext=q} ->
+            when (envIsLinear env') $ throwError $ UnusedLinearResources gamma q
 
-valueCheckingTest :: Value -> IndexContext -> LabelContext -> TypingContext -> Type -> Either String ()
+valueCheckingTest :: Value -> IndexContext -> LabelContext -> TypingContext -> Type -> Either TypingError ()
 valueCheckingTest value theta q gamma typ = let env = TypingEnvironment theta gamma q in
     case execStateT (checkValueType value typ) env of
         Left err -> throwError err
-        Right env' -> when (envIsLinear env') $ throwError "Unused resources in linear environments"
+        Right env'@TypingEnvironment{typingContext=gamma, labelContext=q} ->
+            when (envIsLinear env') $ throwError $ UnusedLinearResources gamma q
+
 
 
 printTestResults :: Term -> IndexContext -> LabelContext -> TypingContext -> Type -> Index -> Bool -> String -> IO()

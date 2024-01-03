@@ -5,17 +5,17 @@ import Control.Monad.State.Lazy (execStateT, evalStateT)
 import qualified Data.Map as Map
 import Data.Either (isLeft)
 import Test.Hspec ( Spec, describe, it, shouldBe, shouldSatisfy )
-import WireBundle.Checking (synthesizeBundleType, LabelContext, checkBundleType)
+import WireBundle.Checking (synthesizeBundleType, LabelContext, checkBundleType, WireTypingError(..))
 import WireBundle.Syntax
 
-bundleSynthesisTest :: Bundle -> LabelContext -> Either String BundleType
+bundleSynthesisTest :: Bundle -> LabelContext -> Either WireTypingError BundleType
 bundleSynthesisTest b = evalStateT (synthesizeBundleType b)
 
-bundleCheckingTest :: Bundle -> LabelContext -> BundleType -> Either String ()
+bundleCheckingTest :: Bundle -> LabelContext -> BundleType -> Either WireTypingError ()
 bundleCheckingTest b q btype = case execStateT (checkBundleType b btype) q of
     Left err -> throwError err
     Right q' -> do
-        unless (Map.null q') $ throwError "Unused resources in linear environments"
+        unless (Map.null q') $ throwError $ UnusedLabels q'
 
 bundleSynthesisSpec :: Spec
 bundleSynthesisSpec = do
