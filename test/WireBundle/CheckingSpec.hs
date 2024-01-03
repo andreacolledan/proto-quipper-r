@@ -1,7 +1,7 @@
 module WireBundle.CheckingSpec(spec) where
 import Control.Monad
 import Control.Monad.Error.Class
-import Control.Monad.State.Lazy (evalStateT)
+import Control.Monad.State.Lazy (execStateT, evalStateT)
 import qualified Data.Map as Map
 import Data.Either (isLeft)
 import Test.Hspec ( Spec, describe, it, shouldBe, shouldSatisfy )
@@ -12,10 +12,10 @@ bundleSynthesisTest :: Bundle -> LabelContext -> Either String BundleType
 bundleSynthesisTest b = evalStateT (synthesizeBundleType b)
 
 bundleCheckingTest :: Bundle -> LabelContext -> BundleType -> Either String ()
-bundleCheckingTest b q btype = case evalStateT (checkBundleType b btype) q of
+bundleCheckingTest b q btype = case execStateT (checkBundleType b btype) q of
     Left err -> throwError err
-    Right linearResourcesRemaining -> do
-        when linearResourcesRemaining $ throwError "Unused resources in linear environments"
+    Right q' -> do
+        unless (Map.null q') $ throwError "Unused resources in linear environments"
 
 bundleSynthesisSpec :: Spec
 bundleSynthesisSpec = do

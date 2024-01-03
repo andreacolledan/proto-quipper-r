@@ -12,7 +12,7 @@ module Language.Checking(
     embedWireBundle,
     embedBundleType,
     embedBundleDerivation,
-    containsLinearResources
+    envIsLinear
 ) where
 import Circuit.Checking
 import Circuit.Syntax
@@ -27,20 +27,26 @@ import WireBundle.Checking
 import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
 import qualified WireBundle.Syntax as Bundle
 import Control.Monad
-import qualified Data.Semigroup as Map
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
 
+-- The state of a typing derivation:
+-- - the index context Θ (nonlinear)
+-- - the typing context Γ (linear/nonlinear)
+-- - the label context Q (linear)
 data TypingEnvironment = TypingEnvironment {
     indexContext :: IndexContext,
     typingContext :: TypingContext,
     labelContext :: LabelContext
 }
+-- check if a typing environment contains any linear variable.
+envIsLinear :: TypingEnvironment -> Bool
+envIsLinear TypingEnvironment{typingContext = gamma, labelContext = q} = (any isLinear . Map.elems) gamma || Map.size q > 0
 
--- check if a typing context contains any linear variable. Corresponds to Γ being written Φ in the paper
-containsLinearResources :: TypingEnvironment -> Bool
-containsLinearResources TypingEnvironment{typingContext = gamma, labelContext = q} = (any isLinear . Map.elems) gamma || Map.size q > 0
+
+
+-- TYPING CONTEXT OPERATIONS ---------------------------------------------------------------
 
 -- lookup a variable in the typing context, remove it if it is linear
 typingContextLookup :: VariableId -> StateT TypingEnvironment (Either String) Type
@@ -61,36 +67,47 @@ bindVariable id typ = do
 -- remove a binding from the typing context, fail if the variable is linear
 unbindVariable :: VariableId -> StateT TypingEnvironment (Either String) ()
 unbindVariable id = do
-    TypingEnvironment{typingContext = gamma} <- get
+    env@TypingEnvironment{typingContext = gamma} <- get
     case Map.lookup id gamma of
         Nothing -> return ()
-        Just t -> when (isLinear t) (throwError $ "Cannot unbind linear variable " ++ id)
+        Just t -> do 
+            when (isLinear t) (throwError $ "Linear variable" ++ id ++ "goes out of scope")
+            put env{typingContext = Map.delete id gamma}
 
--- locally bind a variable in the typing context of an existing derivation
+
+
+-- DERIVATION COMBINATORS ---------------------------------------------------------------
+
+-- locally bind a variable in the scope of an existing derivation
 withBoundVariable :: VariableId -> Type -> StateT TypingEnvironment (Either String) a -> StateT TypingEnvironment (Either String) a
 withBoundVariable x typ der = do
     bindVariable x typ
     outcome <- der
-    unbindVariable x
+    unbindVariable x --this throws an error if x is linear and der does not consume it
     return outcome
 
--- make it so an existing derivation fails if it consumes any linear resources
+-- make an existing derivation also return the amount of linear resources it consumes
+withResourceCount :: StateT TypingEnvironment (Either String) a -> StateT TypingEnvironment (Either String) (a, Index)
+withResourceCount der = do
+    TypingEnvironment{typingContext = gamma, labelContext = q} <- get
+    outcome <- der
+    TypingEnvironment{typingContext = gamma', labelContext = q'} <- get
+    -- count how many linear resources have disappeared from the contexts
+    let gammaDiff = Map.difference gamma gamma'
+    let qDiff = Map.difference q q'
+    let resourceCount = wireCount gammaDiff `Plus` wireCount qDiff
+    return (outcome, resourceCount)
+
+-- make an existing derivation fail if it consumes any linear resources from the pre-existing environment
 withNonLinearContext :: StateT TypingEnvironment (Either String) a -> StateT TypingEnvironment (Either String) a
 withNonLinearContext der = do
     (outcome, resourceCount) <- withResourceCount der
     when (resourceCount > Number 0) (throwError "Linear resources consumed in a lifted term")
     return outcome
 
--- make it so an existing derivation also returns the amount of linear resources it makes use of
-withResourceCount :: StateT TypingEnvironment (Either String) a -> StateT TypingEnvironment (Either String) (a, Index)
-withResourceCount der = do
-    TypingEnvironment{typingContext = gamma, labelContext = q} <- get
-    outcome <- der
-    TypingEnvironment{typingContext = gamma', labelContext = q'} <- get
-    let gammaDiff = Map.difference gamma gamma'
-    let qDiff = Map.difference q q'
-    let resourceCount = wireCount gammaDiff `Plus` wireCount qDiff
-    return (outcome, resourceCount)
+
+
+-- BUNDLE CHECKING ---------------------------------------------------------------
 
 -- Turns a wire bundle into an equivalent language-level value
 embedWireBundle :: Bundle -> Value
@@ -113,6 +130,10 @@ embedBundleDerivation der = do
     case runStateT der q of
         Left err -> throwError err
         Right (x,q') -> put env{labelContext=q'} >> return x
+
+
+
+-- TYPE CHECKING ---------------------------------------------------------------
 
 -- Θ;Γ;Q ⊢ V <= A (Fig. 12)
 -- returns True iff there are linear resources left in the typing contexts
@@ -137,10 +158,10 @@ checkValueType (BoxedCircuit inB circ outB) typ = case typ of
     Circ i inBtype outBtype -> if Number (width circ) <= i
         then lift $ do
             (inQ, outQ) <- inferCircuitSignature circ
-            inputCheck <- evalStateT (checkBundleType inB inBtype) inQ
-            outputCheck <- evalStateT (checkBundleType outB outBtype) outQ
-            when inputCheck  $ throwError $ "Input bundle " ++ pretty inB ++ " does not represent all of the circuits input wires"
-            when outputCheck $ throwError $ "Output bundle " ++ pretty outB ++ " does not represent all of the circuits output wires"
+            inQ' <- execStateT (checkBundleType inB inBtype) inQ
+            outQ' <- execStateT (checkBundleType outB outBtype) outQ
+            unless (Map.null inQ')  $ throwError $ "Input bundle " ++ pretty inB ++ " does not represent all of the circuits input wires"
+            unless (Map.null outQ') $ throwError $ "Output bundle " ++ pretty outB ++ " does not represent all of the circuits output wires"
         else throwError $ "Cannot conclude width (" ++ pretty circ ++ ") <= " ++ pretty i
     _ -> throwError $ "Cannot give type " ++ pretty typ ++ " to a boxed circuit"
 checkValueType (Abs x intyp m) typ = case typ of
@@ -181,7 +202,7 @@ checkTermType (Return v) typ i = do
 checkTermType (App v w) typ i = do
         ftyp <- synthesizeValueType v
         case ftyp of
-            Arrow intyp outtyp i' j -> do
+            Arrow intyp outtyp i' _ -> do
                 argcheck <- checkValueType w intyp
                 when (outtyp /= typ) (throwError $ "Term " ++ pretty (App v w) ++ " has type " ++ pretty outtyp ++ " but is required to have type " ++ pretty typ)
                 when (i < i') (throwError $ "Function produces a circuit of width " ++ pretty i' ++ " but is required to produce a circuit of width at most " ++ pretty i)
@@ -193,6 +214,8 @@ checkTermType (Force v) typ i = do
         checkValueType v (Bang typ)
 
 
+
+-- TYPE SYNTHESIS ---------------------------------------------------------------
 
 -- Θ;Γ;Q ⊢ V => A (Fig. 12)
 synthesizeValueType :: Value -> StateT TypingEnvironment (Either String) Type

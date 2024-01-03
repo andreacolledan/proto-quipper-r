@@ -5,7 +5,7 @@ import Circuit.Syntax
 import Index
 import PrettyPrinter
 import WireBundle.Checking (LabelContext)
-import Language.Checking (TypingContext,TypingEnvironment(..), checkTermType, checkValueType, containsLinearResources)
+import Language.Checking (TypingContext,TypingEnvironment(..), checkTermType, checkValueType, envIsLinear)
 import Control.Monad.State.Lazy
 import Language.Syntax (VariableId, Value(..), Term(..), Type(..))
 import WireBundle.Syntax (LabelId, WireType (Qubit, Bit))
@@ -23,13 +23,13 @@ termCheckingTest :: Term -> IndexContext -> LabelContext -> TypingContext -> Typ
 termCheckingTest term theta q gamma typ index = let env = TypingEnvironment theta gamma q in
     case execStateT (checkTermType term typ index) env of
         Left err -> throwError err
-        Right env' -> when (containsLinearResources env') $ throwError "Unused resources in linear environments"
+        Right env' -> when (envIsLinear env') $ throwError "Unused resources in linear environments"
 
 valueCheckingTest :: Value -> IndexContext -> LabelContext -> TypingContext -> Type -> Either String ()
 valueCheckingTest value theta q gamma typ = let env = TypingEnvironment theta gamma q in
     case execStateT (checkValueType value typ) env of
         Left err -> throwError err
-        Right env' -> when (containsLinearResources env') $ throwError "Unused resources in linear environments"
+        Right env' -> when (envIsLinear env') $ throwError "Unused resources in linear environments"
 
 
 printTestResults :: Term -> IndexContext -> LabelContext -> TypingContext -> Type -> Index -> Bool -> String -> IO()

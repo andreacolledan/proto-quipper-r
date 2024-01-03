@@ -11,10 +11,12 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import PrettyPrinter
 import WireBundle.Syntax
+import Control.Monad (when)
 
 -- Corresponds to Q in the paper
 type LabelContext = Map LabelId WireType
 
+-- Lookup a label in the label context and remove it
 labelContextLookup :: LabelId -> StateT LabelContext (Either String) WireType
 labelContextLookup id = do
     q <- get
@@ -22,6 +24,7 @@ labelContextLookup id = do
     put $ Map.delete id q
     return outcome
 
+-- Check that the label context is nonempty
 labelContextNonempty :: StateT LabelContext (Either String) Bool
 labelContextNonempty = do
     not . Map.null <$> get
@@ -37,7 +40,8 @@ synthesizeBundleType (Pair b1 b2) = do
     btype2 <- synthesizeBundleType b2
     return $ Tensor btype1 btype2
 
-
+-- produces the unique label context that attributes a given bundle type to a given bundle
+-- matching the structure of the bundle with the structure of the bundle type
 synthesizeLabelContext :: Bundle -> BundleType -> Either String LabelContext
 synthesizeLabelContext UnitValue UnitType = Right Map.empty
 synthesizeLabelContext (Label id) (WireType wtype) = Right $ Map.fromList [(id,wtype)]
@@ -48,10 +52,7 @@ synthesizeLabelContext (Pair b1 b2) (Tensor btype1 btype2) = do
 synthesizeLabelContext b btype = Left $ "Cannot match structure of " ++ pretty b ++ " with structure of " ++ pretty btype
 
 -- Q ⊢ l <= T (Fig. 10)
--- returns True iff there are linear resources left in the label context
-checkBundleType :: Bundle -> BundleType -> StateT LabelContext (Either String) Bool
+checkBundleType :: Bundle -> BundleType -> StateT LabelContext (Either String) ()
 checkBundleType b btype = do
     synthesizedBtype <- synthesizeBundleType b
-    if synthesizedBtype == btype
-        then labelContextNonempty
-        else throwError "Type mismatch"
+    when (synthesizedBtype /= btype) $ throwError "Type mismatch"
