@@ -191,24 +191,18 @@ embedBundleDerivation der = do
 -- Θ;Γ;Q ⊢ V <= A (Fig. 12)
 -- returns True iff there are linear resources left in the typing contexts
 checkValueType :: Value -> Type -> StateT TypingEnvironment (Either TypingError) ()
-checkValueType UnitValue typ = case typ of
-    UnitType -> return ()
-    _ -> throwError $ IncompatibleType (Right UnitValue) typ
-checkValueType v@(Label id) typ = case typ of
-    WireType wtype -> do
-        wtype' <- embedBundleDerivation $ labelContextLookup id
-        when (wtype /= wtype') $ throwError $ UnexpectedType (Right v) typ (WireType wtype')
-    _ -> throwError $ IncompatibleType (Right v) typ
+checkValueType UnitValue UnitType = return ()
+checkValueType v@(Label id) typ@(WireType wtype) = do
+    wtype' <- embedBundleDerivation $ labelContextLookup id
+    when (wtype /= wtype') $ throwError $ UnexpectedType (Right v) typ (WireType wtype')
 checkValueType v@(Variable id) typ = do
     typ' <- typingContextLookup id
     when (typ /= typ') $ throwError $ UnexpectedType (Right v) typ typ'
-checkValueType p@(Pair v w) typ = case typ of
-    Tensor typ1 typ2 -> do
+checkValueType (Pair v w) (Tensor typ1 typ2) = do
         _ <- checkValueType v typ1
         checkValueType w typ2
-    _ -> throwError $ IncompatibleType (Right p) typ
-checkValueType v@(BoxedCircuit inB circ outB) typ = case typ of
-    Circ i inBtype outBtype -> if Number (width circ) <= i
+checkValueType (BoxedCircuit inB circ outB) (Circ i inBtype outBtype) = 
+    if Number (width circ) <= i
         then lift $ do
             (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
             inQ' <- mapLeft WireTypingError $ execStateT (checkBundleType inB inBtype) inQ
@@ -216,17 +210,12 @@ checkValueType v@(BoxedCircuit inB circ outB) typ = case typ of
             unless (Map.null inQ')  $ throwError $ MismatchedCircuitInterface Input circ inQ' inB
             unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
         else throwError $ ExceedingCircuitWidth circ i
-    _ -> throwError $ IncompatibleType (Right v) typ
-checkValueType v@(Abs x intyp m) typ = case typ of
-    Arrow intyp' outtyp i j | intyp' == intyp -> do
-        ((),resourceCount) <- withWireCount $ withBoundVariable x intyp $ checkTermType m outtyp i
-        when (j /= resourceCount) $ throwError $ UnexpectedType (Right v) (Arrow intyp outtyp i j) (Arrow intyp outtyp i resourceCount)
-    Arrow inTyp' outtyp i j -> throwError $ UnexpectedType (Right v) (Arrow inTyp' outtyp i j) (Arrow intyp outtyp i j)
-    _ -> throwError $ IncompatibleType (Right v) typ
-checkValueType (Lift m) typ = case typ of
-    Bang typ' -> do
-        withNonLinearContext $ checkTermType m typ' (Number 0)
-    _ -> throwError $ IncompatibleType (Left m) typ
+checkValueType v@(Abs x intyp m) (Arrow intyp' outtyp i j) = do
+    when (intyp' /= intyp) $ throwError $ UnexpectedType (Right (Variable x)) intyp' intyp  --don't like it, maybe define new bespoke error type
+    ((),resourceCount) <- withWireCount $ withBoundVariable x intyp $ checkTermType m outtyp i
+    when (j /= resourceCount) $ throwError $ UnexpectedType (Right v) (Arrow intyp outtyp i j) (Arrow intyp outtyp i resourceCount)
+checkValueType (Lift m) (Bang typ) = withNonLinearContext $ checkTermType m typ (Number 0)
+--If typ is not of the right form for v (e.g. v is an abstraction and typ is a bang type), throw an IncompatibleType error
 checkValueType v typ = throwError $ IncompatibleType (Right v) typ
 
 
