@@ -27,7 +27,7 @@
   - [ ] Return and sequencing let
     - [x] Implementing return
     - [x] Testing return
-    - [ ] Implementing sequencing let
+    - [x] Implementing sequencing let
     - [ ] Testing sequencing let
   - [ ] Circuit boxing
   - [ ] Lists and fold
@@ -35,4 +35,4 @@
 ### Typechecking
 
 - [ ] Interface with SMT solvers
-- [ ] Better error messages
+- [x] Better error messages
