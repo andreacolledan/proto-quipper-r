@@ -18,12 +18,17 @@
 
 - [ ] Implement remaining language constructs
   - [x] Tuples and destructuring let
-  - [ ] Functions
+  - [x] Functions
     - [x] Implementing abstraction and application
-    - [ ] Testing
-  - [ ] Lifting and forcing (boxing and unboxing linear values)
+    - [x] Testing
+  - [x] Lifting and forcing (boxing and unboxing linear values)
     - [x] Implementing lift and force
-    - [ ] Testing
+    - [x] Testing
+  - [ ] Return and sequencing let
+    - [x] Implementing return
+    - [x] Testing return
+    - [ ] Implementing sequencing let
+    - [ ] Testing sequencing let
   - [ ] Circuit boxing
   - [ ] Lists and fold
 

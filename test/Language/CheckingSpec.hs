@@ -321,10 +321,10 @@ liftSpec = do
             let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
             valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
         it "fails when the term consumes linear resources" $ do
-            -- ∅;x:Qubit;∅ ⊢ lift(return λu:Unit.return x) <=/= !(Unit -o [1,1] Qubit)
-            let term = Lift $ Return $ Abs "u" UnitType (Return $ Variable "x")
-            let typ = Bang $ Arrow UnitType (WireType Qubit) (Number 1) (Number 1)
-            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit)],Map.empty)
+            -- ∅;f:Unit -o [0,0] Unit;∅ ⊢ lift(return f) <=/= !(Unit -o [0,0] Unit)
+            let term = Lift $ Return $ Variable "f"
+            let typ = Bang $ Arrow UnitType UnitType (Number 0) (Number 0)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("f",Arrow UnitType UnitType (Number 0) (Number 0))],Map.empty)
             valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
         it "fails when the term produces a circuit" $ do
             -- ∅;∅;∅ ⊢ lift(apply(Init,*)) <=/= !Qubit

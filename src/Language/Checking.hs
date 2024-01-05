@@ -78,7 +78,7 @@ instance Show TypingError where
     show (ShadowedLinearVariable id) = "Shadowed linear variable " ++ id
     show LinearResourcesInLiftedTerm = "Linear resources consumed in a lifted term"
     show (UnexpectedType exp typ1 typ2) =
-        "Expected expression" ++ pretty exp ++ " to have type " ++ pretty typ1 ++ ", got " ++ pretty typ2 ++ " instead"
+        "Expected expression " ++ pretty exp ++ " to have type " ++ pretty typ1 ++ ", got " ++ pretty typ2 ++ " instead"
     show (IncompatibleType exp typ) = "Expression " ++ pretty exp ++ " cannot be given a type of the form " ++ pretty typ
     show (MismatchedCircuitInterface interfaceType circ q b) = 
         "Bundle " ++ pretty b ++ " is not a valid " ++ show interfaceType ++ " interface for circuit " ++ pretty circ
@@ -88,7 +88,7 @@ instance Show TypingError where
     show (UnexpectedWidthAnnotation m i j) =
         "Expected term " ++ pretty m ++ " to have width annotation " ++ pretty i ++ ", got " ++ pretty j ++ " instead"
     show (UnexpectedTypeConstructor exp typ1 typ2) =    --to be changed to only show the top level constructor of typ1
-        "Expected expression" ++ pretty exp ++ " to have type " ++ pretty typ1 ++ ", got type " ++ pretty typ2 ++ " instead"
+        "Expected expression " ++ pretty exp ++ " to have type " ++ pretty typ1 ++ ", got type " ++ pretty typ2 ++ " instead"
     show (UnusedLinearResources gamma q) = "Unused linear resources in typing contexts: " ++ pretty gamma ++ " ; " ++ pretty q
 
 
@@ -134,10 +134,10 @@ withBoundVariable x typ der = do
     unbindVariable x --this throws an error if x is linear and der does not consume it
     return outcome
 
--- make an existing derivation also return the amount of linear resources it consumes
-withResourceCount :: StateT TypingEnvironment (Either TypingError) a
+-- make an existing derivation also return the amount of wires it consumes
+withWireCount :: StateT TypingEnvironment (Either TypingError) a
                     -> StateT TypingEnvironment (Either TypingError) (a, Index)
-withResourceCount der = do
+withWireCount der = do
     TypingEnvironment{typingContext = gamma, labelContext = q} <- get
     outcome <- der
     TypingEnvironment{typingContext = gamma', labelContext = q'} <- get
@@ -151,8 +151,11 @@ withResourceCount der = do
 withNonLinearContext :: StateT TypingEnvironment (Either TypingError) a
                         -> StateT TypingEnvironment (Either TypingError) a
 withNonLinearContext der = do
-    (outcome, resourceCount) <- withResourceCount der
-    when (resourceCount > Number 0) (throwError LinearResourcesInLiftedTerm)
+    TypingEnvironment{typingContext = gamma, labelContext = q} <- get
+    outcome <- der
+    TypingEnvironment{typingContext = gamma', labelContext = q'} <- get
+    -- count how many linear resources have disappeared from the contexts
+    when ((any isLinear . Map.elems) gamma || Map.size q > 0) $ throwError LinearResourcesInLiftedTerm
     return outcome
 
 
@@ -216,7 +219,7 @@ checkValueType v@(BoxedCircuit inB circ outB) typ = case typ of
     _ -> throwError $ IncompatibleType (Right v) typ
 checkValueType v@(Abs x intyp m) typ = case typ of
     Arrow intyp' outtyp i j | intyp' == intyp -> do
-        ((),resourceCount) <- withResourceCount $ withBoundVariable x intyp $ checkTermType m outtyp i
+        ((),resourceCount) <- withWireCount $ withBoundVariable x intyp $ checkTermType m outtyp i
         when (j /= resourceCount) $ throwError $ UnexpectedType (Right v) (Arrow intyp outtyp i j) (Arrow intyp outtyp i resourceCount)
     Arrow inTyp' outtyp i j -> throwError $ UnexpectedType (Right v) (Arrow inTyp' outtyp i j) (Arrow intyp outtyp i j)
     _ -> throwError $ IncompatibleType (Right v) typ
@@ -246,9 +249,9 @@ checkTermType (Dest x y v m) typ i = do
                 withBoundVariable x ltyp1 $ withBoundVariable y ltyp2 $ checkTermType m typ i
             _ -> throwError $ UnexpectedTypeConstructor (Right v) (Tensor UnitType UnitType) ltyp
 checkTermType m@(Return v) typ i = do
-        (vtyp,resourceCount) <- withResourceCount $ synthesizeValueType v
+        (vtyp,resourceCount) <- withWireCount $ synthesizeValueType v
         when (vtyp /= typ) $ throwError $ UnexpectedType (Left m) typ vtyp
-        when (i /= resourceCount) $ throwError $ UnexpectedType (Left m) typ vtyp
+        when (i /= resourceCount) $ throwError $ UnexpectedWidthAnnotation m i resourceCount
 checkTermType m@(App v w) typ i = do
         ftyp <- synthesizeValueType v
         case ftyp of
@@ -285,7 +288,7 @@ synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
         unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
         return $ Circ (Number $ width circ) inBtype outBtype
 synthesizeValueType (Abs x intyp m) = do
-    ((outtyp, i), j) <- withResourceCount $ withBoundVariable x intyp $ synthesizeTermType m
+    ((outtyp, i), j) <- withWireCount $ withBoundVariable x intyp $ synthesizeTermType m
     return $ Arrow intyp outtyp i j
 synthesizeValueType (Lift m) = do
     (typ, i) <- withNonLinearContext $ synthesizeTermType m
@@ -307,7 +310,7 @@ synthesizeTermType (Dest x y v m) = do
         Tensor ltyp1 ltyp2 -> do
             withBoundVariable x ltyp1 $ withBoundVariable y ltyp2 $ synthesizeTermType m
         _ -> throwError $ UnexpectedTypeConstructor (Right v) (Tensor UnitType UnitType) ltyp
-synthesizeTermType (Return v) = withResourceCount $ synthesizeValueType v
+synthesizeTermType (Return v) = withWireCount $ synthesizeValueType v
 synthesizeTermType (App v w) = do
     ftyp <- synthesizeValueType v
     case ftyp of
