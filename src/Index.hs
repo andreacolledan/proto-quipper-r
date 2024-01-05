@@ -15,12 +15,14 @@ data Index
     = IndexVariable IndexVariableId
     | Number Int
     | Plus Index Index
+    | Max Index Index
     deriving Show
 
 instance Pretty Index where
     pretty (IndexVariable id) = id
     pretty (Number n) = show n
     pretty (Plus i j) = "(" ++ pretty i ++ " + " ++ pretty j ++ ")"
+    pretty (Max i j) = "max(" ++ pretty i ++ ", " ++ pretty j ++ ")"
 
 
 -- Corresponds to Θ in the paper
@@ -36,10 +38,12 @@ instance Indexed Index where
     wellFormed context (IndexVariable id) = id `elem` context
     wellFormed _ (Number _) = True
     wellFormed context (Plus i j) = wellFormed context i && wellFormed context j
+    wellFormed context (Max i j) = wellFormed context i && wellFormed context j
 
 eval ::  Index -> Int
 eval (Number n) = n
 eval (Plus i j) = eval i + eval j
+eval (Max i j) = max (eval i) (eval j)
 eval _ = error "Cannot evaluate index variable"
 
 -- We only compare number indices for now

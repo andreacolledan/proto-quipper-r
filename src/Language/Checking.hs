@@ -25,7 +25,7 @@ import Language.Syntax
 import PrettyPrinter
 import qualified Data.Map as Map
 import WireBundle.Checking
-import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount), LabelId)
+import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
 import qualified WireBundle.Syntax as Bundle
 import Control.Monad
 import Data.Either.Extra (mapLeft)
@@ -68,6 +68,9 @@ data TypingError
     | UnexpectedWidthAnnotation Term Index Index
     | UnexpectedTypeConstructor (Either Term Value) Type Type
     | UnusedLinearResources TypingContext LabelContext
+    | UnexpectedFormalParameterType Value Type Type
+    | UnexpectedBoxingType Value Type BundleType
+    | UnboxableType Value Type
     deriving (Eq)
 
 
@@ -90,8 +93,12 @@ instance Show TypingError where
     show (UnexpectedTypeConstructor exp typ1 typ2) =    --to be changed to only show the top level constructor of typ1
         "Expected expression " ++ pretty exp ++ " to have type " ++ pretty typ1 ++ ", got type " ++ pretty typ2 ++ " instead"
     show (UnusedLinearResources gamma q) = "Unused linear resources in typing contexts: " ++ pretty gamma ++ " ; " ++ pretty q
-
-
+    show (UnexpectedFormalParameterType v typ1 typ2) =
+        "Expected formal parameter of " ++ pretty v ++ " to have type " ++ pretty typ1 ++ ", got " ++ pretty typ2 ++ " instead"
+    show (UnexpectedBoxingType v btype1 btype2) =
+        "Expected input type of boxed circuit " ++ pretty v ++ " to be " ++ pretty btype1 ++ ", got " ++ pretty btype2 ++ " instead"
+    show (UnboxableType v typ) =
+        "Expression " ++ pretty v ++ " of type " ++ pretty typ ++ "cannot be boxed"
 
 -- TYPING CONTEXT OPERATIONS ---------------------------------------------------------------
 
@@ -154,8 +161,9 @@ withNonLinearContext der = do
     TypingEnvironment{typingContext = gamma, labelContext = q} <- get
     outcome <- der
     TypingEnvironment{typingContext = gamma', labelContext = q'} <- get
-    -- count how many linear resources have disappeared from the contexts
-    when ((any isLinear . Map.elems) gamma || Map.size q > 0) $ throwError LinearResourcesInLiftedTerm
+    let gammaDiff = Map.difference gamma gamma'
+    let qDiff = Map.difference q q'
+    when ((any isLinear . Map.elems) gammaDiff || Map.size qDiff > 0) $ throwError LinearResourcesInLiftedTerm
     return outcome
 
 
@@ -211,7 +219,7 @@ checkValueType (BoxedCircuit inB circ outB) (Circ i inBtype outBtype) =
             unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
         else throwError $ ExceedingCircuitWidth circ i
 checkValueType v@(Abs x intyp m) (Arrow intyp' outtyp i j) = do
-    when (intyp' /= intyp) $ throwError $ UnexpectedType (Right (Variable x)) intyp' intyp  --don't like it, maybe define new bespoke error type
+    when (intyp' /= intyp) $ throwError $ UnexpectedFormalParameterType v intyp' intyp
     ((),resourceCount) <- withWireCount $ withBoundVariable x intyp $ checkTermType m outtyp i
     when (j /= resourceCount) $ throwError $ UnexpectedType (Right v) (Arrow intyp outtyp i j) (Arrow intyp outtyp i resourceCount)
 checkValueType (Lift m) (Bang typ) = withNonLinearContext $ checkTermType m typ (Number 0)
@@ -253,6 +261,21 @@ checkTermType m@(Force v) typ i = do
         when (i /= Number 0) $ throwError $ UnexpectedWidthAnnotation m (Number 0) i
         --the check for the context to be non-linear is pushed down into the type check for the bang-typed value
         checkValueType v (Bang typ)
+checkTermType (Let x m n) typ i = do
+        (ltype, lwidth) <- synthesizeTermType m
+        ((rtype,rwidth), rWireCount) <- withWireCount $ withBoundVariable x ltype $ synthesizeTermType n
+        when (rtype /= typ) $ throwError $ UnexpectedType (Left (Let x m n)) typ rtype
+        let overallWidth = Max (Plus lwidth rWireCount) rwidth
+        when (i /= overallWidth) $ throwError $ UnexpectedWidthAnnotation (Let x m n) i overallWidth
+checkTermType (Box inbtype v) (Circ i inbtype' outbtype) j = do
+        when (inbtype' /= inbtype) $ throwError $ UnexpectedBoxingType v (embedBundleType inbtype') inbtype
+        when (j /= Number 0) $ throwError $ UnexpectedWidthAnnotation (Box inbtype v) j (Number 0)
+        --the check for the context to be non-linear is pushed down into the type check for the bang-typed value
+        checkValueType v (Bang $ Arrow (embedBundleType inbtype) (embedBundleType outbtype) i (Number 0))
+--If typ is not of the right form for v (e.g. v is an abstraction and typ is a bang type), throw an IncompatibleType error
+checkTermType m typ _ = throwError $ IncompatibleType (Left m) typ
+
+
 
 
 
@@ -313,3 +336,17 @@ synthesizeTermType (Force v) = do
     case vtyp of
         Bang typ -> return (typ, Number 0)
         _ -> throwError $ UnexpectedTypeConstructor (Right v) (Bang UnitType) vtyp
+synthesizeTermType (Let x m n) = do
+    (ltype, lwidth) <- synthesizeTermType m
+    ((rtype,rwidth), rWireCount) <- withWireCount $ withBoundVariable x ltype $ synthesizeTermType n
+    return (rtype, Max (Plus lwidth rWireCount) rwidth)
+synthesizeTermType (Box inbtype v) = do
+    --the check for the context to be non-linear is pushed down into the type synthesis for the bang-typed value
+    fType <- synthesizeValueType v
+    case fType of
+        Bang (Arrow intyp outtyp i _) -> do
+            inbtype' <- maybe (throwError $ UnboxableType v fType) return (toBundleType intyp)
+            when (inbtype' /= inbtype) $ throwError $ UnexpectedBoxingType v intyp inbtype
+            outbtype <- maybe (throwError $ UnboxableType v fType) return (toBundleType outtyp)
+            return (Circ i inbtype outbtype, Number 0)
+        _ -> throwError $ UnboxableType v fType

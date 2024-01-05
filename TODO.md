@@ -4,35 +4,60 @@
 
 ### Circuits
 
- - [x] Decide how to represent circuits, circuits with input and circuit-building computations
- - [ ] Decide how programs are meant to be executed: from a starting circuit or standalone. Consequently, choose whether $Q$ should appear in the implementation of the language type system or not.
+ - [x] Decide how to represent circuits, circuits with input and circuit-building computations. (Done: as in the paper)
+ - [x] Decide how programs are meant to be executed: from a starting circuit or standalone. Consequently, choose whether $Q$ should appear in the implementation of the language type system or not. (Done: the former)
+
+### Subtyping
+ - [ ] Decide whether to inline subtyping (easier) or have bespoke subtyping rules (closer to the paper).
 
 ## Implementation
 
-### Wire language
+### Wire language checking
 
-- [x] Implement pairs of labels
+- [x] Label pairs
+  - [x] Implementing
+  - [x] Testing
 - [ ] Implement sized lists of labels
+  - [ ] Implementing
+  - [ ] Testing
 
-### Language
+### PQR Language checking
 
-- [ ] Implement remaining language constructs
+- [ ] Language constructs
+  - [x] Boxed circuits and apply
+    - [x] Implementing boxed circuits
+    - [x] Testing boxed circuits
+    - [x] Implementing apply
+    - [x] Testing apply
   - [x] Tuples and destructuring let
-  - [x] Functions
-    - [x] Implementing abstraction and application
-    - [x] Testing
-  - [x] Lifting and forcing (boxing and unboxing linear values)
-    - [x] Implementing lift and force
-    - [x] Testing
+    - [x] Implementing tuples
+    - [x] Testing tuples
+    - [x] Implementing destructuring let
+    - [x] Testing destructuring let
+  - [x] Abstraction and application
+    - [x] Implementing abstraction
+    - [x] Testing abstraction
+    - [x] Implementing application
+    - [x] Testing application
+  - [x] Lifting and forcing (aka linear boxing and unboxing of terms)
+    - [x] Implementing lift
+    - [x] Testing lift
+    - [x] Implementing force
+    - [x] Testing force
   - [ ] Return and sequencing let
     - [x] Implementing return
     - [x] Testing return
     - [x] Implementing sequencing let
     - [ ] Testing sequencing let
   - [ ] Circuit boxing
+    - [x] Implementing box
+    - [ ] Testing box
   - [ ] Lists and fold
-
-### Typechecking
+    - [ ] Implementing lists
+    - [ ] Testing lists
+    - [ ] Implementing fold
+    - [ ] Testing fold
 
 - [ ] Interface with SMT solvers
+
 - [x] Better error messages

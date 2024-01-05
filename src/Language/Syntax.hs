@@ -3,24 +3,26 @@ module Language.Syntax(
     Term(..),
     Type(..),
     isLinear,
-    VariableId
+    VariableId,
+    toBundleType,
 ) where
 import Circuit.Syntax
 import Index
 import PrettyPrinter
 import WireBundle.Syntax(LabelId, Bundle, BundleType, WireType, Wide(..))
+import qualified WireBundle.Syntax as Bundle
 
 type VariableId = String
 
 -- Fig. 8
 data Value
     = UnitValue
-    | Label LabelId
-    | Variable VariableId
-    | Pair Value Value
-    | BoxedCircuit Bundle Circuit Bundle
-    | Abs VariableId Type Term
-    | Lift Term
+    | Label LabelId                         -- *
+    | Variable VariableId                   -- x
+    | Pair Value Value                      -- (V, W)
+    | BoxedCircuit Bundle Circuit Bundle    -- (l, C, k)
+    | Abs VariableId Type Term              -- λx:t.M
+    | Lift Term                             -- lift(M)
     deriving (Eq, Show)
 
 instance Pretty Value where
@@ -34,17 +36,21 @@ instance Pretty Value where
 
 -- Fig. 8
 data Term
-    = Apply Value Value
-    | Dest VariableId VariableId Value Term
-    | Return Value
-    | App Value Value
-    | Force Value
+    = Apply Value Value                     -- apply(V, W)
+    | Box BundleType Value                  -- box:T(V)
+    | Dest VariableId VariableId Value Term -- let (x, y) = V in M
+    | Return Value                          -- return V
+    | Let VariableId Term Term              -- let x = M in N
+    | App Value Value                       -- V W
+    | Force Value                           -- force(V)
     deriving (Eq, Show)
 
 instance Pretty Term where
     pretty (Apply v w) = "apply(" ++ pretty v ++ ", " ++ pretty w ++ ")"
+    pretty (Box t v) = "box:" ++ pretty t ++ "(" ++ pretty v ++ ")"
     pretty (Dest x y v m) = "(let (" ++ x ++ ", " ++ y ++ ") = " ++ pretty v ++ " in " ++ pretty m ++ ")"
     pretty (Return v) = "return " ++ pretty v
+    pretty (Let x m n) = "(let " ++ x ++ " = " ++ pretty m ++ " in " ++ pretty n ++ ")"
     pretty (App m n) = "(" ++ pretty m ++ " " ++ pretty n ++ ")"
     pretty (Force v) = "force(" ++ pretty v ++ ")"
 
@@ -63,7 +69,7 @@ instance Pretty Type where
     pretty (WireType wt) = pretty wt
     pretty (Tensor t1 t2) = "(" ++ pretty t1 ++ " ⊗ " ++ pretty t2 ++ ")"
     pretty (Circ i inBtype outBtype) = "Circ [" ++ pretty i ++ "] (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
-    pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " ⊸ [" ++ pretty i ++ "," ++ pretty j ++ "]" ++ pretty typ2 ++ ")"
+    pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " -o [" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
     pretty (Bang typ) = "!" ++ pretty typ
 
 isLinear :: Type -> Bool
@@ -82,3 +88,12 @@ instance Wide Type where
     wireCount (Circ {}) = Number 0
     wireCount (Arrow _ _ _ j) = j
     wireCount (Bang _) = Number 0
+
+toBundleType :: Type -> Maybe BundleType
+toBundleType UnitType = Just Bundle.UnitType
+toBundleType (WireType wtype) = Just $ Bundle.WireType wtype
+toBundleType (Tensor typ1 typ2) = do
+    btype1 <- toBundleType typ1
+    btype2 <- toBundleType typ2
+    return $ Bundle.Tensor btype1 btype2
+toBundleType _ = Nothing
