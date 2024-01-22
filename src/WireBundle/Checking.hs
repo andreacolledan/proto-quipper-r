@@ -39,11 +39,6 @@ labelContextLookup id = do
     put $ Map.delete id q
     return outcome
 
--- Check that the label context is nonempty
-labelContextNonempty :: State LabelContext Bool
-labelContextNonempty = do
-    not . Map.null <$> get
-
 -- Q ⊢ l => T (Fig. 10)
 synthesizeBundleType :: Bundle -> StateT LabelContext (Either WireTypingError) BundleType
 synthesizeBundleType UnitValue = return UnitType

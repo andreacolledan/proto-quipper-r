@@ -30,7 +30,7 @@ instance Pretty Value where
     pretty (Label id) = id
     pretty (Variable id) = id
     pretty (Pair v w) = "(" ++ pretty v ++ ", " ++ pretty w ++ ")"
-    pretty (BoxedCircuit _ c _) = pretty c
+    pretty (BoxedCircuit _ c _) = "[" ++ pretty c ++ "]"
     pretty (Abs x t m) = "(λ" ++ x ++ ":" ++ pretty t ++ ". " ++ pretty m ++ ")"
     pretty (Lift m) = "lift(" ++ pretty m ++ ")"
 

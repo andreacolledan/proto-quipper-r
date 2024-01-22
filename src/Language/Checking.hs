@@ -55,7 +55,7 @@ instance Show CircuitInterfaceType where
     show Output = "output"
 
 -- Typing errors
-data TypingError 
+data TypingError
     = WireTypingError WireTypingError
     | UnboundVariable VariableId
     | UnusedLinearVariable VariableId
@@ -69,7 +69,7 @@ data TypingError
     | UnexpectedTypeConstructor (Either Term Value) Type Type
     | UnusedLinearResources TypingContext LabelContext
     | UnexpectedFormalParameterType Value Type Type
-    | UnexpectedBoxingType Value Type BundleType
+    | UnexpectedBoxingType Term Type BundleType
     | UnboxableType Value Type
     deriving (Eq)
 
@@ -83,22 +83,30 @@ instance Show TypingError where
     show (UnexpectedType exp typ1 typ2) =
         "Expected expression " ++ pretty exp ++ " to have type " ++ pretty typ1 ++ ", got " ++ pretty typ2 ++ " instead"
     show (IncompatibleType exp typ) = "Expression " ++ pretty exp ++ " cannot be given a type of the form " ++ pretty typ
-    show (MismatchedCircuitInterface interfaceType circ q b) = 
+    show (MismatchedCircuitInterface interfaceType circ q b) =
         "Bundle " ++ pretty b ++ " is not a valid " ++ show interfaceType ++ " interface for circuit " ++ pretty circ
         ++ ", whose " ++ show interfaceType ++ " labels are " ++ pretty q
     show (ExceedingCircuitWidth circ i) =
         "Circuit " ++ pretty circ ++ " has width " ++ pretty (width circ) ++ ", which cannot be proven to be bounded by " ++ pretty i
     show (UnexpectedWidthAnnotation m i j) =
         "Expected term " ++ pretty m ++ " to have width annotation " ++ pretty i ++ ", got " ++ pretty j ++ " instead"
-    show (UnexpectedTypeConstructor exp typ1 typ2) =    --to be changed to only show the top level constructor of typ1
-        "Expected expression " ++ pretty exp ++ " to have type " ++ pretty typ1 ++ ", got type " ++ pretty typ2 ++ " instead"
+    show (UnexpectedTypeConstructor exp typ1 typ2) =
+        "Expected expression " ++ pretty exp ++ " to have " ++ printConstructor typ1 ++ ", got type " ++ pretty typ2 ++ " instead"
     show (UnusedLinearResources gamma q) = "Unused linear resources in typing contexts: " ++ pretty gamma ++ " ; " ++ pretty q
     show (UnexpectedFormalParameterType v typ1 typ2) =
         "Expected formal parameter of " ++ pretty v ++ " to have type " ++ pretty typ1 ++ ", got " ++ pretty typ2 ++ " instead"
-    show (UnexpectedBoxingType v btype1 btype2) =
-        "Expected input type of boxed circuit " ++ pretty v ++ " to be " ++ pretty btype1 ++ ", got " ++ pretty btype2 ++ " instead"
+    show (UnexpectedBoxingType m btype1 btype2) =
+        "Expected input type of boxed circuit " ++ pretty m ++ " to be " ++ pretty btype1 ++ ", got " ++ pretty btype2 ++ " instead"
     show (UnboxableType v typ) =
         "Expression " ++ pretty v ++ " of type " ++ pretty typ ++ "cannot be boxed"
+
+printConstructor :: Type -> String
+printConstructor UnitType = "unit type"
+printConstructor (WireType _) = "wire type"
+printConstructor (Tensor _ _) = "tensor type"
+printConstructor (Circ {}) = "circuit type"
+printConstructor (Arrow {}) = "arrow type"
+printConstructor (Bang _) = "bang type"
 
 -- TYPING CONTEXT OPERATIONS ---------------------------------------------------------------
 
@@ -124,7 +132,7 @@ unbindVariable id = do
     env@TypingEnvironment{typingContext = gamma} <- get
     case Map.lookup id gamma of
         Nothing -> return ()
-        Just t -> do 
+        Just t -> do
             when (isLinear t) (throwError $ UnusedLinearVariable id)
             put env{typingContext = Map.delete id gamma}
 
@@ -209,7 +217,7 @@ checkValueType v@(Variable id) typ = do
 checkValueType (Pair v w) (Tensor typ1 typ2) = do
         _ <- checkValueType v typ1
         checkValueType w typ2
-checkValueType (BoxedCircuit inB circ outB) (Circ i inBtype outBtype) = 
+checkValueType (BoxedCircuit inB circ outB) (Circ i inBtype outBtype) =
     if Number (width circ) <= i
         then lift $ do
             (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
@@ -267,9 +275,9 @@ checkTermType (Let x m n) typ i = do
         when (rtype /= typ) $ throwError $ UnexpectedType (Left (Let x m n)) typ rtype
         let overallWidth = Max (Plus lwidth rWireCount) rwidth
         when (i /= overallWidth) $ throwError $ UnexpectedWidthAnnotation (Let x m n) i overallWidth
-checkTermType (Box inbtype v) (Circ i inbtype' outbtype) j = do
-        when (inbtype' /= inbtype) $ throwError $ UnexpectedBoxingType v (embedBundleType inbtype') inbtype
-        when (j /= Number 0) $ throwError $ UnexpectedWidthAnnotation (Box inbtype v) j (Number 0)
+checkTermType m@(Box inbtype v) (Circ i inbtype' outbtype) j = do
+        when (inbtype' /= inbtype) $ throwError $ UnexpectedBoxingType m (embedBundleType inbtype') inbtype
+        when (j /= Number 0) $ throwError $ UnexpectedWidthAnnotation m j (Number 0)
         --the check for the context to be non-linear is pushed down into the type check for the bang-typed value
         checkValueType v (Bang $ Arrow (embedBundleType inbtype) (embedBundleType outbtype) i (Number 0))
 --If typ is not of the right form for v (e.g. v is an abstraction and typ is a bang type), throw an IncompatibleType error
@@ -340,13 +348,13 @@ synthesizeTermType (Let x m n) = do
     (ltype, lwidth) <- synthesizeTermType m
     ((rtype,rwidth), rWireCount) <- withWireCount $ withBoundVariable x ltype $ synthesizeTermType n
     return (rtype, Max (Plus lwidth rWireCount) rwidth)
-synthesizeTermType (Box inbtype v) = do
+synthesizeTermType m@(Box inbtype v) = do
     --the check for the context to be non-linear is pushed down into the type synthesis for the bang-typed value
     fType <- synthesizeValueType v
     case fType of
         Bang (Arrow intyp outtyp i _) -> do
             inbtype' <- maybe (throwError $ UnboxableType v fType) return (toBundleType intyp)
-            when (inbtype' /= inbtype) $ throwError $ UnexpectedBoxingType v intyp inbtype
+            when (inbtype' /= inbtype) $ throwError $ UnexpectedBoxingType m intyp inbtype
             outbtype <- maybe (throwError $ UnboxableType v fType) return (toBundleType outtyp)
             return (Circ i inbtype outbtype, Number 0)
         _ -> throwError $ UnboxableType v fType

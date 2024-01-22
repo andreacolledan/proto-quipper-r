@@ -48,15 +48,21 @@
     - [x] Implementing return
     - [x] Testing return
     - [x] Implementing sequencing let
-    - [ ] Testing sequencing let
+    - [x] Testing sequencing let
   - [ ] Circuit boxing
     - [x] Implementing box
-    - [ ] Testing box
+    - [x] Testing box
   - [ ] Lists and fold
     - [ ] Implementing lists
     - [ ] Testing lists
     - [ ] Implementing fold
     - [ ] Testing fold
+
+## PQR Language Type Synthesis
+
+  - [ ] Type synthesis for lists
+  - [ ] Type synthesis for fold
+  - [ ] Testing synthesis
 
 - [ ] Interface with SMT solvers
 

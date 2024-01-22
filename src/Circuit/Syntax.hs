@@ -42,8 +42,8 @@ data Circuit
     deriving (Eq,Show)
 
 instance Pretty Circuit where
-    pretty (Id q) = "Identity on " ++ pretty q
-    pretty (Seq circ op bin bout) = pretty circ ++ " ; " ++ pretty op ++ "(" ++ pretty bin ++ ") -> " ++ pretty bout
+    pretty (Id q) = "Inputs:" ++ pretty q
+    pretty (Seq circ op bin bout) = pretty circ ++ "; " ++ pretty op ++ "(" ++ pretty bin ++ ") -> " ++ pretty bout
 
 
 width :: Circuit -> Int

@@ -41,7 +41,8 @@ library
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing
   build-depends:
-      base >=4.7 && <5
+      QuickCheck
+    , base >=4.7 && <5
     , containers
     , extra
     , hspec
@@ -58,7 +59,8 @@ executable pqr-exe
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      QuickCheck
+    , base >=4.7 && <5
     , containers
     , extra
     , hspec
@@ -70,9 +72,16 @@ test-suite pqr-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Circuit.Generators
       Circuit.SyntaxSpec
+      Index.Generators
+      Index.SyntaxSpec
       Language.CheckingSpec
+      Language.Generators
+      Language.SyntaxSpec
       WireBundle.CheckingSpec
+      WireBundle.Generators
+      WireBundle.SyntaxSpec
       Paths_pqr
   autogen-modules:
       Paths_pqr
@@ -80,7 +89,8 @@ test-suite pqr-test
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      QuickCheck
+    , base >=4.7 && <5
     , containers
     , extra
     , hspec
