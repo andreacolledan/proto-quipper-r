@@ -57,6 +57,7 @@
     - [ ] Testing lists
     - [ ] Implementing fold
     - [ ] Testing fold
+- [x] Well-formedness constraints
 - [ ] Subsumption (e.g. `⊢ m : Circ 1 (Qubit,Qubit) ; 5` entails `⊢ m : Circ 2 (Qubit,Qubit) ; 8`)
   - [ ] Decide whether to implement subsumption as a distinct case or within rules
   - [ ] Implement subsumption

@@ -71,6 +71,7 @@ data TypingError
     | UnexpectedFormalParameterType Value Type Type
     | UnexpectedBoxingType Term Type BundleType
     | UnboxableType Value Type
+    | IllFormedTypingContext IndexContext TypingContext
     deriving (Eq)
 
 
@@ -99,6 +100,8 @@ instance Show TypingError where
         "Expected input type of boxed circuit " ++ pretty m ++ " to be " ++ pretty btype1 ++ ", got " ++ pretty btype2 ++ " instead"
     show (UnboxableType v typ) =
         "Expression " ++ pretty v ++ " of type " ++ pretty typ ++ "cannot be boxed"
+    show (IllFormedTypingContext theta gamma) =
+        "Typing context " ++ pretty gamma ++ " is not well-formed with respect to index context " ++ pretty theta
 
 printConstructor :: Type -> String
 printConstructor UnitType = "unit type"
@@ -136,6 +139,10 @@ unbindVariable id = do
             when (isLinear t) (throwError $ UnusedLinearVariable id)
             put env{typingContext = Map.delete id gamma}
 
+checkTypingContextWellFormed :: StateT TypingEnvironment (Either TypingError) ()
+checkTypingContextWellFormed = do
+    TypingEnvironment{indexContext = theta, typingContext = gamma} <- get
+    unless (wellFormed theta gamma) $ throwError $ IllFormedTypingContext theta gamma
 
 
 -- DERIVATION COMBINATORS ---------------------------------------------------------------
@@ -207,17 +214,20 @@ embedBundleDerivation der = do
 -- Θ;Γ;Q ⊢ V <= A (Fig. 12)
 -- returns True iff there are linear resources left in the typing contexts
 checkValueType :: Value -> Type -> StateT TypingEnvironment (Either TypingError) ()
-checkValueType UnitValue UnitType = return ()
+checkValueType UnitValue UnitType = checkTypingContextWellFormed
 checkValueType v@(Label id) typ@(WireType wtype) = do
+    checkTypingContextWellFormed
     wtype' <- embedBundleDerivation $ labelContextLookup id
     when (wtype /= wtype') $ throwError $ UnexpectedType (Right v) typ (WireType wtype')
 checkValueType v@(Variable id) typ = do
+    checkTypingContextWellFormed
     typ' <- typingContextLookup id
     when (typ /= typ') $ throwError $ UnexpectedType (Right v) typ typ'
 checkValueType (Pair v w) (Tensor typ1 typ2) = do
         _ <- checkValueType v typ1
         checkValueType w typ2
-checkValueType (BoxedCircuit inB circ outB) (Circ i inBtype outBtype) =
+checkValueType (BoxedCircuit inB circ outB) (Circ i inBtype outBtype) = do
+    checkTypingContextWellFormed   
     if Number (width circ) <= i
         then lift $ do
             (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
@@ -291,22 +301,29 @@ checkTermType m typ _ = throwError $ IncompatibleType (Left m) typ
 
 -- Θ;Γ;Q ⊢ V => A (Fig. 12)
 synthesizeValueType :: Value -> StateT TypingEnvironment (Either TypingError) Type
-synthesizeValueType UnitValue = return UnitType
+synthesizeValueType UnitValue = do
+    checkTypingContextWellFormed
+    return UnitType
 synthesizeValueType (Label id) = do
+    checkTypingContextWellFormed
     wtype <- embedBundleDerivation $ labelContextLookup id
     return $ WireType wtype
-synthesizeValueType (Variable id) = typingContextLookup id
+synthesizeValueType (Variable id) = do
+    checkTypingContextWellFormed
+    typingContextLookup id
 synthesizeValueType (Pair v w) = do
     typ1 <- synthesizeValueType v
     typ2 <- synthesizeValueType w
     return $ Tensor typ1 typ2
-synthesizeValueType (BoxedCircuit inB circ outB) = lift $ do
-        (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
-        (inBtype, inQ') <- mapLeft WireTypingError $ runStateT (synthesizeBundleType inB) inQ
-        (outBtype, outQ') <- mapLeft WireTypingError $ runStateT (synthesizeBundleType outB) outQ
-        unless (Map.null inQ') $ throwError $ MismatchedCircuitInterface Input circ inQ' inB
-        unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
-        return $ Circ (Number $ width circ) inBtype outBtype
+synthesizeValueType (BoxedCircuit inB circ outB) = do
+        checkTypingContextWellFormed
+        lift $ do
+            (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
+            (inBtype, inQ') <- mapLeft WireTypingError $ runStateT (synthesizeBundleType inB) inQ
+            (outBtype, outQ') <- mapLeft WireTypingError $ runStateT (synthesizeBundleType outB) outQ
+            unless (Map.null inQ') $ throwError $ MismatchedCircuitInterface Input circ inQ' inB
+            unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
+            return $ Circ (Number $ width circ) inBtype outBtype
 synthesizeValueType (Abs x intyp m) = do
     ((outtyp, i), j) <- withWireCount $ withBoundVariable x intyp $ synthesizeTermType m
     return $ Arrow intyp outtyp i j

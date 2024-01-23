@@ -43,6 +43,11 @@ instance Pretty BundleType where
     pretty (WireType Qubit) = "Qubit"
     pretty (Tensor b1 b2) = "(" ++ pretty b1 ++ " ⊗ " ++ pretty b2 ++ ")"
 
+instance Indexed BundleType where
+    wellFormed _ UnitType = True
+    wellFormed _ (WireType _) = True
+    wellFormed theta (Tensor b1 b2) = wellFormed theta b1 && wellFormed theta b2
+
 class Wide a where
     wireCount :: a -> Index
 

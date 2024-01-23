@@ -72,15 +72,6 @@ instance Pretty Type where
     pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " -o [" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
     pretty (Bang typ) = "!" ++ pretty typ
 
-isLinear :: Type -> Bool
-isLinear UnitType = False
-isLinear (WireType _) = True
-isLinear (Tensor typ1 typ2) = isLinear typ1 && isLinear typ2
-isLinear (Circ {}) = False
-isLinear (Arrow {}) = True
-isLinear (Bang _) = False
-
-
 instance Wide Type where
     wireCount UnitType = Number 0
     wireCount (WireType _) = Number 1
@@ -88,6 +79,22 @@ instance Wide Type where
     wireCount (Circ {}) = Number 0
     wireCount (Arrow _ _ _ j) = j
     wireCount (Bang _) = Number 0
+
+instance Indexed Type where
+    wellFormed _ UnitType = True
+    wellFormed _ (WireType _) = True
+    wellFormed theta (Tensor t1 t2) = wellFormed theta t1 && wellFormed theta t2
+    wellFormed theta (Circ i inBtype outBtype) = wellFormed theta i && wellFormed theta inBtype && wellFormed theta outBtype
+    wellFormed theta (Arrow typ1 typ2 i j) = wellFormed theta typ1 && wellFormed theta typ2 && wellFormed theta i && wellFormed theta j
+    wellFormed theta (Bang typ) = wellFormed theta typ
+
+isLinear :: Type -> Bool
+isLinear UnitType = False
+isLinear (WireType _) = True
+isLinear (Tensor typ1 typ2) = isLinear typ1 && isLinear typ2
+isLinear (Circ {}) = False
+isLinear (Arrow {}) = True
+isLinear (Bang _) = False
 
 toBundleType :: Type -> Maybe BundleType
 toBundleType UnitType = Just Bundle.UnitType
