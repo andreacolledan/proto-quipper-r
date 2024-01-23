@@ -50,14 +50,14 @@ contextSynthesisSpec :: Spec
 contextSynthesisSpec = do
     describe "context synthesis" $ do
         it "succeeds when a wire bundle and a wire type have the same shape" $ do
-            -- ∅ <= * : Unit
+            -- ∅ <== * : Unit
             synthesizeLabelContext UnitValue UnitType `shouldBe` Right Map.empty
-            -- a:Qubit <= a : Qubit
+            -- a:Qubit <== a : Qubit
             synthesizeLabelContext (Label "a") (WireType Qubit) `shouldBe` Right (Map.fromList [("a",Qubit)])
-            -- a:Qubit,b:Bit<= (a,b) : Qubit ⊗ Bit
+            -- a:Qubit,b:Bit <== (a,b) : Qubit ⊗ Bit
             synthesizeLabelContext (Pair (Label "a") (Label "b")) (Tensor (WireType Qubit) (WireType Bit))
                 `shouldBe` Right (Map.fromList [("a",Qubit),("b",Bit)])
-            -- a:Qubit,b:Bit,c:Qubit <= ((*,a),(b,c)) <= (Unit ⊗ Qubit) ⊗ (Bit ⊗ Qubit)
+            -- a:Qubit,b:Bit,c:Qubit <== ((*,a),(b,c)) : (Unit ⊗ Qubit) ⊗ (Bit ⊗ Qubit)
             synthesizeLabelContext (Pair (Pair UnitValue (Label "a")) (Pair (Label "b") (Label "c")))
                 (Tensor (Tensor UnitType (WireType Qubit)) (Tensor (WireType Bit) (WireType Qubit)))
                 `shouldBe` Right (Map.fromList [("a",Qubit),("b",Bit),("c",Qubit)])

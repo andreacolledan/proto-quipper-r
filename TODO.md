@@ -44,12 +44,12 @@
     - [x] Testing lift
     - [x] Implementing force
     - [x] Testing force
-  - [ ] Return and sequencing let
+  - [x] Return and sequencing let
     - [x] Implementing return
     - [x] Testing return
     - [x] Implementing sequencing let
     - [x] Testing sequencing let
-  - [ ] Circuit boxing
+  - [x] Circuit boxing
     - [x] Implementing box
     - [x] Testing box
   - [ ] Lists and fold
@@ -57,13 +57,18 @@
     - [ ] Testing lists
     - [ ] Implementing fold
     - [ ] Testing fold
+- [ ] Subsumption (e.g. `⊢ m : Circ 1 (Qubit,Qubit) ; 5` entails `⊢ m : Circ 2 (Qubit,Qubit) ; 8`)
+  - [ ] Decide whether to implement subsumption as a distinct case or within rules
+  - [ ] Implement subsumption
+    - [ ] Implement subtyping
+      - [ ] Interface with SMT solver
+- [ ] Instantiation (e.g. `⊢ f : List i Qubit -o [i,0] List i Qubit` entails `⊢ f : List 3 Qubit -o [3,0] List 3 Qubit`)
+  - [ ] Implement instantiation
 
 ## PQR Language Type Synthesis
 
   - [ ] Type synthesis for lists
   - [ ] Type synthesis for fold
   - [ ] Testing synthesis
-
-- [ ] Interface with SMT solvers
 
 - [x] Better error messages
