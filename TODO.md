@@ -7,9 +7,6 @@
  - [x] Decide how to represent circuits, circuits with input and circuit-building computations. (Done: as in the paper)
  - [x] Decide how programs are meant to be executed: from a starting circuit or standalone. Consequently, choose whether $Q$ should appear in the implementation of the language type system or not. (Done: the former)
 
-### Subtyping
- - [x] Decide whether to inline subtyping (easier) or have bespoke subtyping rules (closer to the paper). Chose the latter.
-
 ## Implementation
 
 ### Wire language checking
@@ -59,9 +56,9 @@
     - [ ] Testing fold
 - [x] Well-formedness constraints
 - [ ] Subsumption (e.g. `⊢ m : Circ 1 (Qubit,Qubit) ; 5` entails `⊢ m : Circ 2 (Qubit,Qubit) ; 8`)
-  - [ ] Decide whether to implement subsumption as a distinct case or within rules
-  - [ ] Implement subsumption
-    - [ ] Implement subtyping
+  - [x] Decide whether to implement subsumption as a distinct case or within rules. Decided the former.
+  - [x] Implement subsumption
+    - [x] Implement subtyping
       - [x] Interface with SMT solver
 - [ ] Instantiation (e.g. `⊢ f : List i Qubit -o [i,0] List i Qubit` entails `⊢ f : List 3 Qubit -o [3,0] List 3 Qubit`)
   - [ ] Implement instantiation
