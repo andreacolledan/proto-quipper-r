@@ -228,7 +228,8 @@ embedBundleDerivation der = do
 checkValueType :: Value -> Type -> StateT TypingEnvironment (Either TypingError) ()
 checkValueType v typ = do
     typ' <- synthesizeValueType v
-    when (typ' /= typ) $ throwError $ UnexpectedType (Right v) typ typ'
+    TypingEnvironment{indexContext = theta} <- get
+    unless (typ' == typ || checkSubtype theta typ' typ) $ throwError $ UnexpectedType (Right v) typ typ'
 
 -- Type checking for terms, returns () if successful
 -- Θ;Γ;Q ⊢ M <== A ; I (Fig. 12)
@@ -236,8 +237,8 @@ checkTermType :: Term -> Type -> Index -> StateT TypingEnvironment (Either Typin
 checkTermType m typ i = do
     (typ', i') <- synthesizeTermType m
     TypingEnvironment{indexContext = theta} <- get
-    unless (checkSubtype theta typ' typ) $ throwError $ UnexpectedType (Left m) typ typ'
-    unless (checkLeq theta i' i) $ throwError $ UnexpectedWidthAnnotation m i i'
+    unless (typ' == typ || checkSubtype theta typ' typ) $ throwError $ UnexpectedType (Left m) typ typ'
+    unless (i' <= i || checkLeq theta i' i) $ throwError $ UnexpectedWidthAnnotation m i i'
 
 
 
