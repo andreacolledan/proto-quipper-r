@@ -14,6 +14,7 @@ import qualified WireBundle.Syntax as Bundle
 
 type VariableId = String
 
+-- The datatype of PQR values
 -- Fig. 8
 data Value
     = UnitValue
@@ -24,7 +25,6 @@ data Value
     | Abs VariableId Type Term              -- λx:t.M
     | Lift Term                             -- lift(M)
     deriving (Eq, Show)
-
 instance Pretty Value where
     pretty UnitValue = "*"
     pretty (Label id) = id
@@ -34,6 +34,7 @@ instance Pretty Value where
     pretty (Abs x t m) = "(λ" ++ x ++ ":" ++ pretty t ++ ". " ++ pretty m ++ ")"
     pretty (Lift m) = "lift(" ++ pretty m ++ ")"
 
+-- The datatype of PQR terms
 -- Fig. 8
 data Term
     = Apply Value Value                     -- apply(V, W)
@@ -44,7 +45,6 @@ data Term
     | App Value Value                       -- V W
     | Force Value                           -- force(V)
     deriving (Eq, Show)
-
 instance Pretty Term where
     pretty (Apply v w) = "apply(" ++ pretty v ++ ", " ++ pretty w ++ ")"
     pretty (Box t v) = "box:" ++ pretty t ++ "(" ++ pretty v ++ ")"
@@ -54,16 +54,16 @@ instance Pretty Term where
     pretty (App m n) = "(" ++ pretty m ++ " " ++ pretty n ++ ")"
     pretty (Force v) = "force(" ++ pretty v ++ ")"
 
+-- The datatype of PQR types
 -- Fig. 8
 data Type
-    = UnitType
-    | WireType WireType
-    | Tensor Type Type
-    | Circ Index BundleType BundleType
-    | Arrow Type Type Index Index
-    | Bang Type
+    = UnitType                          -- 1
+    | WireType WireType                 -- Bit | Qubit
+    | Tensor Type Type                  -- A ⊗ B
+    | Circ Index BundleType BundleType  -- Circ I (T,U)
+    | Arrow Type Type Index Index       -- A -o [I,J] B
+    | Bang Type                         -- !A
     deriving (Show, Eq)
-
 instance Pretty Type where
     pretty UnitType = "Unit"
     pretty (WireType wt) = pretty wt
@@ -72,6 +72,8 @@ instance Pretty Type where
     pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " -o [" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
     pretty (Bang typ) = "!" ++ pretty typ
 
+-- PQR types are amenable to wire counting
+-- Def. 2 (Wire Count)
 instance Wide Type where
     wireCount UnitType = Number 0
     wireCount (WireType _) = Number 1
@@ -80,6 +82,7 @@ instance Wide Type where
     wireCount (Arrow _ _ _ j) = j
     wireCount (Bang _) = Number 0
 
+-- PQR types are amenable to the notion of well-formedness with respect to an index context
 instance Indexed Type where
     wellFormed _ UnitType = True
     wellFormed _ (WireType _) = True
@@ -88,6 +91,7 @@ instance Indexed Type where
     wellFormed theta (Arrow typ1 typ2 i j) = wellFormed theta typ1 && wellFormed theta typ2 && wellFormed theta i && wellFormed theta j
     wellFormed theta (Bang typ) = wellFormed theta typ
 
+-- Returns True iff the given type is linear
 isLinear :: Type -> Bool
 isLinear UnitType = False
 isLinear (WireType _) = True
@@ -96,6 +100,7 @@ isLinear (Circ {}) = False
 isLinear (Arrow {}) = True
 isLinear (Bang _) = False
 
+-- Turns a suitable PQR type into an identical bundle type
 toBundleType :: Type -> Maybe BundleType
 toBundleType UnitType = Just Bundle.UnitType
 toBundleType (WireType wtype) = Just $ Bundle.WireType wtype
@@ -104,3 +109,4 @@ toBundleType (Tensor typ1 typ2) = do
     btype2 <- toBundleType typ2
     return $ Bundle.Tensor btype1 btype2
 toBundleType _ = Nothing
+

@@ -52,7 +52,10 @@ instance Indexed Index where
 instance (Traversable t, Indexed a) => Indexed (t a) where
     wellFormed context x = let wellFormednesses = wellFormed context <$> x in and wellFormednesses
 
--- TEMPORARY CONSTRAINT CHECKING --
+
+
+--- CLOSED INDEX TERM CONSTRAINT CHECKING --------------------------------------------------------------------------
+
 
 eval ::  Index -> Int
 eval (Number n) = n
@@ -66,7 +69,10 @@ instance Eq Index where
 instance Ord Index where
     i <= j = eval i <= eval j
 
--- SMT CONSTRAINT CHECKING (WIP) --
+
+
+--- SMT CONSTRAINT CHECKING (WIP) ---------------------------------------------------------------------------------
+
 
 -- Allowed relations between indices
 data IndexRel

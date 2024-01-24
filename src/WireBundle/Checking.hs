@@ -17,14 +17,13 @@ import Control.Monad (when)
 -- Corresponds to Q in the paper
 type LabelContext = Map LabelId WireType
 
--- Wire typing error
+-- Wire typing errors
 data WireTypingError
     = UnboundLabel LabelId
     | BundleTypeMismatch Bundle BundleType BundleType
     | ContextSynthesisMismatch Bundle BundleType
     | UnusedLabels LabelContext
     deriving (Eq)
-
 instance Show WireTypingError where
     show (UnboundLabel id) = "Unbound label " ++ show id
     show (BundleTypeMismatch b btype1 btype2) = "Bundle " ++ pretty b ++ " has type " ++ pretty btype1 ++ " but is expected to have type " ++ pretty btype2
@@ -32,6 +31,7 @@ instance Show WireTypingError where
     show (UnusedLabels q) = "Unused labels in label context: " ++ pretty q
 
 -- Lookup a label in the label context and remove it
+-- Returns the type of the label, throws an error if the label is not found
 labelContextLookup :: LabelId -> StateT LabelContext (Either WireTypingError) WireType
 labelContextLookup id = do
     q <- get
@@ -50,8 +50,10 @@ synthesizeBundleType (Pair b1 b2) = do
     btype2 <- synthesizeBundleType b2
     return $ Tensor btype1 btype2
 
--- produces the unique label context that attributes a given bundle type to a given bundle
+-- Returns the unique label context that attributes a given bundle type to a given bundle
 -- matching the structure of the bundle with the structure of the bundle type
+-- Throws an error if the bundle and the bundle type do not match
+-- Q <== l : T
 synthesizeLabelContext :: Bundle -> BundleType -> Either WireTypingError LabelContext
 synthesizeLabelContext UnitValue UnitType = Right Map.empty
 synthesizeLabelContext (Label id) (WireType wtype) = Right $ Map.fromList [(id,wtype)]
@@ -61,7 +63,9 @@ synthesizeLabelContext (Pair b1 b2) (Tensor btype1 btype2) = do
     return $ Map.union q1 q2
 synthesizeLabelContext b btype = throwError $ ContextSynthesisMismatch b btype
 
--- Q ⊢ l <= T (Fig. 10)
+-- Returns () if the wire bundle b type checks against the bundle type btype
+-- Throws an error otherwise
+-- Q ⊢ l <== T (Fig. 10)
 checkBundleType :: Bundle -> BundleType -> StateT LabelContext (Either WireTypingError) ()
 checkBundleType b btype = do
     synthesizedBtype <- synthesizeBundleType b

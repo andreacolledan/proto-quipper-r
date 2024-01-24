@@ -47,12 +47,8 @@ data TypingEnvironment = TypingEnvironment {
 envIsLinear :: TypingEnvironment -> Bool
 envIsLinear TypingEnvironment{typingContext = gamma, labelContext = q} = (any isLinear . Map.elems) gamma || Map.size q > 0
 
--- TYPING ERRORS ---------------------------------------------------------------
+--- TYPING ERRORS ---------------------------------------------------------------
 
-data CircuitInterfaceType = Input | Output deriving (Eq)
-instance Show CircuitInterfaceType where
-    show Input = "input"
-    show Output = "output"
 
 -- Typing errors
 data TypingError
@@ -74,6 +70,10 @@ data TypingError
     | IllFormedTypingContext IndexContext TypingContext
     deriving (Eq)
 
+data CircuitInterfaceType = Input | Output deriving (Eq)
+instance Show CircuitInterfaceType where
+    show Input = "input"
+    show Output = "output"
 
 instance Show TypingError where
     show (WireTypingError err) = show err
@@ -103,6 +103,7 @@ instance Show TypingError where
     show (IllFormedTypingContext theta gamma) =
         "Typing context " ++ pretty gamma ++ " is not well-formed with respect to index context " ++ pretty theta
 
+-- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
 printConstructor UnitType = "unit type"
 printConstructor (WireType _) = "wire type"
@@ -111,9 +112,13 @@ printConstructor (Circ {}) = "circuit type"
 printConstructor (Arrow {}) = "arrow type"
 printConstructor (Bang _) = "bang type"
 
--- TYPING CONTEXT OPERATIONS ---------------------------------------------------------------
+
+
+--- TYPING CONTEXT OPERATIONS ---------------------------------------------------------------
+
 
 -- lookup a variable in the typing context, remove it if it is linear
+-- throws an error if the variable is not found
 typingContextLookup :: VariableId -> StateT TypingEnvironment (Either TypingError) Type
 typingContextLookup id = do
     env@TypingEnvironment{typingContext = gamma} <- get
@@ -121,7 +126,8 @@ typingContextLookup id = do
     when (isLinear typ) $ put env{typingContext = Map.delete id gamma}
     return typ
 
--- add a new binding to the typing context, fail if the variable is already bound
+-- add a new binding to the typing context
+-- throws an error if the variable is already bound (no shadowing allowed at the moment)
 bindVariable :: VariableId -> Type -> StateT TypingEnvironment (Either TypingError) ()
 bindVariable id typ = do
     env@TypingEnvironment{typingContext = gamma} <- get
@@ -129,7 +135,8 @@ bindVariable id typ = do
     let gamma' = Map.insert id typ gamma
     put env{typingContext = gamma'}
 
--- remove a binding from the typing context, fail if the variable is linear
+-- remove a binding from the typing context
+-- throws an error if the variable is linear
 unbindVariable :: VariableId -> StateT TypingEnvironment (Either TypingError) ()
 unbindVariable id = do
     env@TypingEnvironment{typingContext = gamma} <- get
@@ -139,13 +146,17 @@ unbindVariable id = do
             when (isLinear t) (throwError $ UnusedLinearVariable id)
             put env{typingContext = Map.delete id gamma}
 
+-- check if the current typing context is well formed with respect to the current index context
+-- TODO: this check might be performed just once globally instead of at every leaf of the derivation tree
 checkTypingContextWellFormed :: StateT TypingEnvironment (Either TypingError) ()
 checkTypingContextWellFormed = do
     TypingEnvironment{indexContext = theta, typingContext = gamma} <- get
     unless (wellFormed theta gamma) $ throwError $ IllFormedTypingContext theta gamma
 
 
--- DERIVATION COMBINATORS ---------------------------------------------------------------
+
+--- DERIVATION COMBINATORS ---------------------------------------------------------------
+
 
 -- locally bind a variable in the scope of an existing derivation
 withBoundVariable :: VariableId -> Type -> StateT TypingEnvironment (Either TypingError) a
@@ -183,15 +194,16 @@ withNonLinearContext der = do
 
 
 
--- BUNDLE CHECKING ---------------------------------------------------------------
+--- BUNDLE CHECKING WITHIN TYPE CHECKING ------------------------------------------------------------
 
--- Turns a wire bundle into an equivalent language-level value
+
+-- Turns a wire bundle into an equivalent PQR value
 embedWireBundle :: Bundle -> Value
 embedWireBundle Bundle.UnitValue = UnitValue
 embedWireBundle (Bundle.Label id) = Label id
 embedWireBundle (Bundle.Pair b1 b2) = Pair (embedWireBundle b1) (embedWireBundle b2)
 
--- Turns a wire bundle type into an equivalent language-level type
+-- Turns a bundle type into an equivalent PQR type
 embedBundleType :: BundleType -> Type
 embedBundleType Bundle.UnitType = UnitType
 embedBundleType (Bundle.WireType wtype) = WireType wtype
@@ -209,10 +221,10 @@ embedBundleDerivation der = do
 
 
 
--- TYPE CHECKING ---------------------------------------------------------------
+--- PQR TYPE CHECKING ---------------------------------------------------------------
 
--- Θ;Γ;Q ⊢ V <= A (Fig. 12)
--- returns True iff there are linear resources left in the typing contexts
+-- Type checking for values, retuns () if successful
+-- Θ;Γ;Q ⊢ V <== A (Fig. 12)
 checkValueType :: Value -> Type -> StateT TypingEnvironment (Either TypingError) ()
 checkValueType UnitValue UnitType = checkTypingContextWellFormed
 checkValueType v@(Label id) typ@(WireType wtype) = do
@@ -244,9 +256,8 @@ checkValueType (Lift m) (Bang typ) = withNonLinearContext $ checkTermType m typ 
 --If typ is not of the right form for v (e.g. v is an abstraction and typ is a bang type), throw an IncompatibleType error
 checkValueType v typ = throwError $ IncompatibleType (Right v) typ
 
-
--- Θ;Γ;Q ⊢ M <= A ; I (Fig. 12)
--- returns True iff there are linear resources left in the typing contexts
+-- Type checking for terms, returns () if successful
+-- Θ;Γ;Q ⊢ M <== A ; I (Fig. 12)
 checkTermType :: Term -> Type -> Index -> StateT TypingEnvironment (Either TypingError) ()
 checkTermType m@(Apply v w) typ i = do
         ctype <- synthesizeValueType v
@@ -295,10 +306,10 @@ checkTermType m typ _ = throwError $ IncompatibleType (Left m) typ
 
 
 
+--- PQR TYPE SYNTHESIS ---------------------------------------------------------------
 
 
--- TYPE SYNTHESIS ---------------------------------------------------------------
-
+-- Type synthesis for values, returns the type of the value if successful, throws an error otherwise 
 -- Θ;Γ;Q ⊢ V => A (Fig. 12)
 synthesizeValueType :: Value -> StateT TypingEnvironment (Either TypingError) Type
 synthesizeValueType UnitValue = do
@@ -332,6 +343,7 @@ synthesizeValueType (Lift m) = do
     when (i /= Number 0) (throwError $ UnexpectedWidthAnnotation m (Number 0) i)
     return $ Bang typ
 
+-- Type synthesis for terms, returns the type of the term and the width upper bound if successful, throws an error otherwise
 -- Θ;Γ;Q ⊢ M => A ; I (Fig. 12)
 synthesizeTermType :: Term -> StateT TypingEnvironment (Either TypingError) (Type, Index)
 synthesizeTermType (Apply v w) = do
