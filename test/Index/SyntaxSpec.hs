@@ -24,6 +24,10 @@ semanticSpec = do
             let i = Plus (Plus (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
             let j = Plus (IndexVariable "a") (Plus (IndexVariable "b") (IndexVariable "c"))
             checkEq theta i j `shouldSatisfy` isRight
+            -- {a, b, c} |=/= a+c = max(a,b) + c
+            let i = Plus (IndexVariable "a") (IndexVariable "c")
+            let j = Plus (Max (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
+            checkEq theta i j `shouldSatisfy` isLeft
     describe "index inequality" $ do
         it "works for closed terms" $ do
             -- ∅ ⊨ 1 + 1 <= 3
@@ -36,6 +40,17 @@ semanticSpec = do
             let j = Max (Plus (IndexVariable "a") (IndexVariable "c")) (IndexVariable "b")
             let theta = Set.fromList ["a", "b", "c"]
             checkLeq theta i j `shouldSatisfy` isRight
+            -- {a, b, c} ⊨ a+c <= max(a,b) + c
+            let i = Plus (IndexVariable "a") (IndexVariable "c")
+            let j = Plus (Max (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
+            let theta = Set.fromList ["a", "b", "c"]
+            checkLeq theta i j `shouldSatisfy` isRight
+            -- {a, b, c} |=/= max(a,b) <= a+c
+            let i = Max (IndexVariable "a") (IndexVariable "b")
+            let j = Plus (IndexVariable "a") (IndexVariable "c")
+            let theta = Set.fromList ["a", "b", "c"]
+            checkLeq theta i j `shouldSatisfy` isLeft
+
 
 -- SPECIFICATION --
 

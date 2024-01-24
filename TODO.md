@@ -8,7 +8,7 @@
  - [x] Decide how programs are meant to be executed: from a starting circuit or standalone. Consequently, choose whether $Q$ should appear in the implementation of the language type system or not. (Done: the former)
 
 ### Subtyping
- - [ ] Decide whether to inline subtyping (easier) or have bespoke subtyping rules (closer to the paper).
+ - [x] Decide whether to inline subtyping (easier) or have bespoke subtyping rules (closer to the paper). Chose the latter.
 
 ## Implementation
 
