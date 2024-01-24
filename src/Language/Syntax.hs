@@ -5,6 +5,7 @@ module Language.Syntax(
     isLinear,
     VariableId,
     toBundleType,
+    checkSubtype
 ) where
 import Circuit.Syntax
 import Index
@@ -109,4 +110,32 @@ toBundleType (Tensor typ1 typ2) = do
     btype2 <- toBundleType typ2
     return $ Bundle.Tensor btype1 btype2
 toBundleType _ = Nothing
+
+fromBundleType :: BundleType -> Type
+fromBundleType Bundle.UnitType = UnitType
+fromBundleType (Bundle.WireType wtype) = WireType wtype
+fromBundleType (Bundle.Tensor btype1 btype2) = Tensor (fromBundleType btype1) (fromBundleType btype2)
+
+
+--- SUBTYPING ---------------------------------------------------------------------------------
+
+checkSubtype :: IndexContext -> Type -> Type -> Bool
+checkSubtype _ UnitType UnitType = True
+checkSubtype _ (WireType wtype1) (WireType wtype2) = wtype1 == wtype2
+checkSubtype theta (Bang t) (Bang t') = checkSubtype theta t t'
+checkSubtype theta (Tensor t1 t2) (Tensor t1' t2') =
+    checkSubtype theta t1' t1
+    && checkSubtype theta t2 t2'
+checkSubtype theta (Arrow t1 t2 i j) (Arrow t1' t2' i' j') =
+    checkSubtype theta t1' t1
+    && checkSubtype theta t2 t2'
+    && checkLeq theta i i'
+    && checkEq theta j j'
+checkSubtype theta (Circ i btype1 btype2) (Circ i' btype1' btype2') =
+    checkSubtype theta (fromBundleType btype1) (fromBundleType btype1')
+    &&checkSubtype theta (fromBundleType btype1') (fromBundleType btype1)
+    && checkSubtype theta (fromBundleType btype2) (fromBundleType btype2')
+    && checkSubtype theta (fromBundleType btype2') (fromBundleType btype2)
+    && checkLeq theta i i'
+checkSubtype _ _ _ = False
 

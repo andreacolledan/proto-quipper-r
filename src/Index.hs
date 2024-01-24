@@ -101,7 +101,7 @@ embedRel Leq = "<="
 
 -- Queries the SMT solver to check whether the given relation holds between the two indices
 -- Returns () if the relation is valid, throws an SMTError otherwise
-querySMTWithContext :: IndexRel -> IndexContext -> Index -> Index -> Either SMTError ()
+querySMTWithContext :: IndexRel -> IndexContext -> Index -> Index -> Bool
 querySMTWithContext rel theta i j = unsafePerformIO $ do
     Process.with Process.defaultConfig $ \handle -> do
         solver <- initSolver Queuing (Process.toBackend handle)
@@ -114,14 +114,14 @@ querySMTWithContext rel theta i j = unsafePerformIO $ do
         command_ solver $ fromString $ "(assert (not (" ++ embedRel rel ++ " " ++ embedIndex i ++ " " ++ embedIndex j ++ ")))"
         resp <- command solver $ fromString "(check-sat)"
         case LBS.unpack resp of
-            "unsat" -> return $ Right ()                        -- no counterexample found, so the constraint is valid
-            "sat" -> return $ Left $ InvalidConstraint rel i j  -- counterexample found, so the constraint is invalid
-            _ -> return $ Left $ UnknownConstraint rel i j      -- SMT solver failed to conclude anything
+            "unsat" -> return True  -- no counterexample found, so the constraint is valid
+            "sat" -> return False   -- counterexample found, so the constraint is invalid
+            _ -> return False       -- SMT solver failed to conclude anything
     
 -- Θ ⊨ i = j (figs. 10,15)
-checkEq :: IndexContext -> Index -> Index -> Either SMTError ()
+checkEq :: IndexContext -> Index -> Index -> Bool
 checkEq = querySMTWithContext Eq
 
 -- Θ ⊨ i ≤ j (figs. 12,15)
-checkLeq :: IndexContext -> Index -> Index -> Either SMTError ()
+checkLeq :: IndexContext -> Index -> Index -> Bool
 checkLeq = querySMTWithContext Leq

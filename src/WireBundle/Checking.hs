@@ -13,6 +13,7 @@ import qualified Data.Map as Map
 import PrettyPrinter
 import WireBundle.Syntax
 import Control.Monad (when)
+import Index (IndexContext)
 
 -- Corresponds to Q in the paper
 type LabelContext = Map LabelId WireType

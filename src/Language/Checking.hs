@@ -226,83 +226,18 @@ embedBundleDerivation der = do
 -- Type checking for values, retuns () if successful
 -- Θ;Γ;Q ⊢ V <== A (Fig. 12)
 checkValueType :: Value -> Type -> StateT TypingEnvironment (Either TypingError) ()
-checkValueType UnitValue UnitType = checkTypingContextWellFormed
-checkValueType v@(Label id) typ@(WireType wtype) = do
-    checkTypingContextWellFormed
-    wtype' <- embedBundleDerivation $ labelContextLookup id
-    when (wtype /= wtype') $ throwError $ UnexpectedType (Right v) typ (WireType wtype')
-checkValueType v@(Variable id) typ = do
-    checkTypingContextWellFormed
-    typ' <- typingContextLookup id
-    when (typ /= typ') $ throwError $ UnexpectedType (Right v) typ typ'
-checkValueType (Pair v w) (Tensor typ1 typ2) = do
-        _ <- checkValueType v typ1
-        checkValueType w typ2
-checkValueType (BoxedCircuit inB circ outB) (Circ i inBtype outBtype) = do
-    checkTypingContextWellFormed   
-    if Number (width circ) <= i
-        then lift $ do
-            (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
-            inQ' <- mapLeft WireTypingError $ execStateT (checkBundleType inB inBtype) inQ
-            outQ' <- mapLeft WireTypingError $ execStateT (checkBundleType outB outBtype) outQ
-            unless (Map.null inQ')  $ throwError $ MismatchedCircuitInterface Input circ inQ' inB
-            unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
-        else throwError $ ExceedingCircuitWidth circ i
-checkValueType v@(Abs x intyp m) (Arrow intyp' outtyp i j) = do
-    when (intyp' /= intyp) $ throwError $ UnexpectedFormalParameterType v intyp' intyp
-    ((),resourceCount) <- withWireCount $ withBoundVariable x intyp $ checkTermType m outtyp i
-    when (j /= resourceCount) $ throwError $ UnexpectedType (Right v) (Arrow intyp outtyp i j) (Arrow intyp outtyp i resourceCount)
-checkValueType (Lift m) (Bang typ) = withNonLinearContext $ checkTermType m typ (Number 0)
---If typ is not of the right form for v (e.g. v is an abstraction and typ is a bang type), throw an IncompatibleType error
-checkValueType v typ = throwError $ IncompatibleType (Right v) typ
+checkValueType v typ = do
+    typ' <- synthesizeValueType v
+    when (typ' /= typ) $ throwError $ UnexpectedType (Right v) typ typ'
 
 -- Type checking for terms, returns () if successful
 -- Θ;Γ;Q ⊢ M <== A ; I (Fig. 12)
 checkTermType :: Term -> Type -> Index -> StateT TypingEnvironment (Either TypingError) ()
-checkTermType m@(Apply v w) typ i = do
-        ctype <- synthesizeValueType v
-        case ctype of
-            Circ i' inBtype outBtype -> do
-                inputCheck <- checkValueType w (embedBundleType inBtype)
-                when (embedBundleType outBtype /= typ) $ throwError $ UnexpectedType (Left m) typ (embedBundleType outBtype)
-                when (i < i') $ throwError $ UnexpectedWidthAnnotation m i i'
-                return inputCheck
-            _ -> throwError $ UnexpectedTypeConstructor (Right v) (Circ (Number 0) BundleType.UnitType BundleType.UnitType) ctype
-checkTermType (Dest x y v m) typ i = do
-        ltyp <- synthesizeValueType v
-        case ltyp of
-            Tensor ltyp1 ltyp2 -> do
-                withBoundVariable x ltyp1 $ withBoundVariable y ltyp2 $ checkTermType m typ i
-            _ -> throwError $ UnexpectedTypeConstructor (Right v) (Tensor UnitType UnitType) ltyp
-checkTermType m@(Return v) typ i = do
-        (vtyp,resourceCount) <- withWireCount $ synthesizeValueType v
-        when (vtyp /= typ) $ throwError $ UnexpectedType (Left m) typ vtyp
-        when (i /= resourceCount) $ throwError $ UnexpectedWidthAnnotation m i resourceCount
-checkTermType m@(App v w) typ i = do
-        ftyp <- synthesizeValueType v
-        case ftyp of
-            Arrow intyp outtyp i' _ -> do
-                checkValueType w intyp
-                when (outtyp /= typ) $ throwError $ UnexpectedType (Left m) typ outtyp
-                when (i < i') $ throwError $ UnexpectedWidthAnnotation m i i'
-            _ -> throwError $ UnexpectedTypeConstructor (Right v) (Arrow UnitType UnitType (Number 0) (Number 0)) ftyp
-checkTermType m@(Force v) typ i = do
-        when (i /= Number 0) $ throwError $ UnexpectedWidthAnnotation m (Number 0) i
-        --the check for the context to be non-linear is pushed down into the type check for the bang-typed value
-        checkValueType v (Bang typ)
-checkTermType (Let x m n) typ i = do
-        (ltype, lwidth) <- synthesizeTermType m
-        ((rtype,rwidth), rWireCount) <- withWireCount $ withBoundVariable x ltype $ synthesizeTermType n
-        when (rtype /= typ) $ throwError $ UnexpectedType (Left (Let x m n)) typ rtype
-        let overallWidth = Max (Plus lwidth rWireCount) rwidth
-        when (i /= overallWidth) $ throwError $ UnexpectedWidthAnnotation (Let x m n) i overallWidth
-checkTermType m@(Box inbtype v) (Circ i inbtype' outbtype) j = do
-        when (inbtype' /= inbtype) $ throwError $ UnexpectedBoxingType m (embedBundleType inbtype') inbtype
-        when (j /= Number 0) $ throwError $ UnexpectedWidthAnnotation m j (Number 0)
-        --the check for the context to be non-linear is pushed down into the type check for the bang-typed value
-        checkValueType v (Bang $ Arrow (embedBundleType inbtype) (embedBundleType outbtype) i (Number 0))
---If typ is not of the right form for v (e.g. v is an abstraction and typ is a bang type), throw an IncompatibleType error
-checkTermType m typ _ = throwError $ IncompatibleType (Left m) typ
+checkTermType m typ i = do
+    (typ', i') <- synthesizeTermType m
+    TypingEnvironment{indexContext = theta} <- get
+    unless (checkSubtype theta typ' typ) $ throwError $ UnexpectedType (Left m) typ typ'
+    unless (checkLeq theta i' i) $ throwError $ UnexpectedWidthAnnotation m i i'
 
 
 
