@@ -62,7 +62,7 @@
   - [ ] Decide whether to implement subsumption as a distinct case or within rules
   - [ ] Implement subsumption
     - [ ] Implement subtyping
-      - [ ] Interface with SMT solver
+      - [x] Interface with SMT solver
 - [ ] Instantiation (e.g. `⊢ f : List i Qubit -o [i,0] List i Qubit` entails `⊢ f : List 3 Qubit -o [3,0] List 3 Qubit`)
   - [ ] Implement instantiation
 

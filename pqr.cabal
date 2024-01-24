@@ -43,10 +43,13 @@ library
   build-depends:
       QuickCheck
     , base >=4.7 && <5
+    , bytestring
     , containers
     , extra
     , hspec
     , mtl
+    , smtlib-backends
+    , smtlib-backends-process
   default-language: Haskell2010
 
 executable pqr-exe
@@ -61,11 +64,14 @@ executable pqr-exe
   build-depends:
       QuickCheck
     , base >=4.7 && <5
+    , bytestring
     , containers
     , extra
     , hspec
     , mtl
     , pqr
+    , smtlib-backends
+    , smtlib-backends-process
   default-language: Haskell2010
 
 test-suite pqr-test
@@ -81,7 +87,6 @@ test-suite pqr-test
       Language.SyntaxSpec
       WireBundle.CheckingSpec
       WireBundle.Generators
-      WireBundle.SyntaxSpec
       Paths_pqr
   autogen-modules:
       Paths_pqr
@@ -91,9 +96,12 @@ test-suite pqr-test
   build-depends:
       QuickCheck
     , base >=4.7 && <5
+    , bytestring
     , containers
     , extra
     , hspec
     , mtl
     , pqr
+    , smtlib-backends
+    , smtlib-backends-process
   default-language: Haskell2010

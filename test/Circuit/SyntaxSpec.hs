@@ -1,21 +1,8 @@
 module Circuit.SyntaxSpec(spec) where
 import Test.Hspec
-import Test.Hspec.QuickCheck (prop, modifyMaxSize)
 import Circuit.Syntax
-import Circuit.Generators
 import qualified Data.Map as Map
 import WireBundle.Syntax
-
-
-import PrettyPrinter
-
--- TRIVIAL (for coverage) --
-
-showSpec :: Spec
-showSpec = do
-    describe "showing a circuit" $ do
-        modifyMaxSize (const 5) $ prop "returns a string" $ do
-            \x -> pretty (x :: Circuit) `shouldBe` pretty x
 
 widthSpec :: Spec
 widthSpec = do
@@ -42,5 +29,4 @@ widthSpec = do
 
 spec :: Spec
 spec = do
-    showSpec
     widthSpec

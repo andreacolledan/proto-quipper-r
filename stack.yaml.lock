@@ -11,6 +11,20 @@ packages:
       size: 2315
   original:
     hackage: QuickCheck-2.14.3
+- completed:
+    hackage: smtlib-backends-0.3@sha256:69977f97a8db2c11e97bde92fff7e86e793c1fb23827b284bf89938ee463fbf0,1211
+    pantry-tree:
+      sha256: d7c614eab0f3f256b22724ca2d7ac41651f22209242af1d24f052f41d7a7541f
+      size: 275
+  original:
+    hackage: smtlib-backends-0.3
+- completed:
+    hackage: smtlib-backends-process-0.3@sha256:3eee93e91f41c8a2fb2699e95b502a24d8053485ccf7749e2766683d1ebfe11d,1676
+    pantry-tree:
+      sha256: 579580c8067b4c6640261187fc5d2ac0a02923db4633e0027067de72f947083c
+      size: 461
+  original:
+    hackage: smtlib-backends-process-0.3
 snapshots:
 - completed:
     sha256: e176944bc843f740e05242fa7a66ca1f440c127e425254f7f1257f9b19add23f

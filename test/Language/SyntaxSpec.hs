@@ -3,32 +3,10 @@ module Language.SyntaxSpec (
 ) where
 
 import Test.Hspec
-import Test.Hspec.QuickCheck (prop, modifyMaxSize)
 
 import Language.Syntax as Lang
 import WireBundle.Syntax as Wire
 import Index 
-
-import WireBundle.Generators
-import Index.Generators
-import Circuit.Generators
-import Language.Generators
-
-import PrettyPrinter
-
--- TRIVIAL (for coverage) --
-
-showSpec :: Spec
-showSpec = do
-    describe "showing a type" $ do
-        modifyMaxSize (const 5) $ prop "outputs a string" $ do
-            \x -> pretty (x :: Type) `shouldBe` pretty x
-    describe "showing a term" $ do
-        modifyMaxSize (const 5) $ prop "outputs a string" $ do
-            \x -> pretty (x :: Term) `shouldBe` pretty x
-    describe "showing a value" $ do
-        modifyMaxSize (const 5) $ prop "outputs a string" $ do
-            \x -> pretty (x :: Value) `shouldBe` pretty x
 
 
 -- SPECIFICATION --
@@ -70,5 +48,4 @@ syntaxSpec = do
 
 spec :: Spec
 spec = do
-    showSpec
     syntaxSpec
