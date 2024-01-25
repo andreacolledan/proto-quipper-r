@@ -26,13 +26,17 @@ data Index
     | Number Int
     | Plus Index Index
     | Max Index Index
-    deriving Show
+    | Mult Index Index
+    | Minus Index Index
+    deriving (Show, Eq)
 
 instance Pretty Index where
     pretty (IndexVariable id) = id
     pretty (Number n) = show n
     pretty (Plus i j) = "(" ++ pretty i ++ " + " ++ pretty j ++ ")"
     pretty (Max i j) = "max(" ++ pretty i ++ ", " ++ pretty j ++ ")"
+    pretty (Mult i j) = "(" ++ pretty i ++ " * " ++ pretty j ++ ")"
+    pretty (Minus i j) = "(" ++ pretty i ++ " - " ++ pretty j ++ ")"
 
 
 -- Corresponds to Θ in the paper
@@ -47,6 +51,8 @@ instance Indexed Index where
     wellFormed _ (Number _) = True
     wellFormed context (Plus i j) = wellFormed context i && wellFormed context j
     wellFormed context (Max i j) = wellFormed context i && wellFormed context j
+    wellFormed context (Mult i j) = wellFormed context i && wellFormed context j
+    wellFormed context (Minus i j) = wellFormed context i && wellFormed context j
 
 -- Natural lifting of well-formedness to traversable data structures
 instance (Traversable t, Indexed a) => Indexed (t a) where
@@ -56,19 +62,21 @@ instance (Traversable t, Indexed a) => Indexed (t a) where
 
 --- CLOSED INDEX TERM CONSTRAINT CHECKING --------------------------------------------------------------------------
 
-
-eval ::  Index -> Int
-eval (Number n) = n
-eval (Plus i j) = eval i + eval j
-eval (Max i j) = max (eval i) (eval j)
-eval _ = error "Cannot evaluate index variable"
-
-instance Eq Index where
-    i == j = eval i == eval j
-
-instance Ord Index where
-    i <= j = eval i <= eval j
-
+simplify :: Index -> Index
+simplify (Number n) = Number n
+simplify (Plus i j) = case (simplify i, simplify j) of
+    (Number n, Number m) -> Number (n + m)
+    (i',j') -> Plus i' j'
+simplify (Max i j) = case (simplify i, simplify j) of
+    (Number n, Number m) -> Number (max n m)
+    (i',j') -> Max i' j'
+simplify (Mult i j) = case (simplify i, simplify j) of
+    (Number n, Number m) -> Number (n * m)
+    (i',j') -> Mult i' j'   
+simplify (Minus i j) = case (simplify i, simplify j) of
+    (Number n, Number m) -> Number (n - m)
+    (i',j') -> Minus i' j'
+simplify (IndexVariable id) = IndexVariable id
 
 
 --- SMT CONSTRAINT CHECKING (WIP) ---------------------------------------------------------------------------------
@@ -93,6 +101,8 @@ embedIndex (IndexVariable id) = id
 embedIndex (Number n) = show n
 embedIndex (Plus i j) = "(+ " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 embedIndex (Max i j) = "(max " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
+embedIndex (Mult i j) = "(* " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
+embedIndex (Minus i j) = "(- " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 
 -- Converts an index relation to the corresponding SMTLIB syntax
 embedRel :: IndexRel -> String
@@ -120,8 +130,12 @@ querySMTWithContext rel theta i j = unsafePerformIO $ do
     
 -- Θ ⊨ i = j (figs. 10,15)
 checkEq :: IndexContext -> Index -> Index -> Bool
-checkEq = querySMTWithContext Eq
+checkEq theta i j = case (simplify i,simplify j) of
+    (Number n, Number m) -> n == m
+    (i',j') -> querySMTWithContext Eq theta i' j'
 
 -- Θ ⊨ i ≤ j (figs. 12,15)
 checkLeq :: IndexContext -> Index -> Index -> Bool
-checkLeq = querySMTWithContext Leq
+checkLeq theta i j = case (simplify i,simplify j) of
+    (Number n, Number m) -> n <= m
+    (i',j') -> querySMTWithContext Leq theta i' j'

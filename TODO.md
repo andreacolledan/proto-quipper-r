@@ -14,9 +14,9 @@
 - [x] Label pairs
   - [x] Implementing
   - [x] Testing
-- [ ] Implement sized lists of labels
-  - [ ] Implementing
-  - [ ] Testing
+- [x] Implement sized lists of labels
+  - [x] Implementing
+  - [x] Testing
 
 ### PQR Language checking
 
@@ -50,8 +50,8 @@
     - [x] Implementing box
     - [x] Testing box
   - [ ] Lists and fold
-    - [ ] Implementing lists
-    - [ ] Testing lists
+    - [x] Implementing lists
+    - [x] Testing lists
     - [ ] Implementing fold
     - [ ] Testing fold
 - [x] Well-formedness constraints
@@ -62,11 +62,5 @@
       - [x] Interface with SMT solver
 - [ ] Instantiation (e.g. `⊢ f : List i Qubit -o [i,0] List i Qubit` entails `⊢ f : List 3 Qubit -o [3,0] List 3 Qubit`)
   - [ ] Implement instantiation
-
-## PQR Language Type Synthesis
-
-  - [ ] Type synthesis for lists
-  - [ ] Type synthesis for fold
-  - [ ] Testing synthesis
 
 - [x] Better error messages

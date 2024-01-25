@@ -12,8 +12,9 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import PrettyPrinter
 import WireBundle.Syntax
-import Control.Monad (when)
-import Index (IndexContext)
+import Control.Monad (when, unless)
+import Index
+import qualified Data.Set as Set
 
 -- Corresponds to Q in the paper
 type LabelContext = Map LabelId WireType
@@ -24,12 +25,24 @@ data WireTypingError
     | BundleTypeMismatch Bundle BundleType BundleType
     | ContextSynthesisMismatch Bundle BundleType
     | UnusedLabels LabelContext
+    | UnexpectedBundleListLength Bundle Index Index
+    | LengthZeroCons Bundle BundleType
+    | UnexpectedBundleTypeContstructor Bundle BundleType BundleType
     deriving (Eq)
 instance Show WireTypingError where
     show (UnboundLabel id) = "Unbound label " ++ show id
     show (BundleTypeMismatch b btype1 btype2) = "Bundle " ++ pretty b ++ " has type " ++ pretty btype1 ++ " but is expected to have type " ++ pretty btype2
     show (ContextSynthesisMismatch b btype) = "Cannot match structure of bundle " ++ pretty b ++ " and bundle type " ++ pretty btype ++ " to produce a label context"
     show (UnusedLabels q) = "Unused labels in label context: " ++ pretty q
+    show (UnexpectedBundleListLength b i1 i2) = "Expected list bundle " ++ pretty b ++ " to have length " ++ pretty i1 ++ ", got " ++ pretty i2 ++ " instead"
+    show (LengthZeroCons b btype) = "Non-empty list " ++ pretty b ++ " cannot be given the type " ++ pretty btype ++ " because it has length 0" 
+    show (UnexpectedBundleTypeContstructor b btype1 btype2) = "Expected bundle " ++ pretty b ++ " to have type " ++ printConstructor btype1 ++ ", got type " ++ pretty btype2 ++ " instead"
+
+printConstructor :: BundleType -> String
+printConstructor UnitType = "unit type"
+printConstructor (WireType _) = "wire type"
+printConstructor (Tensor _ _) = "tensor type"
+printConstructor (List _ _) = "list type" 
 
 -- Lookup a label in the label context and remove it
 -- Returns the type of the label, throws an error if the label is not found
@@ -68,6 +81,16 @@ synthesizeLabelContext b btype = throwError $ ContextSynthesisMismatch b btype
 -- Throws an error otherwise
 -- Q ⊢ l <== T (Fig. 10)
 checkBundleType :: Bundle -> BundleType -> StateT LabelContext (Either WireTypingError) ()
+checkBundleType Nil btype = case btype of
+    List i _ -> do
+        unless (checkEq Set.empty i (Number 0)) $ throwError $ UnexpectedBundleListLength Nil i (Number 0)
+    _ -> throwError $ UnexpectedBundleTypeContstructor Nil btype (List (Number 0) UnitType)
+checkBundleType b@(Cons b1 b2) btype = case btype of
+    List i btype' -> do
+        when (checkLeq Set.empty i (Number 0)) $ throwError $ LengthZeroCons b btype
+        checkBundleType b1 btype'
+        checkBundleType b2 $ List (Minus i (Number 1)) btype'
+    _ -> throwError $ UnexpectedBundleTypeContstructor (Cons b1 b2) btype (List (Number 0) UnitType)
 checkBundleType b btype = do
-    synthesizedBtype <- synthesizeBundleType b
-    when (synthesizedBtype /= btype) $ throwError $ BundleTypeMismatch b synthesizedBtype btype
+    btype' <- synthesizeBundleType b
+    unless (isBundleSubtype btype' btype) $ throwError $ BundleTypeMismatch b btype' btype

@@ -25,6 +25,8 @@ data Value
     | BoxedCircuit Bundle Circuit Bundle    -- (l, C, k)
     | Abs VariableId Type Term              -- λx:t.M
     | Lift Term                             -- lift(M)
+    | Nil                                   -- []
+    | Cons Value Value                      -- V:W
     deriving (Eq, Show)
 instance Pretty Value where
     pretty UnitValue = "*"
@@ -34,6 +36,8 @@ instance Pretty Value where
     pretty (BoxedCircuit _ c _) = "[" ++ pretty c ++ "]"
     pretty (Abs x t m) = "(λ" ++ x ++ ":" ++ pretty t ++ ". " ++ pretty m ++ ")"
     pretty (Lift m) = "lift(" ++ pretty m ++ ")"
+    pretty Nil = "[]"
+    pretty (Cons v w) = "(" ++ pretty v ++ ":" ++ pretty w ++ ")"
 
 -- The datatype of PQR terms
 -- Fig. 8
@@ -61,9 +65,10 @@ data Type
     = UnitType                          -- 1
     | WireType WireType                 -- Bit | Qubit
     | Tensor Type Type                  -- A ⊗ B
-    | Circ Index BundleType BundleType  -- Circ I (T,U)
+    | Circ Index BundleType BundleType  -- Circ[I] (T,U)
     | Arrow Type Type Index Index       -- A -o [I,J] B
     | Bang Type                         -- !A
+    | List Index Type                   -- List[I] A
     deriving (Show, Eq)
 instance Pretty Type where
     pretty UnitType = "Unit"
@@ -72,6 +77,7 @@ instance Pretty Type where
     pretty (Circ i inBtype outBtype) = "Circ [" ++ pretty i ++ "] (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
     pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " -o [" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
     pretty (Bang typ) = "!" ++ pretty typ
+    pretty (List i typ) = "List[" ++ pretty i ++ "] " ++ pretty typ
 
 -- PQR types are amenable to wire counting
 -- Def. 2 (Wire Count)
@@ -82,6 +88,7 @@ instance Wide Type where
     wireCount (Circ {}) = Number 0
     wireCount (Arrow _ _ _ j) = j
     wireCount (Bang _) = Number 0
+    wireCount (List i t) = Mult i (wireCount t)
 
 -- PQR types are amenable to the notion of well-formedness with respect to an index context
 instance Indexed Type where
@@ -91,6 +98,7 @@ instance Indexed Type where
     wellFormed theta (Circ i inBtype outBtype) = wellFormed theta i && wellFormed theta inBtype && wellFormed theta outBtype
     wellFormed theta (Arrow typ1 typ2 i j) = wellFormed theta typ1 && wellFormed theta typ2 && wellFormed theta i && wellFormed theta j
     wellFormed theta (Bang typ) = wellFormed theta typ
+    wellFormed theta (List i typ) = wellFormed theta i && wellFormed theta typ
 
 -- Returns True iff the given type is linear
 isLinear :: Type -> Bool
@@ -100,6 +108,7 @@ isLinear (Tensor typ1 typ2) = isLinear typ1 && isLinear typ2
 isLinear (Circ {}) = False
 isLinear (Arrow {}) = True
 isLinear (Bang _) = False
+isLinear (List _ typ) = isLinear typ
 
 -- Turns a suitable PQR type into an identical bundle type
 toBundleType :: Type -> Maybe BundleType
@@ -115,6 +124,7 @@ fromBundleType :: BundleType -> Type
 fromBundleType Bundle.UnitType = UnitType
 fromBundleType (Bundle.WireType wtype) = WireType wtype
 fromBundleType (Bundle.Tensor btype1 btype2) = Tensor (fromBundleType btype1) (fromBundleType btype2)
+fromBundleType (Bundle.List i btype) = List i (fromBundleType btype)
 
 
 --- SUBTYPING ---------------------------------------------------------------------------------
@@ -137,5 +147,8 @@ checkSubtype theta (Circ i btype1 btype2) (Circ i' btype1' btype2') =
     && checkSubtype theta (fromBundleType btype2) (fromBundleType btype2')
     && checkSubtype theta (fromBundleType btype2') (fromBundleType btype2)
     && checkLeq theta i i'
+checkSubtype theta (List i t) (List i' t') =
+    checkSubtype theta t t'
+    && checkEq theta i i'
 checkSubtype _ _ _ = False
 

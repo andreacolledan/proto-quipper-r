@@ -3,10 +3,11 @@ import Control.Monad
 import Control.Monad.Error.Class
 import Control.Monad.State.Lazy (execStateT, evalStateT)
 import qualified Data.Map as Map
-import Data.Either (isLeft)
+import Data.Either (isLeft, isRight)
 import Test.Hspec ( Spec, describe, it, shouldBe, shouldSatisfy )
 import WireBundle.Checking (synthesizeBundleType, LabelContext, checkBundleType, WireTypingError(..), synthesizeLabelContext)
 import WireBundle.Syntax
+import Index
 
 bundleSynthesisTest :: Bundle -> LabelContext -> Either WireTypingError BundleType
 bundleSynthesisTest b = evalStateT (synthesizeBundleType b)
@@ -77,6 +78,17 @@ contextSynthesisSpec = do
 bundleCheckingSpec :: Spec
 bundleCheckingSpec = do
     describe "wire bundle type checking" $ do
+        it "succeeds on the empty list" $ do
+            -- ∅ ⊢ [] <== List[0] Qubit
+            bundleCheckingTest Nil Map.empty (List (Number 0) (WireType Qubit)) `shouldSatisfy` isRight
+            -- ∅ ⊢ [] <== List[0] Bit
+            bundleCheckingTest Nil Map.empty (List (Number 0) (WireType Bit)) `shouldSatisfy` isRight
+        it "succeeds on a list of the correct length" $ do
+            -- a:Qubit,b:Qubit ⊢ [a,b] <== List[2] Qubit
+            bundleCheckingTest (Cons (Label "a") (Cons (Label "b") Nil)) (Map.fromList [("a",Qubit),("b",Qubit)]) (List (Number 2) (WireType Qubit)) `shouldSatisfy` isRight
+        it "fails on a list of the incorrect length" $ do
+            -- a:Qubit,b:Qubit ⊢ [a,b] <=/= List[1] Qubit
+            bundleCheckingTest (Cons (Label "a") (Cons (Label "b") Nil)) (Map.fromList [("a",Qubit),("b",Qubit)]) (List (Number 1) (WireType Qubit)) `shouldSatisfy` isLeft
         it "fails when there are unused labels in the context" $ do
             -- a:Qubit ⊢ * <=/= Unit
             bundleCheckingTest UnitValue (Map.fromList [("a",Qubit)]) UnitType `shouldSatisfy` isLeft

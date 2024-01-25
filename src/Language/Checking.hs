@@ -25,6 +25,10 @@ import Language.Syntax
 import PrettyPrinter
 import qualified Data.Map as Map
 import WireBundle.Checking
+    ( labelContextLookup,
+      synthesizeBundleType,
+      LabelContext,
+      WireTypingError )
 import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
 import qualified WireBundle.Syntax as Bundle
 import Control.Monad
@@ -68,6 +72,8 @@ data TypingError
     | UnexpectedBoxingType Term Type BundleType
     | UnboxableType Value Type
     | IllFormedTypingContext IndexContext TypingContext
+    | UnexpectedListLength Value Index Index
+    | ZeroLengthCons Value Type
     deriving (Eq)
 
 data CircuitInterfaceType = Input | Output deriving (Eq)
@@ -102,6 +108,10 @@ instance Show TypingError where
         "Expression " ++ pretty v ++ " of type " ++ pretty typ ++ "cannot be boxed"
     show (IllFormedTypingContext theta gamma) =
         "Typing context " ++ pretty gamma ++ " is not well-formed with respect to index context " ++ pretty theta
+    show (UnexpectedListLength v i j) =
+        "Expected list " ++ pretty v ++ " to have length " ++ pretty i ++ ", got " ++ pretty j ++ " instead"
+    show (ZeroLengthCons v typ) =
+        "Non-empty list " ++ pretty v ++ " cannot be given the type " ++ pretty typ ++ " because it has length 0"
 
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
@@ -111,6 +121,7 @@ printConstructor (Tensor _ _) = "tensor type"
 printConstructor (Circ {}) = "circuit type"
 printConstructor (Arrow {}) = "arrow type"
 printConstructor (Bang _) = "bang type"
+printConstructor (List _ _) = "list type"
 
 
 
@@ -202,12 +213,15 @@ embedWireBundle :: Bundle -> Value
 embedWireBundle Bundle.UnitValue = UnitValue
 embedWireBundle (Bundle.Label id) = Label id
 embedWireBundle (Bundle.Pair b1 b2) = Pair (embedWireBundle b1) (embedWireBundle b2)
+embedWireBundle Bundle.Nil = Nil
+embedWireBundle (Bundle.Cons b1 b2) = Cons (embedWireBundle b1) (embedWireBundle b2)
 
 -- Turns a bundle type into an equivalent PQR type
 embedBundleType :: BundleType -> Type
 embedBundleType Bundle.UnitType = UnitType
 embedBundleType (Bundle.WireType wtype) = WireType wtype
 embedBundleType (Bundle.Tensor b1 b2) = Tensor (embedBundleType b1) (embedBundleType b2)
+embedBundleType (Bundle.List i b) = List i (embedBundleType b)
 
 -- turns a bundle type derivation (which only has a label context)
 -- into a typing derivation that does not use the index or typing context
@@ -226,10 +240,23 @@ embedBundleDerivation der = do
 -- Type checking for values, retuns () if successful
 -- Θ;Γ;Q ⊢ V <== A (Fig. 12)
 checkValueType :: Value -> Type -> StateT TypingEnvironment (Either TypingError) ()
+checkValueType Nil typ = case typ of
+        List i _ -> do
+            checkTypingContextWellFormed
+            TypingEnvironment{indexContext = theta} <- get
+            unless (checkEq theta i (Number 0)) $ throwError $ UnexpectedListLength Nil i (Number 0)
+        _ -> throwError $ IncompatibleType (Right Nil) typ
+checkValueType l@(Cons v w) typ = case typ of
+        List i typ' -> do
+            TypingEnvironment{indexContext = theta} <- get
+            when (checkLeq theta i (Number 0)) $ throwError $ ZeroLengthCons l typ
+            checkValueType v typ'
+            checkValueType w $ List (Minus i (Number 1)) typ'
+        _ -> throwError $ IncompatibleType (Right l) typ
 checkValueType v typ = do
     typ' <- synthesizeValueType v
     TypingEnvironment{indexContext = theta} <- get
-    unless (typ' == typ || checkSubtype theta typ' typ) $ throwError $ UnexpectedType (Right v) typ typ'
+    unless (checkSubtype theta typ' typ) $ throwError $ UnexpectedType (Right v) typ typ'
 
 -- Type checking for terms, returns () if successful
 -- Θ;Γ;Q ⊢ M <== A ; I (Fig. 12)
@@ -237,8 +264,8 @@ checkTermType :: Term -> Type -> Index -> StateT TypingEnvironment (Either Typin
 checkTermType m typ i = do
     (typ', i') <- synthesizeTermType m
     TypingEnvironment{indexContext = theta} <- get
-    unless (typ' == typ || checkSubtype theta typ' typ) $ throwError $ UnexpectedType (Left m) typ typ'
-    unless (i' <= i || checkLeq theta i' i) $ throwError $ UnexpectedWidthAnnotation m i i'
+    unless (checkSubtype theta typ' typ) $ throwError $ UnexpectedType (Left m) typ typ'
+    unless (checkLeq theta i' i) $ throwError $ UnexpectedWidthAnnotation m i i'
 
 
 
@@ -276,7 +303,8 @@ synthesizeValueType (Abs x intyp m) = do
     return $ Arrow intyp outtyp i j
 synthesizeValueType (Lift m) = do
     (typ, i) <- withNonLinearContext $ synthesizeTermType m
-    when (i /= Number 0) (throwError $ UnexpectedWidthAnnotation m (Number 0) i)
+    TypingEnvironment{indexContext = theta} <- get
+    unless (checkEq theta i (Number 0)) (throwError $ UnexpectedWidthAnnotation m (Number 0) i)
     return $ Bang typ
 
 -- Type synthesis for terms, returns the type of the term and the width upper bound if successful, throws an error otherwise

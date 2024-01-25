@@ -557,7 +557,85 @@ boxSpec = do
             -- ∅;∅;∅ ⊢ box:Bit(lift(return(λx:Qubit.apply(hadamard,x)))) <=/= Circ 1 (Bit,Qubit) ; 0
             let (typ, index) = (Circ (Number 1) (Bundle.WireType Bit) (Bundle.WireType Qubit), Number 0)
             termCheckingTest term theta q gamma typ index `shouldSatisfy` isLeft
-            
+
+listSpec :: Spec
+listSpec = do
+    describe "empty list type checking" $ do
+        it "succeeds when the rule premises hold" $ do
+            -- ∅;∅;∅ ⊢ [] <== List[0] Qubit
+            let term = Nil
+            let typ = List (Number 0) (WireType Qubit)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+        it "fails when the checked length is not 0" $ do
+            -- ∅;∅;∅ ⊢ [] <=/= List[1] Qubit
+            let term = Nil
+            let typ = List (Number 1) (WireType Qubit)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when type checking against a non-list type" $ do
+            -- ∅;∅;∅ ⊢ [] <=/= *
+            let term = Nil
+            let typ = UnitType
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+    describe "type checking non-empty lists" $ do
+        it "succeeds when the rule premises hold" $ do
+            -- ∅;x:Qubit;a:Qubit,b:Qubit ⊢ [x,a,b] <== List[3] Qubit
+            let term = Cons (Variable "x") (Cons (Label "a") (Cons (Label "b") Nil))
+            let typ = List (Number 3) (WireType Qubit)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit)],Map.fromList [("a",Qubit),("b",Qubit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+            -- ∅;l:List[8] Bit;a:Bit ⊢ a : l <== List[9] Bit
+            let term = Cons (Label "a") (Variable "l")
+            let typ = List (Number 9) (WireType Bit)    
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("l",List (Number 8) (WireType Bit))],Map.fromList [("a",Bit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+            -- i;l:List[i] Bit;a:Bit ⊢ a : l <== List[i+1] Bit
+            let term = Cons (Label "a") (Variable "l")
+            let typ = List (Plus (IndexVariable "i") (Number 1)) (WireType Bit)
+            let (theta,gamma,q) = (Set.fromList ["i"],Map.fromList [("l",List (IndexVariable "i") (WireType Bit))],Map.fromList [("a",Bit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+        it "fails when the checked length is incorrect" $ do
+            -- ∅;l:List[8] Bit;a:Bit ⊢ a : l <=/= List[4] Bit
+            let term = Cons (Label "a") (Variable "l")
+            let typ = List (Number 4) (WireType Bit)    
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("l",List (Number 8) (WireType Bit))],Map.fromList [("a",Bit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when the checked element type is incorrect" $ do
+            -- ∅;∅;a:Qubit ⊢ [a] <=/= List[1] Bit
+            let term = Cons (Label "a") Nil
+            let typ = List (Number 1) (WireType Bit)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("a",Qubit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when cons-ing elements of mismatching types" $ do
+            -- ∅;∅;a:Qubit,b:Bit ⊢ [a,b] <=/= List[2] Qubit
+            let term = Cons (Label "a") (Cons (Label "b") Nil)
+            let typ = List (Number 2) (WireType Qubit)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("a",Qubit),("b",Bit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when cons-ing an element to something that is not a list" $ do
+            -- ∅;∅;a:Qubit ⊢ a : * <=/= List[1] Qubit
+            let term = Cons (Label "a") UnitValue
+            let typ = List (Number 1) (WireType Qubit)
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("a",Qubit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+        it "fails when type checking against a non-list type" $ do
+            -- ∅;∅;a:Qubit ⊢ [a] <=/= Qubit
+            let term = Cons (Label "a") Nil
+            let typ = WireType Qubit
+            let (theta,gamma,q) = (Set.empty,Map.empty,Map.fromList [("a",Qubit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft
+
+otherSpec :: Spec
+otherSpec = do
+    describe "type checking" $ do
+        it "fails when the typing context is ill-formed with respect to the index context" $ do
+            -- ∅;x:List[i] Qubit;a:Qubit ⊢ a : x <=/= List[i+1] Qubit
+            let term = Cons (Label "a") (Variable "x")
+            let typ = List (Plus (IndexVariable "i") (Number 1)) (WireType Qubit)
+            let (theta,gamma,q) = (Set.empty,Map.fromList [("x",List (IndexVariable "i") (WireType Qubit))],Map.fromList [("a",Bit)])
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isLeft 
 
 
 
@@ -577,3 +655,5 @@ spec = do
     forceSpec
     letSpec
     boxSpec
+    listSpec
+    otherSpec
