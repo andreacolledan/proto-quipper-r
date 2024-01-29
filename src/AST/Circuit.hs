@@ -1,14 +1,16 @@
-module Circuit.Syntax(
+module AST.Circuit(
     QuantumOperation(..),
     sig,
     net,
     Circuit(..),
     width
 ) where
-import PrettyPrinter
-import WireBundle.Checking (LabelContext)
-import WireBundle.Syntax
+
+import AST.Bundle
+import Checking.Bundle (LabelContext)
+
 import qualified Data.Map as Map
+import PrettyPrinter
 
 -- The datatype of elementary quantum operations
 data QuantumOperation

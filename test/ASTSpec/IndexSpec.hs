@@ -1,9 +1,12 @@
-module Index.SyntaxSpec where
+module ASTSpec.IndexSpec (spec) where
 
+import AST.Index
+
+import qualified Data.Set as Set
 import Test.Hspec
 
-import Index
-import qualified Data.Set as Set
+
+-- SPECIFICATION --
 
 semanticSpec :: Spec
 semanticSpec = do

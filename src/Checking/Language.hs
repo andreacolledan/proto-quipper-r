@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use uncurry" #-}
 {-# HLINT ignore "Use record patterns" #-}
-module Language.Checking(
+module Checking.Language(
     checkValueType,
     synthesizeValueType,
     synthesizeTermType,
@@ -15,26 +15,27 @@ module Language.Checking(
     envIsLinear,
     TypingError(..)
 ) where
-import Circuit.Checking
-import Circuit.Syntax
-import Control.Monad.Except
-import Control.Monad.State.Lazy
-import Data.Map (Map)
-import Index
-import Language.Syntax
-import PrettyPrinter
-import qualified Data.Map as Map
-import WireBundle.Checking
+    
+import AST.Bundle (Bundle, BundleType, Wide (wireCount))
+import qualified AST.Bundle as Bundle
+import AST.Circuit
+import AST.Index
+import AST.Language
+import Checking.Bundle
     ( labelContextLookup,
       synthesizeBundleType,
       LabelContext,
       WireTypingError )
-import WireBundle.Syntax (Bundle, BundleType, Wide (wireCount))
-import qualified WireBundle.Syntax as Bundle
+import Checking.Circuit
+
 import Control.Monad
+import Control.Monad.Except
+import Control.Monad.State.Lazy
 import Data.Either.Extra (mapLeft)
-import qualified WireBundle.Syntax as BundleType
+import Data.Map (Map)
+import qualified Data.Map as Map
 import qualified Data.Set as Set
+import PrettyPrinter
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -383,7 +384,7 @@ synthesizeTermType (Apply v w) = do
         Circ i inBtype outBtype -> do
             _ <- checkValueType w (embedBundleType inBtype)
             return (embedBundleType outBtype, i)
-        _ -> throwError $ UnexpectedTypeConstructor (Right v) (Circ (Number 0) BundleType.UnitType BundleType.UnitType) ctype
+        _ -> throwError $ UnexpectedTypeConstructor (Right v) (Circ (Number 0) Bundle.UnitType Bundle.UnitType) ctype
 synthesizeTermType (Dest x y v m) = do
     ltyp <- synthesizeValueType v
     case ltyp of

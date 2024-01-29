@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
-module Index(
+module AST.Index(
     Index(..),
     IndexVariableId,
     IndexContext,
@@ -8,15 +8,16 @@ module Index(
     checkEq,
     checkLeq
 ) where
-import Data.Set (Set)
-import PrettyPrinter
+
+import Control.Exception
 import Control.Monad
-import GHC.IO (unsafePerformIO)
+import Data.List (isPrefixOf)
+import Data.Set (Set)
 import qualified Data.Set as Set
+import GHC.IO (unsafePerformIO)
+import PrettyPrinter
 import System.IO
 import System.Process as Proc
-import Data.List (isPrefixOf)
-import Control.Exception
 
 
 type IndexVariableId = String

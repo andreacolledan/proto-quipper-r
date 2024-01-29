@@ -1,4 +1,4 @@
-module WireBundle.Checking (
+module Checking.Bundle (
     LabelContext,
     synthesizeLabelContext,
     synthesizeBundleType,
@@ -6,15 +6,17 @@ module WireBundle.Checking (
     labelContextLookup,
     WireTypingError(..)
 ) where
+
+import AST.Bundle
+import AST.Index
+
+import Control.Monad (when, unless)
 import Control.Monad.Except
 import Control.Monad.State.Lazy
 import Data.Map (Map)
 import qualified Data.Map as Map
-import PrettyPrinter
-import WireBundle.Syntax
-import Control.Monad (when, unless)
-import Index
 import qualified Data.Set as Set
+import PrettyPrinter
 
 -- Corresponds to Q in the paper
 type LabelContext = Map LabelId WireType

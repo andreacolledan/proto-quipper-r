@@ -1,9 +1,10 @@
-module Circuit.Checking(
+module Checking.Circuit(
     inferCircuitSignature
 ) where
-import Circuit.Syntax
+import AST.Circuit
+import Checking.Bundle
+
 import Control.Monad.State.Lazy
-import WireBundle.Checking
 import qualified Data.Map as Map
 
 -- C => Q -> L (Fig. 10) 

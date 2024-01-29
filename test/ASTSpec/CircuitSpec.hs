@@ -1,8 +1,14 @@
-module Circuit.SyntaxSpec(spec) where
-import Test.Hspec
-import Circuit.Syntax
+module ASTSpec.CircuitSpec (spec) where
+
+import AST.Bundle
+import AST.Circuit
+
 import qualified Data.Map as Map
-import WireBundle.Syntax
+import Test.Hspec
+
+
+-- SPECIFICATION --
+
 
 widthSpec :: Spec
 widthSpec = do

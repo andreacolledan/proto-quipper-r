@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-module WireBundle.Syntax(
+module AST.Bundle(
     Bundle(..),
     BundleType(..),
     WireType(..),
@@ -7,9 +7,11 @@ module WireBundle.Syntax(
     Wide(..),
     isBundleSubtype
 ) where
-import Index
-import PrettyPrinter
+
+import AST.Index
+
 import qualified Data.Set as Set
+import PrettyPrinter
 
 type LabelId = String
 

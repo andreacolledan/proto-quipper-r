@@ -1,21 +1,23 @@
-module Language.CheckingSpec(spec) where
-import Data.Set (Set)
-import Data.Map (Map)
-import Circuit.Syntax
-import Index
-import PrettyPrinter
-import WireBundle.Checking (LabelContext)
-import Language.Checking (TypingContext,TypingEnvironment(..), checkTermType, checkValueType, envIsLinear, TypingError(..))
-import Control.Monad.State.Lazy
-import Language.Syntax (VariableId, Value(..), Term(..), Type(..))
-import WireBundle.Syntax (LabelId, WireType (Qubit, Bit))
-import qualified WireBundle.Syntax as Bundle
-import Test.Hspec
-import qualified Data.Set as Set
-import qualified Data.Map as Map
-import Control.Monad.Error.Class ( MonadError(throwError) )
+module CheckingSpec.LanguageSpec (spec) where
+
+import AST.Bundle (LabelId, WireType (Qubit, Bit))
+import qualified AST.Bundle as Bundle
+import AST.Circuit
+import AST.Index
+import AST.Language (VariableId, Value(..), Term(..), Type(..))
+import Checking.Bundle (LabelContext)
+import Checking.Language (TypingContext,TypingEnvironment(..), checkTermType, checkValueType, envIsLinear, TypingError(..))
+
 import Control.Monad
+import Control.Monad.Error.Class ( MonadError(throwError) )
+import Control.Monad.State.Lazy
 import Data.Either (isRight, isLeft)
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
+import PrettyPrinter
+import Test.Hspec
 
 -- HELPER FUNCTIONS --
 

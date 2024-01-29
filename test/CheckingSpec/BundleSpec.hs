@@ -1,13 +1,19 @@
-module WireBundle.CheckingSpec(spec) where
+module CheckingSpec.BundleSpec (spec) where
+
+import AST.Bundle
+import AST.Index
+import Checking.Bundle (synthesizeBundleType, LabelContext, checkBundleType, WireTypingError(..), synthesizeLabelContext)
+
 import Control.Monad
 import Control.Monad.Error.Class
 import Control.Monad.State.Lazy (execStateT, evalStateT)
-import qualified Data.Map as Map
 import Data.Either (isLeft, isRight)
-import Test.Hspec ( Spec, describe, it, shouldBe, shouldSatisfy )
-import WireBundle.Checking (synthesizeBundleType, LabelContext, checkBundleType, WireTypingError(..), synthesizeLabelContext)
-import WireBundle.Syntax
-import Index
+import qualified Data.Map as Map
+import Test.Hspec
+
+
+-- SPECIFICATION --
+
 
 bundleSynthesisTest :: Bundle -> LabelContext -> Either WireTypingError BundleType
 bundleSynthesisTest b = evalStateT (synthesizeBundleType b)

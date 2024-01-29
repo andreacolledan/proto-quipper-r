@@ -25,14 +25,14 @@ source-repository head
 
 library
   exposed-modules:
-      Circuit.Checking
-      Circuit.Syntax
-      Index
-      Language.Checking
-      Language.Syntax
+      AST.Bundle
+      AST.Circuit
+      AST.Index
+      AST.Language
+      Checking.Bundle
+      Checking.Circuit
+      Checking.Language
       PrettyPrinter
-      WireBundle.Checking
-      WireBundle.Syntax
   other-modules:
       Paths_pqr
   autogen-modules:
@@ -72,12 +72,11 @@ test-suite pqr-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Circuit.Generators
-      Circuit.SyntaxSpec
-      Index.SyntaxSpec
-      Language.CheckingSpec
-      Language.SyntaxSpec
-      WireBundle.CheckingSpec
+      ASTSpec.CircuitSpec
+      ASTSpec.IndexSpec
+      ASTSpec.LanguageSpec
+      CheckingSpec.BundleSpec
+      CheckingSpec.LanguageSpec
       Paths_pqr
   autogen-modules:
       Paths_pqr

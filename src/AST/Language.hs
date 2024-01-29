@@ -1,4 +1,4 @@
-module Language.Syntax(
+module AST.Language(
     Value(..),
     Term(..),
     Type(..),
@@ -7,11 +7,13 @@ module Language.Syntax(
     toBundleType,
     checkSubtype
 ) where
-import Circuit.Syntax
-import Index
+
+import AST.Bundle(LabelId, Bundle, BundleType, WireType, Wide(..))
+import qualified AST.Bundle as Bundle
+import AST.Circuit
+import AST.Index
+
 import PrettyPrinter
-import WireBundle.Syntax(LabelId, Bundle, BundleType, WireType, Wide(..))
-import qualified WireBundle.Syntax as Bundle
 
 type VariableId = String
 
