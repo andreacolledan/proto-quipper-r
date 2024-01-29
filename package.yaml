@@ -25,7 +25,6 @@ dependencies:
 - containers
 - extra
 - hspec
-- QuickCheck
 - process
 
 ghc-options:
