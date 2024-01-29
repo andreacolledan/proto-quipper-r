@@ -4,7 +4,6 @@ import Test.Hspec
 
 import Index
 import qualified Data.Set as Set
-import Data.Either (isLeft, isRight)
 
 semanticSpec :: Spec
 semanticSpec = do
@@ -50,6 +49,7 @@ semanticSpec = do
             let j = Plus (IndexVariable "a") (IndexVariable "c")
             let theta = Set.fromList ["a", "b", "c"]
             checkLeq theta i j `shouldBe` False
+        
 
 
 -- SPECIFICATION --

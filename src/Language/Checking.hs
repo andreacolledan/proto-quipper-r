@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use uncurry" #-}
+{-# HLINT ignore "Use record patterns" #-}
 module Language.Checking(
     checkValueType,
     synthesizeValueType,
@@ -8,7 +9,6 @@ module Language.Checking(
     TypingContext,
     TypingEnvironment(..),
     typingContextLookup,
-    bindVariable,
     embedWireBundle,
     embedBundleType,
     embedBundleDerivation,
@@ -34,6 +34,7 @@ import qualified WireBundle.Syntax as Bundle
 import Control.Monad
 import Data.Either.Extra (mapLeft)
 import qualified WireBundle.Syntax as BundleType
+import qualified Data.Set as Set
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -74,6 +75,12 @@ data TypingError
     | IllFormedTypingContext IndexContext TypingContext
     | UnexpectedListLength Value Index Index
     | ZeroLengthCons Value Type
+    | CannotSynthesizeType Value
+    | IllFormedType IndexContext Type
+    | IllFormedIndex IndexContext Index
+    | ShadowedIndexVariable IndexVariableId
+    | UnfoldableType Value Type
+    | GenericTypingError String
     deriving (Eq)
 
 data CircuitInterfaceType = Input | Output deriving (Eq)
@@ -112,6 +119,17 @@ instance Show TypingError where
         "Expected list " ++ pretty v ++ " to have length " ++ pretty i ++ ", got " ++ pretty j ++ " instead"
     show (ZeroLengthCons v typ) =
         "Non-empty list " ++ pretty v ++ " cannot be given the type " ++ pretty typ ++ " because it has length 0"
+    show (CannotSynthesizeType v) =
+        "Cannot synthesize type for expression " ++ pretty v
+    show (IllFormedType theta typ) =
+        "Type " ++ pretty typ ++ " is not well-formed with respect to index context " ++ pretty theta
+    show (IllFormedIndex theta i) =
+        "Index " ++ pretty i ++ " is not well-formed with respect to index context " ++ pretty theta
+    show (ShadowedIndexVariable id) =
+        "Shadowed index variable " ++ id
+    show (UnfoldableType v typ) =
+        "Expression " ++ pretty v ++ " of type " ++ pretty typ ++ " cannot be used as a step function in a fold"
+    show (GenericTypingError msg) = "Error: " ++ msg
 
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
@@ -137,26 +155,6 @@ typingContextLookup id = do
     when (isLinear typ) $ put env{typingContext = Map.delete id gamma}
     return typ
 
--- add a new binding to the typing context
--- throws an error if the variable is already bound (no shadowing allowed at the moment)
-bindVariable :: VariableId -> Type -> StateT TypingEnvironment (Either TypingError) ()
-bindVariable id typ = do
-    env@TypingEnvironment{typingContext = gamma} <- get
-    when (Map.member id gamma) $ throwError $ ShadowedLinearVariable id
-    let gamma' = Map.insert id typ gamma
-    put env{typingContext = gamma'}
-
--- remove a binding from the typing context
--- throws an error if the variable is linear
-unbindVariable :: VariableId -> StateT TypingEnvironment (Either TypingError) ()
-unbindVariable id = do
-    env@TypingEnvironment{typingContext = gamma} <- get
-    case Map.lookup id gamma of
-        Nothing -> return ()
-        Just t -> do
-            when (isLinear t) (throwError $ UnusedLinearVariable id)
-            put env{typingContext = Map.delete id gamma}
-
 -- check if the current typing context is well formed with respect to the current index context
 -- TODO: this check might be performed just once globally instead of at every leaf of the derivation tree
 checkTypingContextWellFormed :: StateT TypingEnvironment (Either TypingError) ()
@@ -177,6 +175,21 @@ withBoundVariable x typ der = do
     outcome <- der
     unbindVariable x --this throws an error if x is linear and der does not consume it
     return outcome
+    where
+        bindVariable :: VariableId -> Type -> StateT TypingEnvironment (Either TypingError) ()
+        bindVariable id typ = do
+            env@TypingEnvironment{typingContext = gamma} <- get
+            when (Map.member id gamma) $ throwError $ ShadowedLinearVariable id
+            let gamma' = Map.insert id typ gamma
+            put env{typingContext = gamma'}
+        unbindVariable :: VariableId -> StateT TypingEnvironment (Either TypingError) ()
+        unbindVariable id = do
+            env@TypingEnvironment{typingContext = gamma} <- get
+            case Map.lookup id gamma of
+                Nothing -> return ()
+                Just t -> do
+                    when (isLinear t) (throwError $ UnusedLinearVariable id)
+                    put env{typingContext = Map.delete id gamma}
 
 -- make an existing derivation also return the amount of wires it consumes
 withWireCount :: StateT TypingEnvironment (Either TypingError) a
@@ -190,6 +203,24 @@ withWireCount der = do
     let qDiff = Map.difference q q'
     let resourceCount = wireCount gammaDiff `Plus` wireCount qDiff
     return (outcome, resourceCount)
+
+withBoundIndexVariable :: IndexVariableId -> StateT TypingEnvironment (Either TypingError) a
+                        -> StateT TypingEnvironment (Either TypingError) a
+withBoundIndexVariable id der = do
+    bindIndexVariable id
+    outcome <- der
+    unbindIndexVariable id
+    return outcome
+    where
+        bindIndexVariable :: IndexVariableId -> StateT TypingEnvironment (Either TypingError) ()
+        bindIndexVariable id = do
+            env@TypingEnvironment{indexContext = theta} <- get
+            when (Set.member id theta) $ throwError $ ShadowedIndexVariable id
+            put env{indexContext = Set.insert id theta}
+        unbindIndexVariable :: IndexVariableId -> StateT TypingEnvironment (Either TypingError) ()
+        unbindIndexVariable id = do
+            env@TypingEnvironment{indexContext = theta} <- get
+            put env{indexContext = Set.delete id theta}
 
 -- make an existing derivation fail if it consumes any linear resources from the pre-existing environment
 withNonLinearContext :: StateT TypingEnvironment (Either TypingError) a
@@ -253,6 +284,29 @@ checkValueType l@(Cons v w) typ = case typ of
             checkValueType v typ'
             checkValueType w $ List (Minus i (Number 1)) typ'
         _ -> throwError $ IncompatibleType (Right l) typ
+checkValueType f@(Fold id v w) typ = case typ of
+        Arrow (List i ltyp) restyp e i' -> do
+            TypingEnvironment{indexContext = theta} <- get
+            unless (wellFormed theta i) $ throwError $ IllFormedIndex theta i
+            unless (wellFormed theta ltyp) $ throwError $ IllFormedType theta ltyp
+            stepTyp <- withBoundVariable id ltyp $ synthesizeValueType v
+            case stepTyp of
+                Bang (Arrow (Tensor acctyp ltyp') incacctyp j _) -> do
+                    -- check ltyp = ltyp'
+                    unless (ltyp == ltyp') $ throwError $ GenericTypingError "TODO"
+                    -- check acctyp{i/id} <: restyp
+                    unless (checkSubtype theta (isub i id acctyp) restyp) $ throwError $ GenericTypingError "TODO"
+                    -- check acctyp{id+1/id} = incacctyp
+                    unless (isub (Plus i (Number 1)) id acctyp == incacctyp) $ throwError $ GenericTypingError "TODO"
+                    -- check w <== acctyp{0/id} consuming i'' wires
+                    ((),i'') <- withWireCount $ checkValueType w (isub (Number 0) id acctyp)
+                    -- check i'' = i'
+                    unless (checkEq theta i'' i') $ throwError $ GenericTypingError "TODO"
+                    -- check e <= max(i', max[id<i] j+(i-1-id) * #ltyp)
+                    let upperBoundIndex = Maximum id i (Plus j (Mult (Minus i (Plus (IndexVariable id) (Number 1))) (wireCount ltyp)))
+                    unless (checkLeq theta e upperBoundIndex) $ throwError $ GenericTypingError "TODO"
+                _ -> throwError $ UnfoldableType v stepTyp
+        _ -> throwError $ IncompatibleType (Right f) typ
 checkValueType v typ = do
     typ' <- synthesizeValueType v
     TypingEnvironment{indexContext = theta} <- get
@@ -306,6 +360,19 @@ synthesizeValueType (Lift m) = do
     TypingEnvironment{indexContext = theta} <- get
     unless (checkEq theta i (Number 0)) (throwError $ UnexpectedWidthAnnotation m (Number 0) i)
     return $ Bang typ
+--TODO sort out list type synthesis
+synthesizeValueType (Cons v w) = do
+    ltyp <- synthesizeValueType w
+    case ltyp of
+        List i typ -> do
+            checkValueType v typ
+            return $ List (Plus i (Number 1)) typ
+        _ -> throwError $ UnexpectedTypeConstructor (Right w) (List (Number 0) UnitType) ltyp
+synthesizeValueType Nil = throwError $ CannotSynthesizeType Nil
+synthesizeValueType v@(Fold _ _ _) = throwError $ CannotSynthesizeType v
+synthesizeValueType (Anno v typ) = do
+    checkValueType v typ
+    return typ
 
 -- Type synthesis for terms, returns the type of the term and the width upper bound if successful, throws an error otherwise
 -- Θ;Γ;Q ⊢ M => A ; I (Fig. 12)

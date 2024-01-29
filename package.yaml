@@ -26,9 +26,7 @@ dependencies:
 - extra
 - hspec
 - QuickCheck
-- smtlib-backends
-- smtlib-backends-process
-- bytestring
+- process
 
 ghc-options:
 - -Wall

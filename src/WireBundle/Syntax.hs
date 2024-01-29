@@ -55,6 +55,8 @@ instance Indexed BundleType where
     wellFormed theta (Tensor b1 b2) = wellFormed theta b1 && wellFormed theta b2
     wellFormed theta (List i b) = wellFormed theta i && wellFormed theta b
 
+    isub _ _ = id   -- No index variables in bundle types
+
 --- WIRE COUNTING ---------------------------------------------------------------------------------
 
 -- The class of datatypes that can contain wires and are thus amenable to wire counting

@@ -288,6 +288,11 @@ functionSpec = do
             let typ = Arrow (WireType Qubit) (Tensor (WireType Qubit) (WireType Qubit)) (Number 2) (Number 1)
             let (theta,gamma,q) = (Set.empty,Map.fromList [("x",WireType Qubit)],Map.empty)
             valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
+            -- i;∅;∅ ⊢ λx:List[i] Qubit. let y = apply(qinit,*) in return y : x <== List[i] Qubit -o [i+1,0] List[i+1] Qubit
+            let term = Abs "x" (List (IndexVariable "i") (WireType Qubit)) (Let "y" (Apply qinit UnitValue) (Return $ Cons (Variable "y") (Variable "x")))
+            let typ = Arrow (List (IndexVariable "i") (WireType Qubit)) (List (Plus (IndexVariable "i") (Number 1)) (WireType Qubit)) (Plus (IndexVariable "i") (Number 1)) (Number 0)
+            let (theta,gamma,q) = (Set.singleton "i",Map.empty,Map.empty)
+            valueCheckingTest term theta q gamma typ `shouldSatisfy` isRight
         it "fails when the function does not use its linear argument" $ do
             -- ∅;∅;∅ ⊢ λx:Qubit. return * <== Qubit -o [1,0] Unit
             let term = Abs "x" (WireType Qubit) (Return UnitValue)

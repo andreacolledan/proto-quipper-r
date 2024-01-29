@@ -27,6 +27,8 @@ data Value
     | Lift Term                             -- lift(M)
     | Nil                                   -- []
     | Cons Value Value                      -- V:W
+    | Fold IndexVariableId Value Value      -- fold[i] V W
+    | Anno Value Type                       -- (V : t)
     deriving (Eq, Show)
 instance Pretty Value where
     pretty UnitValue = "*"
@@ -38,6 +40,8 @@ instance Pretty Value where
     pretty (Lift m) = "lift(" ++ pretty m ++ ")"
     pretty Nil = "[]"
     pretty (Cons v w) = "(" ++ pretty v ++ ":" ++ pretty w ++ ")"
+    pretty (Fold i v w) = "fold[" ++ i ++ "] " ++ pretty v ++ " " ++ pretty w
+    pretty (Anno v t) = "(" ++ pretty v ++ " : " ++ pretty t ++ ")"
 
 -- The datatype of PQR terms
 -- Fig. 8
@@ -99,6 +103,14 @@ instance Indexed Type where
     wellFormed theta (Arrow typ1 typ2 i j) = wellFormed theta typ1 && wellFormed theta typ2 && wellFormed theta i && wellFormed theta j
     wellFormed theta (Bang typ) = wellFormed theta typ
     wellFormed theta (List i typ) = wellFormed theta i && wellFormed theta typ
+
+    isub _ _ UnitType = UnitType
+    isub _ _ (WireType wtype) = WireType wtype
+    isub i id (Tensor t1 t2) = Tensor (isub i id t1) (isub i id t2)
+    isub i id (Circ j inBtype outBtype) = Circ (isub i id j) inBtype outBtype --Bundle types have no free variables
+    isub i id (Arrow typ1 typ2 j k) = Arrow (isub i id typ1) (isub i id typ2) (isub i id j) (isub i id k)
+    isub i id (Bang typ) = Bang (isub i id typ)
+    isub i id (List j typ) = List (isub i id j) (isub i id typ)
 
 -- Returns True iff the given type is linear
 isLinear :: Type -> Bool

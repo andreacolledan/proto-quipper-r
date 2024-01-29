@@ -1,0 +1,6 @@
+(set-logic HO_ALL)
+(set-option :fmf-fun true)
+(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x))
+(define-fun-rec maximum ((f (-> Int Int)) (j Int)) Int (ite (= j 0) 0 (max (f j) (maximum f (- j 1)))))
+(assert (not (<= (+ i 1) 0)))
+(check-sat)

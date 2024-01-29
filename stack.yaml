@@ -42,8 +42,6 @@ packages:
 #
 extra-deps:
 - QuickCheck-2.14.3
-- smtlib-backends-0.3
-- smtlib-backends-process-0.3
 
 
 # Override default flag values for local packages and extra-deps
@@ -65,10 +63,8 @@ extra-deps:
 #
 # Extra directories used by Stack for building
 extra-include-dirs:
-- /opt/homebrew/opt/23/include
 - /usr/local/include
 extra-lib-dirs:
-- /opt/homebrew/opt/z3/lib
 - /usr/local/lib
 #
 # Allow a newer minor version of GHC than the snapshot specifies
