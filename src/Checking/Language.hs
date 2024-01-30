@@ -303,9 +303,9 @@ checkValueType f@(Fold id v w) typ = case typ of
                     ((),i'') <- withWireCount $ checkValueType w (isub (Number 0) id acctyp)
                     -- check i'' = i'
                     unless (checkEq theta i'' i') $ throwError $ GenericTypingError "TODO"
-                    -- check e <= max(i', max[id<i] j+(i-1-id) * #ltyp)
-                    let upperBoundIndex = Maximum id i (Plus j (Mult (Minus i (Plus (IndexVariable id) (Number 1))) (wireCount ltyp)))
-                    unless (checkLeq theta e upperBoundIndex) $ throwError $ GenericTypingError "TODO"
+                    -- check max(i', max[id<i] j+(i-1-id) * #ltyp) <= e
+                    let closestBound = Maximum id i (Plus j (Mult (Minus i (Plus (IndexVariable id) (Number 1))) (wireCount ltyp)))
+                    unless (checkLeq theta closestBound e) $ throwError $ GenericTypingError "TODO"
                 _ -> throwError $ UnfoldableType v stepTyp
         _ -> throwError $ IncompatibleType (Right f) typ
 checkValueType v typ = do

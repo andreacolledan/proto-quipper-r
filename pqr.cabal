@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -32,6 +32,9 @@ library
       Checking.Bundle
       Checking.Circuit
       Checking.Language
+      Parsing.Bundle
+      Parsing.Index
+      Parsing.Language
       PrettyPrinter
   other-modules:
       Paths_pqr
@@ -44,8 +47,10 @@ library
       base >=4.7 && <5
     , containers
     , extra
+    , filepath
     , hspec
     , mtl
+    , parsec
     , process
   default-language: Haskell2010
 
@@ -62,8 +67,10 @@ executable pqr-exe
       base >=4.7 && <5
     , containers
     , extra
+    , filepath
     , hspec
     , mtl
+    , parsec
     , pqr
     , process
   default-language: Haskell2010
@@ -77,6 +84,8 @@ test-suite pqr-test
       ASTSpec.LanguageSpec
       CheckingSpec.BundleSpec
       CheckingSpec.LanguageSpec
+      ParsingSpec.BundleSpec
+      ParsingSpec.IndexSpec
       Paths_pqr
   autogen-modules:
       Paths_pqr
@@ -87,8 +96,10 @@ test-suite pqr-test
       base >=4.7 && <5
     , containers
     , extra
+    , filepath
     , hspec
     , mtl
+    , parsec
     , pqr
     , process
   default-language: Haskell2010

@@ -26,6 +26,8 @@ dependencies:
 - extra
 - hspec
 - process
+- filepath
+- parsec
 
 ghc-options:
 - -Wall

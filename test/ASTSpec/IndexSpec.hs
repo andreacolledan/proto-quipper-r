@@ -11,7 +11,7 @@ import Test.Hspec
 semanticSpec :: Spec
 semanticSpec = do
     describe "index equality" $ do
-        it "works for closed terms" $ do
+        it "works for simple closed terms" $ do
             -- ∅ ⊨ 1 + 2 = 3
             let i = Plus (Number 1) (Number 2)
             let j = Number 3
@@ -20,7 +20,7 @@ semanticSpec = do
             let i = Plus (Number 1) (Number 3)
             let j = Number 3
             checkEq Set.empty i j `shouldBe` False
-        it "works for open terms" $ do
+        it "works for simple open terms" $ do
             let theta = Set.fromList ["a", "b", "c"]
             -- {a, b, c} ⊨ (a + b) + c = a + (b + c)
             let i = Plus (Plus (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
@@ -30,6 +30,14 @@ semanticSpec = do
             let i = Plus (IndexVariable "a") (IndexVariable "c")
             let j = Plus (Max (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
             checkEq theta i j `shouldBe` False
+        it "works for closed maxima" $ do
+            -- ∅ ⊨ max[i<4] i*2 + 2 = 8
+            let i = Maximum "i" (Number 4) (Plus (Mult (IndexVariable "i") (Number 2)) (Number 2))
+            let j = Number 8
+            checkEq Set.empty i j `shouldBe` True
+            -- ∅ ⊨ max[i<4] i*2 + 2 ≠ 9
+            let j = Number 9
+            checkEq Set.empty i j `shouldBe` False
     describe "index inequality" $ do
         it "works for closed terms" $ do
             -- ∅ ⊨ 1 + 1 <= 3
@@ -52,6 +60,12 @@ semanticSpec = do
             let j = Plus (IndexVariable "a") (IndexVariable "c")
             let theta = Set.fromList ["a", "b", "c"]
             checkLeq theta i j `shouldBe` False
+        it "works for maxima" $ do
+            -- j ⊨ max[i<j] i + 1 <= j + 1
+            let i = Maximum "i" (IndexVariable "j") (Plus (IndexVariable "i") (Number 1))
+            let j = IndexVariable "j" `Plus` Number 1
+            let theta = Set.fromList ["j"]
+            checkLeq theta i j `shouldBe` True
         
 
 

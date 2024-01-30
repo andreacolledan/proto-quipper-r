@@ -17,6 +17,7 @@ import qualified Data.Set as Set
 import GHC.IO (unsafePerformIO)
 import PrettyPrinter
 import System.IO
+import System.FilePath
 import System.Process as Proc
 
 
@@ -94,7 +95,35 @@ instance (Traversable t, Indexed a) => Indexed (t a) where
     isub i id x = isub i id <$> x
 
 
---- SMT CONSTRAINT CHECKING (WIP) ---------------------------------------------------------------------------------
+--- SMT CONSTRAINT CHECKING ---------------------------------------------------------------------------------
+
+nonDecreasingIn :: Index -> IndexVariableId -> Bool
+nonDecreasingIn (IndexVariable _) _ = True
+nonDecreasingIn (Number _) _ = True
+nonDecreasingIn (Plus i j) id = i `nonDecreasingIn` id && j `nonDecreasingIn` id
+nonDecreasingIn (Max i j) id = i `nonDecreasingIn` id && j `nonDecreasingIn` id
+nonDecreasingIn (Mult i j) id = i `nonDecreasingIn` id && j `nonDecreasingIn` id
+nonDecreasingIn (Minus i j) id = i `nonDecreasingIn` id && j `nonIncreasingIn` id
+nonDecreasingIn (Maximum id' i j) id | id /= id' =
+    i `nonDecreasingIn` id && j `nonDecreasingIn` id
+    || i `nonDecreasingIn` id && j `nonDecreasingIn` id'
+nonDecreasingIn _ _ = False
+
+nonIncreasingIn :: Index -> IndexVariableId -> Bool
+nonIncreasingIn (IndexVariable id') id = id /= id'
+nonIncreasingIn (Number _) _ = True
+nonIncreasingIn (Plus i j) id = i `nonIncreasingIn` id && j `nonIncreasingIn` id
+nonIncreasingIn (Max i j) id = i `nonIncreasingIn` id && j `nonIncreasingIn` id
+nonIncreasingIn (Mult i j) id = i `nonIncreasingIn` id && j `nonIncreasingIn` id
+nonIncreasingIn (Minus i j) id = i `nonIncreasingIn` id && j `nonDecreasingIn` id
+nonIncreasingIn (Maximum id' i j) id | id /= id' =
+    i `nonIncreasingIn` id && j `nonIncreasingIn` id
+    || i `nonIncreasingIn` id && j `nonDecreasingIn` id'
+nonIncreasingIn _ _ = False
+
+stableIn :: Index -> IndexVariableId -> Bool
+stableIn i id = i `nonDecreasingIn` id && i `nonIncreasingIn` id
+
 
 -- Simplifies an index expression, evaluating an expression until it is a number or a variable is encountered
 simplify :: Index -> Index
@@ -110,26 +139,35 @@ simplify (Mult i j) = case (simplify i, simplify j) of
     (i',j') -> Mult i' j'
 simplify (Minus i j) = case (simplify i, simplify j) of
     (Number n, Number m) -> Number (n - m)
+    (i',j') | i' == j' -> Number 0
     (i',j') -> Minus i' j'
 simplify (IndexVariable id) = IndexVariable id
-simplify (Maximum id i j) = if id `notElem` freeVariables j then simplify j else
-    case simplify i of
+simplify (Maximum id i j) = case simplify i of
+    -- if upper bound is 0, the range is empty and the maximum defaults to 0
     Number 0 -> Number 0
-    Number n -> let unrolling = foldr1 Max [isub (Number step) id j | step <- [1..n]] in simplify unrolling
-    i' -> Maximum id i' j
+    -- if the upper bound is known, unroll the maximum into a sequence of binary maxima
+    Number n -> let unrolling = foldr1 Max [isub (Number step) id j | step <- [0..n-1]] in simplify unrolling
+    -- if the upper bound is unknown, simplify the body of the maximum and...
+    i' -> let j' = simplify j in
+        -- if the body of does not mention id, then just return the body
+        if id `notElem` freeVariables j' then j'
+        -- if the body does not increase in i, then return the body at id=0
+        else if j' `nonIncreasingIn` id then simplify $ isub (Number 0) id j'
+        -- if the body of the maximum does not decrease in i, then return the body at id=i-1
+        else if j' `nonDecreasingIn` id then simplify $ isub (Minus i' (Number 1)) id j'
+        --otherwise return the simplified term and pray that an SMT solver will figure it out (it won't)
+        else Maximum id i' j'
+    
 
 -- Allowed relations between indices
-data IndexRel
-    = Eq
-    | Leq
+data Constraint
+    = Eq Index Index
+    | Leq Index Index
     deriving Show
 
-data SMTError
-    = InvalidConstraint IndexRel Index Index
-    | UnknownConstraint IndexRel Index Index
-instance Show SMTError where
-    show (InvalidConstraint rel i j) = show i ++ " " ++ show rel ++ " " ++ show j ++ " does not hold"
-    show (UnknownConstraint rel i j) = "Could not prove " ++ show i ++ " " ++ show rel ++ " " ++ show j
+instance Pretty Constraint where
+    pretty (Eq i j) = pretty i ++ " = " ++ pretty j
+    pretty (Leq i j) = pretty i ++ " ≤ " ++ pretty j
 
 -- Converts an index to the corresponding SMTLIB syntax
 embedIndex :: Index -> String
@@ -142,42 +180,151 @@ embedIndex (Minus i j) = "(- " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 embedIndex (Maximum id i j) = "(maximum (lambda ((" ++ id ++ " Int)) " ++ embedIndex j ++ ") " ++ embedIndex i ++ ")"
 
 -- Converts an index relation to the corresponding SMTLIB syntax
-embedRel :: IndexRel -> String
-embedRel Eq = "="
-embedRel Leq = "<="
+embedConstraint :: Constraint -> String
+embedConstraint (Eq i j) = "(= " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
+embedConstraint (Leq i j) = "(<= " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 
 -- Queries the SMT solver to check whether the given relation holds between the two indices
 -- Returns () if the relation is valid, throws an SMTError otherwise
--- Queries are written to the file "query" and then run with the SMT solver cvc5
-querySMTWithContext :: IndexRel -> IndexContext -> Index -> Index -> Bool
-querySMTWithContext rel theta i j = unsafePerformIO $ do
-    withFile "query" WriteMode $ \handle -> do
-        hPutStrLn handle "(set-logic HO_ALL)" --higher order logic
-        hPutStrLn handle "(set-option :fmf-fun true)" --enable recursive functions
+querySMTWithContext :: IndexContext -> Constraint -> Bool
+querySMTWithContext theta c = unsafePerformIO $ do
+    withFile queryFile WriteMode $ \handle -> do
+        hPutStrLn handle $ "; " ++ pretty c
+        when maximaInvolved $ do
+            hPutStrLn handle "(set-logic HO_ALL)"
+            hPutStrLn handle "(set-option :fmf-fun true)" --enable recursive functions
+            hPutStrLn handle "(set-option :full-saturate-quant true)"
+            hPutStrLn handle "(set-option :fmf-mbqi fmc)"
+            hPutStrLn handle "(set-option :nl-cov true)"
+            hPutStrLn handle "(set-option :nl-ext-tplanes-interleave true)"
         hPutStrLn handle "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x))"  --define max(x,y)
-        hPutStrLn handle "(define-fun-rec maximum ((f (-> Int Int)) (j Int)) Int (ite (= j 0) 0 (max (f j) (maximum f (- j 1)))))" 
+        when maximaInvolved $
+            hPutStrLn handle "(define-fun-rec maximum ((f (-> Int Int)) (j Int)) Int (ite (= j 0) 0 (max (f j) (maximum f (- j 1)))))"
         forM_ theta $ \id -> do
             -- for each index variable, initialize an unknown natural variable
             hPutStrLn handle $ "(declare-const " ++ id ++ " Int)"
             hPutStrLn handle $ "(assert (>= " ++ id ++ " 0))"
         -- try to find a counterexample to the relation of the two indices
-        hPutStrLn handle $ "(assert (not (" ++ embedRel rel ++ " " ++ embedIndex i ++ " " ++ embedIndex j ++ ")))"
+        hPutStrLn handle $ "(assert (not " ++ embedConstraint c ++ "))"
         hPutStrLn handle "(check-sat)"
     -- run the SMT solver
-    resp <- try $ readProcess "cvc5" ["./query"] []
-    case resp of
-        Left (SomeException _) -> return False
-        Right resp -> if "unsat" `isPrefixOf` resp then return True else return False
-    
+    resp <- try $ readProcess "cvc5" [queryFile, "-q"] []
+    withFile queryFile AppendMode $ \handle -> do
+        case resp of
+            Left (SomeException e) -> do
+                hPutStrLn handle $ "; Error thrown: " ++ show e
+                return False
+            Right resp -> if "unsat" `isPrefixOf` resp then do
+                    hPutStrLn handle "; founds unsat (valid)"
+                    return True
+                else if "sat" `isPrefixOf` resp then do
+                    hPutStrLn handle "; found sat (invalid)"
+                    return False
+                else do
+                    hPutStrLn handle $ "; got response: " ++ resp
+                    return False
+    where
+        queryFile :: FilePath
+        queryFile = "queries" </> sanitize (pretty c) <.> "smt2"
+        maximaInvolved :: Bool
+        maximaInvolved = case c of
+            Eq i j -> containsMaximum i || containsMaximum j
+            Leq i j -> containsMaximum i || containsMaximum j
+        containsMaximum :: Index -> Bool
+        containsMaximum (IndexVariable _) = False
+        containsMaximum (Number _) = False
+        containsMaximum (Plus i j) = containsMaximum i || containsMaximum j
+        containsMaximum (Max i j) = containsMaximum i || containsMaximum j
+        containsMaximum (Mult i j) = containsMaximum i || containsMaximum j
+        containsMaximum (Minus i j) = containsMaximum i || containsMaximum j
+        containsMaximum (Maximum {}) = True
+        sanitize :: String -> String
+        sanitize [] = []
+        sanitize (c1:c2:cs) | [c1,c2] == "<=" = "LEQ" ++ sanitize cs
+        sanitize (c:cs) | c == ' ' = sanitize cs
+        sanitize (c:cs) | c == '*' = "×" ++ sanitize cs
+        sanitize (c:cs) | c == '<' = "LT" ++ sanitize cs
+        sanitize (c:cs) = c : sanitize cs
 
 -- Θ ⊨ i = j (figs. 10,15)
 checkEq :: IndexContext -> Index -> Index -> Bool
 checkEq theta i j = case (simplify i,simplify j) of
     (Number n, Number m) -> n == m
-    (i',j') -> querySMTWithContext Eq theta i' j'
+    (i',j') -> querySMTWithContext theta $ Eq i' j'
 
 -- Θ ⊨ i ≤ j (figs. 12,15)
 checkLeq :: IndexContext -> Index -> Index -> Bool
 checkLeq theta i j = case (simplify i,simplify j) of
     (Number n, Number m) -> n <= m
-    (i',j') -> querySMTWithContext Leq theta i' j'
+    (i',j') -> querySMTWithContext theta $ Leq i' j'
+
+
+---- Queries the SMT solver to check whether the given relation holds between the two indices
+---- Returns () if the relation is valid, throws an SMTError otherwise
+--querySMTWithContext' :: IndexRel -> IndexContext -> Index -> Index -> Bool
+--querySMTWithContext' rel theta i j = unsafePerformIO $ do
+--    withFile queryFile WriteMode $ \handle -> do
+--        hPutStrLn handle $ "; " ++ pretty i ++ " " ++ embedRel rel ++ " " ++ pretty j
+--        when maximaInvolved $ do
+--            hPutStrLn handle "(set-logic HO_ALL)"
+--            hPutStrLn handle "(set-option :fmf-fun true)" --enable recursive functions
+--            hPutStrLn handle "(set-option :full-saturate-quant true)"
+--            hPutStrLn handle "(set-option :fmf-mbqi fmc)"
+--            hPutStrLn handle "(set-option :cegqi-inf-int true)"
+--            hPutStrLn handle "(set-option :nl-cov true)"
+--            hPutStrLn handle "(set-option :cegqi true)"
+--            hPutStrLn handle "(set-option :dt-stc-ind true)"
+--            hPutStrLn handle "(set-option :conjecture-gen true)"
+--            hPutStrLn handle "(set-option :cegis-sample trust)"
+--            hPutStrLn handle "(set-option :quant-ind true)"
+--            hPutStrLn handle "(set-option :nl-ext-tplanes-interleave true)"
+--        hPutStrLn handle "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x))"  --define max(x,y)
+--        when maximaInvolved $
+--            hPutStrLn handle "(define-fun-rec maximum ((f (-> Int Int)) (j Int)) Int (ite (= j 0) 0 (max (f j) (maximum f (- j 1)))))"
+--        -- try to find a counterexample to the relation of the two indices
+--        hPutStrLn handle "(assert (forall ("
+--        forM_ theta $ \id -> do
+--            -- for each index variable, initialize an unknown natural variable
+--            hPutStrLn handle $ "(" ++ id ++ " Int)"
+--        hPutStrLn handle ") (=> (and "
+--        forM_ theta $ \id -> do
+--            -- for each index variable, initialize an unknown natural variable
+--            hPutStrLn handle $ "(>= " ++ id ++ " 0)"
+--        hPutStrLn handle $ ") (" ++ embedRel rel ++ " " ++ embedIndex i ++ " " ++ embedIndex j ++ "))))"
+--        hPutStrLn handle "(check-sat)"
+--    -- run the SMT solver
+--    resp <- try $ readProcess "cvc5" [queryFile, "-q"] []
+--    withFile queryFile AppendMode $ \handle -> do
+--        case resp of
+--            Left (SomeException e) -> do
+--                hPutStrLn handle $ "; Error thrown: " ++ show e
+--                return False
+--            Right resp -> if "sat" `isPrefixOf` resp then do
+--                    hPutStrLn handle "; founds sat (valid)"
+--                    return True
+--                else if "unsat" `isPrefixOf` resp then do
+--                    hPutStrLn handle "; found unsat (invalid)"
+--                    return False
+--                else do
+--                    hPutStrLn handle $ "; got response: " ++ resp
+--                    return False
+--    where
+--        queryFile :: FilePath
+--        queryFile = "queries" </> sanitize (pretty i ++ " " ++ embedRel rel ++ " " ++ pretty j) <.> "smt2"
+--        maximaInvolved :: Bool
+--        maximaInvolved = containsMaximum i || containsMaximum j
+--        containsMaximum :: Index -> Bool
+--        containsMaximum (IndexVariable _) = False
+--        containsMaximum (Number _) = False
+--        containsMaximum (Plus i j) = containsMaximum i || containsMaximum j
+--        containsMaximum (Max i j) = containsMaximum i || containsMaximum j
+--        containsMaximum (Mult i j) = containsMaximum i || containsMaximum j
+--        containsMaximum (Minus i j) = containsMaximum i || containsMaximum j
+--        containsMaximum (Maximum {}) = True
+--        sanitize :: String -> String
+--        sanitize [] = []
+--        sanitize (c1:c2:cs) | [c1,c2] == "<=" = "LEQ" ++ sanitize cs
+--        sanitize (c:cs) | c == ' ' = sanitize cs
+--        sanitize (c:cs) | c == '*' = "×" ++ sanitize cs
+--        sanitize (c:cs) | c == '<' = "LT" ++ sanitize cs
+--        sanitize (c:cs) = c : sanitize cs
