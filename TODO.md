@@ -64,3 +64,10 @@
   - [ ] Implement instantiation
 
 - [x] Better error messages
+  
+### Parser
+
+- [x] Parsing wire bundles
+- [x] Parsing indices
+- [ ] Parsing Circuits
+- [ ] Parsing PQR
