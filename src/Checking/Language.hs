@@ -11,21 +11,22 @@ module Checking.Language(
     typingContextLookup,
     embedWireBundle,
     embedBundleType,
-    embedBundleDerivation,
     envIsLinear,
     TypingError(..)
 ) where
     
-import AST.Bundle (Bundle, BundleType, Wide (wireCount))
+import AST.Bundle (Bundle, BundleType, Wide (wireCount), LabelId)
 import qualified AST.Bundle as Bundle
 import AST.Circuit
 import AST.Index
 import AST.Language
 import Checking.Bundle
-    ( labelContextLookup,
-      synthesizeBundleType,
+    ( runBundleTypeInference,
+      runBundleTypeInferenceWithRemaining,
       LabelContext,
-      WireTypingError )
+      WireTypingError(..)
+    )
+import qualified Checking.Bundle as Bundle
 import Checking.Circuit
 
 import Control.Monad
@@ -36,6 +37,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import PrettyPrinter
+import qualified Control.Monad.Cont as Bundle
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -239,6 +241,12 @@ withNonLinearContext der = do
 
 --- BUNDLE CHECKING WITHIN TYPE CHECKING ------------------------------------------------------------
 
+labelContextLookup :: LabelId -> StateT TypingEnvironment (Either TypingError) Bundle.WireType
+labelContextLookup id = do
+    env@TypingEnvironment{labelContext = q} <- get
+    outcome <- maybe (throwError $ WireTypingError $ UnboundLabel id) return (Map.lookup id q)
+    put $ env{labelContext = Map.delete id q}
+    return outcome
 
 -- Turns a wire bundle into an equivalent PQR value
 embedWireBundle :: Bundle -> Value
@@ -254,18 +262,6 @@ embedBundleType Bundle.UnitType = UnitType
 embedBundleType (Bundle.WireType wtype) = WireType wtype
 embedBundleType (Bundle.Tensor b1 b2) = Tensor (embedBundleType b1) (embedBundleType b2)
 embedBundleType (Bundle.List i b) = List i (embedBundleType b)
-
--- turns a bundle type derivation (which only has a label context)
--- into a typing derivation that does not use the index or typing context
-embedBundleDerivation :: StateT LabelContext (Either WireTypingError) a
-                        -> StateT TypingEnvironment (Either TypingError) a
-embedBundleDerivation der = do
-    env@TypingEnvironment{labelContext = q} <- get
-    case runStateT der q of
-        Left err -> throwError $ WireTypingError err
-        Right (x,q') -> put env{labelContext=q'} >> return x
-
-
 
 --- PQR TYPE CHECKING ---------------------------------------------------------------
 
@@ -335,7 +331,7 @@ synthesizeValueType UnitValue = do
     return UnitType
 synthesizeValueType (Label id) = do
     checkTypingContextWellFormed
-    wtype <- embedBundleDerivation $ labelContextLookup id
+    wtype <- labelContextLookup id
     return $ WireType wtype
 synthesizeValueType (Variable id) = do
     checkTypingContextWellFormed
@@ -348,8 +344,8 @@ synthesizeValueType (BoxedCircuit inB circ outB) = do
         checkTypingContextWellFormed
         lift $ do
             (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
-            (inBtype, inQ') <- mapLeft WireTypingError $ runStateT (synthesizeBundleType inB) inQ
-            (outBtype, outQ') <- mapLeft WireTypingError $ runStateT (synthesizeBundleType outB) outQ
+            (inBtype, inQ') <- mapLeft WireTypingError $ runBundleTypeInferenceWithRemaining inQ inB
+            (outBtype, outQ') <- mapLeft WireTypingError $ runBundleTypeInferenceWithRemaining outQ outB
             unless (Map.null inQ') $ throwError $ MismatchedCircuitInterface Input circ inQ' inB
             unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
             return $ Circ (Number $ width circ) inBtype outBtype
