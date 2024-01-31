@@ -32,7 +32,6 @@ library
       Checking.Bundle
       Checking.Circuit
       Checking.Language
-      Inference.Unification
       Parsing.Bundle
       Parsing.Index
       Parsing.Language

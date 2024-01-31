@@ -17,7 +17,6 @@ import Control.Monad.State.Lazy
 import Data.Map (Map)
 import qualified Data.Map as Map
 import PrettyPrinter
-import Inference.Unification
 
 
 -- Corresponds to Q in the paper
@@ -40,7 +39,7 @@ instance Show WireTypingError where
     show (ContextSynthesisMismatch b btype) = "Cannot match structure of bundle " ++ pretty b ++ " and bundle type " ++ pretty btype ++ " to produce a label context"
     show (UnusedLabels q) = "Unused labels in label context: " ++ pretty q
     show (UnexpectedBundleListLength b i1 i2) = "Expected list bundle " ++ pretty b ++ " to have length " ++ pretty i1 ++ ", got " ++ pretty i2 ++ " instead"
-    show (LengthZeroCons b btype) = "Non-empty list " ++ pretty b ++ " cannot be given the type " ++ pretty btype ++ " because it has length 0" 
+    show (LengthZeroCons b btype) = "Non-empty list " ++ pretty b ++ " cannot be given the type " ++ pretty btype ++ " because it has length 0"
     show (UnexpectedBundleTypeContstructor b btype1 btype2) = "Expected bundle " ++ pretty b ++ " to have type " ++ printConstructor btype1 ++ ", got type " ++ pretty btype2 ++ " instead"
 
 printConstructor :: BundleType -> String
@@ -58,14 +57,14 @@ data InferenceEnv = InferenceEnv {
     freeVarCounter :: Int
 }
 
-freshTypeVariableName :: StateT InferenceEnv (Either WireTypingError) BTVarId
+freshTypeVariableName :: StateT InferenceEnv (Either WireTypingError) BundleTypeVariableId
 freshTypeVariableName = do
     env@InferenceEnv{freeVarCounter = c} <- get
     put $ env{freeVarCounter = c + 1}
     return $ "a" ++ show c
 
-tryUnify :: BundleType -> BundleType -> WireTypingError -> StateT InferenceEnv (Either WireTypingError) (Substitution BTVarId BundleType)
-tryUnify bt1 bt2 err = case mgu bt1 bt2 of
+tryUnify :: BundleType -> BundleType -> WireTypingError -> StateT InferenceEnv (Either WireTypingError) BundleTypeSubstitution
+tryUnify bt1 bt2 err = case mostGeneralBundleTypeUnifier bt1 bt2 of
     Just s -> return s
     Nothing -> throwError err
 
@@ -79,25 +78,25 @@ labelContextLookup id = do
     return outcome
 
 -- Q ⊢ l => T (Fig. 10)
-inferBundleType :: Bundle -> StateT InferenceEnv (Either WireTypingError) (BundleType, Substitution BTVarId BundleType)
-inferBundleType UnitValue = return (UnitType, emptySub)
+inferBundleType :: Bundle -> StateT InferenceEnv (Either WireTypingError) (BundleType, BundleTypeSubstitution)
+inferBundleType UnitValue = return (UnitType, Map.empty)
 inferBundleType (Label id) = do
     btype <- labelContextLookup id
-    return (WireType btype, emptySub)
+    return (WireType btype, Map.empty)
 inferBundleType (Pair b1 b2) = do
     (btype1, sub1) <- inferBundleType b1
     (btype2, sub2) <- inferBundleType b2
     return (Tensor btype1 btype2, compose sub1 sub2)
 inferBundleType Nil = do
     a <- freshTypeVariableName
-    return (List (Number 0) (TypeVariable a), emptySub)
+    return (List (Number 0) (TypeVariable a), Map.empty)
 inferBundleType b@(Cons b1 b2) = do
     (btype1, sub1) <- inferBundleType b1
     (btype2, sub2) <- inferBundleType b2
-    case btype2 of 
+    case btype2 of
         List i btype1' -> do
-            sub3 <- tryUnify (apply sub1 btype1') (apply sub2 btype1) $ BundleTypeMismatch b (List i btype1) btype2
-            return (List (Plus i (Number 1)) (apply sub3 btype1), sub3 `compose` sub2 `compose` sub1)
+            sub3 <- tryUnify (applyBundleTypeSubstitution sub1 btype1') (applyBundleTypeSubstitution sub2 btype1) $ BundleTypeMismatch b (List i btype1) btype2
+            return (List (Plus i (Number 1)) (applyBundleTypeSubstitution sub3 btype1), sub3 `compose` sub2 `compose` sub1)
         _ -> throwError $ UnexpectedBundleTypeContstructor (Cons b1 b2) btype2 (List (Number 0) UnitType)
 
 -- Q <== l : T
@@ -130,9 +129,9 @@ runBundleTypeInference context bundle = case runBundleTypeInferenceWithRemaining
 runBundleTypeCheckingWithRemaining :: LabelContext -> Bundle -> BundleType -> Either WireTypingError LabelContext
 runBundleTypeCheckingWithRemaining context bundle expected = do
     ((t,_), InferenceEnv{labelContext = remaining}) <- runStateT (inferBundleType bundle) (InferenceEnv context 0)
-    case (mgu t expected :: Maybe (Substitution BTVarId BundleType)) of
+    case mostGeneralBundleTypeUnifier t expected of
         Just sub -> do
-            unless (isBundleSubtype (apply sub t) expected) $ throwError $ BundleTypeMismatch bundle expected t
+            unless (isBundleSubtype (applyBundleTypeSubstitution sub t) expected) $ throwError $ BundleTypeMismatch bundle expected t
             return remaining
         Nothing -> throwError $ BundleTypeMismatch bundle expected t
 

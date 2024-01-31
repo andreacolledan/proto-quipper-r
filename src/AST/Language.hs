@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module AST.Language(
     Value(..),
     Term(..),
@@ -65,6 +67,11 @@ instance Pretty Term where
     pretty (App m n) = "(" ++ pretty m ++ " " ++ pretty n ++ ")"
     pretty (Force v) = "force(" ++ pretty v ++ ")"
 
+
+--- TYPES ---------------------------------------------------------------------------------------
+
+type TypeVariableId = String
+
 -- The datatype of PQR types
 -- Fig. 8
 data Type
@@ -75,6 +82,7 @@ data Type
     | Arrow Type Type Index Index       -- A -o [I,J] B
     | Bang Type                         -- !A
     | List Index Type                   -- List[I] A
+    | TypeVariable TypeVariableId       -- α
     deriving (Show, Eq)
 instance Pretty Type where
     pretty UnitType = "Unit"
@@ -84,6 +92,7 @@ instance Pretty Type where
     pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " -o [" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
     pretty (Bang typ) = "!" ++ pretty typ
     pretty (List i typ) = "List[" ++ pretty i ++ "] " ++ pretty typ
+    pretty (TypeVariable id) = id
 
 -- PQR types are amenable to wire counting
 -- Def. 2 (Wire Count)
@@ -95,6 +104,7 @@ instance Wide Type where
     wireCount (Arrow _ _ _ j) = j
     wireCount (Bang _) = Number 0
     wireCount (List i t) = Mult i (wireCount t)
+    wireCount (TypeVariable _) = error "Cannot count wires of a type variable"
 
 -- PQR types are amenable to the notion of well-formedness with respect to an index context
 instance Indexed Type where
@@ -165,4 +175,3 @@ checkSubtype theta (List i t) (List i' t') =
     checkSubtype theta t t'
     && checkEq theta i i'
 checkSubtype _ _ _ = False
-

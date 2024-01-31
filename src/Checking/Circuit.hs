@@ -4,7 +4,6 @@ module Checking.Circuit(
 import AST.Circuit
 import Checking.Bundle
 
-import Control.Monad.State.Lazy
 import qualified Data.Map as Map
 
 -- C => Q -> L (Fig. 10) 

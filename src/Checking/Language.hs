@@ -21,12 +21,10 @@ import AST.Circuit
 import AST.Index
 import AST.Language
 import Checking.Bundle
-    ( runBundleTypeInference,
-      runBundleTypeInferenceWithRemaining,
+    ( runBundleTypeInferenceWithRemaining,
       LabelContext,
       WireTypingError(..)
     )
-import qualified Checking.Bundle as Bundle
 import Checking.Circuit
 
 import Control.Monad
@@ -37,7 +35,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import PrettyPrinter
-import qualified Control.Monad.Cont as Bundle
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -46,10 +43,12 @@ type TypingContext = Map VariableId Type
 -- - the index context Θ (nonlinear)
 -- - the typing context Γ (linear/nonlinear)
 -- - the label context Q (linear)
+-- - a counter for fresh type variables
 data TypingEnvironment = TypingEnvironment {
     indexContext :: IndexContext,
     typingContext :: TypingContext,
-    labelContext :: LabelContext
+    labelContext :: LabelContext,
+    freeVarCounter :: Int
 }
 -- check if a typing environment contains any linear variable.
 envIsLinear :: TypingEnvironment -> Bool
@@ -143,6 +142,7 @@ printConstructor (Circ {}) = "circuit type"
 printConstructor (Arrow {}) = "arrow type"
 printConstructor (Bang _) = "bang type"
 printConstructor (List _ _) = "list type"
+printConstructor (TypeVariable _) = "type variable"
 
 
 
@@ -262,6 +262,7 @@ embedBundleType Bundle.UnitType = UnitType
 embedBundleType (Bundle.WireType wtype) = WireType wtype
 embedBundleType (Bundle.Tensor b1 b2) = Tensor (embedBundleType b1) (embedBundleType b2)
 embedBundleType (Bundle.List i b) = List i (embedBundleType b)
+embedBundleType (Bundle.TypeVariable id) = TypeVariable id
 
 --- PQR TYPE CHECKING ---------------------------------------------------------------
 
@@ -415,3 +416,5 @@ synthesizeTermType m@(Box inbtype v) = do
             outbtype <- maybe (throwError $ UnboxableType v fType) return (toBundleType outtyp)
             return (Circ i inbtype outbtype, Number 0)
         _ -> throwError $ UnboxableType v fType
+
+--- PQR TYPE INFERENCE ---------------------------------------------------------------

@@ -8,14 +8,17 @@ module AST.Bundle(
     LabelId,
     Wide(..),
     isBundleSubtype,
-    BTVarId
+    BundleTypeVariableId,
+    BundleTypeSubstitution,
+    HasBundleTypeVariables(..),
+    compose
 ) where
 
 import AST.Index
 import qualified Data.Set as Set
 import PrettyPrinter
-import Inference.Unification (WithFreeVars (..), Substitutable (..), Unifiable (..), singSub, emptySub, compose)
 import qualified Data.Map as Map
+import Data.Map (Map)
 
 --- LANGUAGE ---------------------------------------------------------------------------------
 
@@ -47,7 +50,7 @@ instance Pretty Bundle where
 --- BUNDLE TYPES ---------------------------------------------------------------------------------
 
 
-type BTVarId = String
+type BundleTypeVariableId = String
 
 -- Bundle Type Syntax
 -- Fig. 9
@@ -56,7 +59,7 @@ data BundleType
     | WireType WireType
     | Tensor BundleType BundleType
     | List Index BundleType
-    | TypeVariable BTVarId
+    | TypeVariable BundleTypeVariableId
     deriving (Eq, Show)
 
 instance Pretty BundleType where
@@ -83,31 +86,44 @@ instance Indexed BundleType where
     isub :: Index -> IndexVariableId -> BundleType -> BundleType
     isub _ _ = id   -- No index variables in bundle types
 
-instance WithFreeVars BTVarId BundleType where
-    freeVars UnitType = Set.empty
-    freeVars (WireType _) = Set.empty
-    freeVars (Tensor b1 b2) = freeVars b1 `Set.union` freeVars b2
-    freeVars (List _ b) = freeVars b
-    freeVars (TypeVariable id) = Set.singleton id
+--- SUBSTITUTION ---------------------------------------------------------------------------------
 
-instance Substitutable BTVarId BundleType BundleType where
-    apply _ UnitType = UnitType
-    apply _ (WireType wtype) = WireType wtype
-    apply sub (Tensor b1 b2) = Tensor (apply sub b1) (apply sub b2)
-    apply sub (List i b) = List i (apply sub b)
-    apply sub (TypeVariable id) = Map.findWithDefault (TypeVariable id) id sub
+type BundleTypeSubstitution = Map BundleTypeVariableId BundleType
 
-instance Unifiable BTVarId BundleType BundleType where
-    mgu (TypeVariable id) t = return $ singSub id t
-    mgu t (TypeVariable id) = return $ singSub id t
-    mgu UnitType UnitType = return emptySub
-    mgu (WireType w1) (WireType w2) | w1 == w2 = return emptySub
-    mgu (Tensor b1 b2) (Tensor b3 b4) = do
-        sub1 <- mgu b1 b3
-        sub2 <- mgu (apply sub1 b2) (apply sub1 b4)
-        return $ sub2 `compose` sub1
-    mgu (List _ b1) (List _ b2) = mgu b1 b2
-    mgu _ _ = Nothing
+-- The class of datatypes that may contain bundle type variables
+class HasBundleTypeVariables a where
+    freeBundleTypeVariables :: a -> Set.Set BundleTypeVariableId
+    applyBundleTypeSubstitution :: BundleTypeSubstitution -> a -> a
+    mostGeneralBundleTypeUnifier :: a -> a -> Maybe BundleTypeSubstitution
+    isBundleTypeClosed :: a -> Bool
+    isBundleTypeClosed = Set.null . freeBundleTypeVariables
+
+instance HasBundleTypeVariables BundleType where
+    freeBundleTypeVariables UnitType = Set.empty
+    freeBundleTypeVariables (WireType _) = Set.empty
+    freeBundleTypeVariables (Tensor b1 b2) = freeBundleTypeVariables b1 `Set.union` freeBundleTypeVariables b2
+    freeBundleTypeVariables (List i b) = freeBundleTypeVariables b
+    freeBundleTypeVariables (TypeVariable id) = Set.singleton id
+    applyBundleTypeSubstitution :: BundleTypeSubstitution -> BundleType -> BundleType
+    applyBundleTypeSubstitution _ UnitType = UnitType
+    applyBundleTypeSubstitution _ (WireType wt) = WireType wt
+    applyBundleTypeSubstitution sub (Tensor b1 b2) = Tensor (applyBundleTypeSubstitution sub b1) (applyBundleTypeSubstitution sub b2)
+    applyBundleTypeSubstitution sub (List i b) = List i (applyBundleTypeSubstitution sub b)
+    applyBundleTypeSubstitution sub bt@(TypeVariable id) = Map.findWithDefault bt id sub
+    mostGeneralBundleTypeUnifier :: BundleType -> BundleType -> Maybe BundleTypeSubstitution
+    mostGeneralBundleTypeUnifier (TypeVariable id) b = return $ Map.singleton id b
+    mostGeneralBundleTypeUnifier b (TypeVariable id) = return $ Map.singleton id b
+    mostGeneralBundleTypeUnifier UnitType UnitType = return Map.empty
+    mostGeneralBundleTypeUnifier (WireType wt1) (WireType wt2) | wt1 == wt2 = return Map.empty
+    mostGeneralBundleTypeUnifier (Tensor b1 b2) (Tensor b1' b2') = do
+        sub1 <- mostGeneralBundleTypeUnifier b1 b1'
+        sub2 <- mostGeneralBundleTypeUnifier (applyBundleTypeSubstitution sub1 b2) (applyBundleTypeSubstitution sub1 b2')
+        return $ compose sub2 sub1
+    mostGeneralBundleTypeUnifier (List _ b) (List _ b') = mostGeneralBundleTypeUnifier b b'
+    mostGeneralBundleTypeUnifier _ _ = Nothing
+
+compose :: BundleTypeSubstitution -> BundleTypeSubstitution -> BundleTypeSubstitution
+compose sub1 sub2 = Map.union (Map.map (applyBundleTypeSubstitution sub1) sub2) sub1
 
 
 --- WIRE COUNTING ---------------------------------------------------------------------------------

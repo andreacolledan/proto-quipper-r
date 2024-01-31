@@ -2,11 +2,8 @@ module CheckingSpec.BundleSpec (spec) where
 
 import AST.Bundle
 import AST.Index
-import Checking.Bundle (LabelContext, WireTypingError(..), synthesizeLabelContext, runBundleTypeInference, runBundleTypeChecking)
+import Checking.Bundle (synthesizeLabelContext, runBundleTypeInference, runBundleTypeChecking)
 
-import Control.Monad
-import Control.Monad.Error.Class
-import Control.Monad.State.Lazy (execStateT, evalStateT)
 import Data.Either (isLeft, isRight)
 import qualified Data.Map as Map
 import Test.Hspec
