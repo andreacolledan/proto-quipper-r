@@ -111,8 +111,8 @@ instance HasBundleTypeVariables BundleType where
     applyBundleTypeSubstitution sub (List i b) = List i (applyBundleTypeSubstitution sub b)
     applyBundleTypeSubstitution sub bt@(TypeVariable id) = Map.findWithDefault bt id sub
     mostGeneralBundleTypeUnifier :: BundleType -> BundleType -> Maybe BundleTypeSubstitution
-    mostGeneralBundleTypeUnifier (TypeVariable id) b = return $ Map.singleton id b
-    mostGeneralBundleTypeUnifier b (TypeVariable id) = return $ Map.singleton id b
+    mostGeneralBundleTypeUnifier (TypeVariable id) b = assignVar id b
+    mostGeneralBundleTypeUnifier b (TypeVariable id) = assignVar id b
     mostGeneralBundleTypeUnifier UnitType UnitType = return Map.empty
     mostGeneralBundleTypeUnifier (WireType wt1) (WireType wt2) | wt1 == wt2 = return Map.empty
     mostGeneralBundleTypeUnifier (Tensor b1 b2) (Tensor b1' b2') = do
@@ -121,6 +121,11 @@ instance HasBundleTypeVariables BundleType where
         return $ compose sub2 sub1
     mostGeneralBundleTypeUnifier (List _ b) (List _ b') = mostGeneralBundleTypeUnifier b b'
     mostGeneralBundleTypeUnifier _ _ = Nothing
+
+assignVar :: BundleTypeVariableId -> BundleType -> Maybe BundleTypeSubstitution
+assignVar id (TypeVariable id') | id == id' = return Map.empty
+assignVar id b | id `Set.member` freeBundleTypeVariables b = Nothing
+assignVar id b = return $ Map.singleton id b
 
 compose :: BundleTypeSubstitution -> BundleTypeSubstitution -> BundleTypeSubstitution
 compose sub1 sub2 = Map.union (Map.map (applyBundleTypeSubstitution sub1) sub2) sub1
@@ -157,5 +162,5 @@ isBundleSubtype :: BundleType -> BundleType -> Bool
 isBundleSubtype UnitType UnitType = True
 isBundleSubtype (WireType wtype1) (WireType wtype2) = wtype1 == wtype2
 isBundleSubtype (Tensor b1 b2) (Tensor b1' b2') = isBundleSubtype b1' b1 && isBundleSubtype b2' b2
-isBundleSubtype (List i b) (List i' b') = checkEq Set.empty i i' && isBundleSubtype b' b
+isBundleSubtype (List i b) (List i' b') = checkEq i i' && isBundleSubtype b' b
 isBundleSubtype _ _ = False

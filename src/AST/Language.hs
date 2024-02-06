@@ -7,7 +7,13 @@ module AST.Language(
     isLinear,
     VariableId,
     toBundleType,
-    checkSubtype
+    checkSubtype,
+    TypeSubstitution,
+    applyTypeSub,
+    mgtu,
+    compose,
+    checkTypeEq,
+    simplifyType
 ) where
 
 import AST.Bundle(LabelId, Bundle, BundleType, WireType, Wide(..))
@@ -16,6 +22,10 @@ import AST.Circuit
 import AST.Index
 
 import PrettyPrinter
+import qualified Data.Map as Map
+import Data.Map (Map)
+import Data.Set
+import qualified Data.Set as Set
 
 type VariableId = String
 
@@ -149,29 +159,114 @@ fromBundleType Bundle.UnitType = UnitType
 fromBundleType (Bundle.WireType wtype) = WireType wtype
 fromBundleType (Bundle.Tensor btype1 btype2) = Tensor (fromBundleType btype1) (fromBundleType btype2)
 fromBundleType (Bundle.List i btype) = List i (fromBundleType btype)
+fromBundleType (Bundle.TypeVariable _) = error "Cannot convert bundle type variable to PQR type"
+
+--- SUBSTITUTION ---------------------------------------------------------------------------------
+
+type TypeSubstitution = Map TypeVariableId Type
+
+freeTypeVariables :: Type -> Set TypeVariableId
+freeTypeVariables UnitType = Set.empty
+freeTypeVariables (WireType _) = Set.empty
+freeTypeVariables (Tensor t1 t2) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
+freeTypeVariables (Circ {}) = Set.empty
+freeTypeVariables (Arrow t1 t2 _ _) = freeTypeVariables t1 `Set.union` freeTypeVariables t2
+freeTypeVariables (Bang t) = freeTypeVariables t
+freeTypeVariables (List _ t) = freeTypeVariables t
+freeTypeVariables (TypeVariable id) = Set.singleton id
+
+applyTypeSub :: TypeSubstitution -> Type -> Type
+applyTypeSub _ UnitType = UnitType
+applyTypeSub _ typ@(WireType _) = typ
+applyTypeSub sub (Tensor t1 t2) = Tensor (applyTypeSub sub t1) (applyTypeSub sub t2)
+applyTypeSub _ typ@(Circ {}) = typ
+applyTypeSub sub (Arrow typ1 typ2 i j) = Arrow (applyTypeSub sub typ1) (applyTypeSub sub typ2) i j
+applyTypeSub sub (Bang typ) = Bang (applyTypeSub sub typ)
+applyTypeSub sub (List i typ) = List i (applyTypeSub sub typ)
+applyTypeSub sub typ@(TypeVariable id) = Map.findWithDefault typ id sub
+
+compose :: TypeSubstitution -> TypeSubstitution -> TypeSubstitution
+compose sub1 sub2 = Map.union (Map.map (applyTypeSub sub1) sub2) sub1
+
+--- UNIFICATION ---------------------------------------------------------------------------------
+
+assignTypeVariable :: TypeVariableId -> Type -> Maybe TypeSubstitution
+assignTypeVariable id (TypeVariable id') | id == id' = return Map.empty
+assignTypeVariable id t | id `Set.member` freeTypeVariables t = Nothing
+assignTypeVariable id t = return $ Map.singleton id t
+
+--TODO include checks on equality of indices
+mgtu :: Type -> Type -> Maybe TypeSubstitution
+mgtu (TypeVariable id) t = assignTypeVariable id t
+mgtu t (TypeVariable id) = assignTypeVariable id t
+mgtu UnitType UnitType = return Map.empty
+mgtu (WireType wt1) (WireType wt2) | wt1 == wt2 = return Map.empty
+mgtu (Tensor t1 t2) (Tensor t1' t2') = do
+    sub1 <- mgtu t1 t1'
+    sub2 <- mgtu (applyTypeSub sub1 t2) (applyTypeSub sub1 t2')
+    return $ compose sub2 sub1
+mgtu (Circ i inBtype outBtype) (Circ i' inBtype' outBtype') | checkEq i i' && inBtype == inBtype' && outBtype == outBtype' = return Map.empty
+mgtu (Arrow typ1 typ2 i j) (Arrow typ1' typ2' i' j') | checkEq i i' && checkEq j j' = do
+    sub1 <- mgtu typ1 typ1'
+    sub2 <- mgtu (applyTypeSub sub1 typ2) (applyTypeSub sub1 typ2')
+    return $ compose sub2 sub1
+mgtu (Bang typ) (Bang typ') = mgtu typ typ'
+mgtu (List i typ) (List i' typ') | checkEq i i' = mgtu typ typ'
+mgtu _ _ = Nothing
+
+
 
 
 --- SUBTYPING ---------------------------------------------------------------------------------
 
-checkSubtype :: IndexContext -> Type -> Type -> Bool
-checkSubtype _ UnitType UnitType = True
-checkSubtype _ (WireType wtype1) (WireType wtype2) = wtype1 == wtype2
-checkSubtype theta (Bang t) (Bang t') = checkSubtype theta t t'
-checkSubtype theta (Tensor t1 t2) (Tensor t1' t2') =
-    checkSubtype theta t1' t1
-    && checkSubtype theta t2 t2'
-checkSubtype theta (Arrow t1 t2 i j) (Arrow t1' t2' i' j') =
-    checkSubtype theta t1' t1
-    && checkSubtype theta t2 t2'
-    && checkLeq theta i i'
-    && checkEq theta j j'
-checkSubtype theta (Circ i btype1 btype2) (Circ i' btype1' btype2') =
-    checkSubtype theta (fromBundleType btype1) (fromBundleType btype1')
-    &&checkSubtype theta (fromBundleType btype1') (fromBundleType btype1)
-    && checkSubtype theta (fromBundleType btype2) (fromBundleType btype2')
-    && checkSubtype theta (fromBundleType btype2') (fromBundleType btype2)
-    && checkLeq theta i i'
-checkSubtype theta (List i t) (List i' t') =
-    checkSubtype theta t t'
-    && checkEq theta i i'
-checkSubtype _ _ _ = False
+checkSubtype :: Type -> Type -> Bool
+checkSubtype UnitType UnitType = True
+checkSubtype (WireType wtype1) (WireType wtype2) = wtype1 == wtype2
+checkSubtype (Bang t) (Bang t') = checkSubtype t t'
+checkSubtype (Tensor t1 t2) (Tensor t1' t2') =
+    checkSubtype t1' t1
+    && checkSubtype t2 t2'
+checkSubtype (Arrow t1 t2 i j) (Arrow t1' t2' i' j') =
+    checkSubtype t1' t1
+    && checkSubtype t2 t2'
+    && checkLeq i i'
+    && checkEq j j'
+checkSubtype (Circ i btype1 btype2) (Circ i' btype1' btype2') =
+    checkSubtype (fromBundleType btype1) (fromBundleType btype1')
+    &&checkSubtype (fromBundleType btype1') (fromBundleType btype1)
+    && checkSubtype (fromBundleType btype2) (fromBundleType btype2')
+    && checkSubtype (fromBundleType btype2') (fromBundleType btype2)
+    && checkLeq i i'
+checkSubtype (List i t) (List i' t') =
+    checkSubtype t t'
+    && checkEq i i'
+checkSubtype _ _ = False
+
+checkTypeEq :: Type -> Type -> Bool
+checkTypeEq UnitType UnitType = True
+checkTypeEq (WireType wtype1) (WireType wtype2) = wtype1 == wtype2
+checkTypeEq (Bang t) (Bang t') = checkTypeEq t t'
+checkTypeEq (Tensor t1 t2) (Tensor t1' t2') =
+    checkTypeEq t1' t1
+    && checkTypeEq t2 t2'
+checkTypeEq (Arrow t1 t2 i j) (Arrow t1' t2' i' j') =
+    checkTypeEq t1' t1
+    && checkTypeEq t2 t2'
+    && checkEq i i'
+    && checkEq j j'
+checkTypeEq (Circ i btype1 btype2) (Circ i' btype1' btype2') =
+    checkTypeEq (fromBundleType btype1) (fromBundleType btype1')
+    && checkTypeEq (fromBundleType btype2) (fromBundleType btype2')
+    && checkEq i i'
+checkTypeEq (List i t) (List i' t') =
+    checkTypeEq t t'
+    && checkEq i i'
+checkTypeEq _ _ = False
+
+simplifyType :: Type -> Type
+simplifyType (Tensor t1 t2) = Tensor (simplifyType t1) (simplifyType t2)
+simplifyType (Arrow t1 t2 i j) = Arrow (simplifyType t1) (simplifyType t2) (simplify i) (simplify j)
+simplifyType (Bang t) = Bang (simplifyType t)
+simplifyType (List i t) = List (simplify i) (simplifyType t)
+simplifyType (Circ i inBtype outBtype) = Circ (simplify i) inBtype outBtype
+simplifyType t = t

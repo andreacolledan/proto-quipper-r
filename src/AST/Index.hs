@@ -6,7 +6,8 @@ module AST.Index(
     IndexContext,
     Indexed(..),
     checkEq,
-    checkLeq
+    checkLeq,
+    simplify
 ) where
 
 import Control.Exception
@@ -19,6 +20,8 @@ import PrettyPrinter
 import System.IO
 import System.FilePath
 import System.Process as Proc
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 
 type IndexVariableId = String
@@ -94,6 +97,66 @@ instance (Traversable t, Indexed a) => Indexed (t a) where
     isub :: Index -> IndexVariableId -> t a -> t a
     isub i id x = isub i id <$> x
 
+--- NEW VERSION (WIP)  ---------------------------------------------------------------------------------
+
+--type IndexSubstitution = Map IndexVariableId Index
+--
+--class HasIndexVariables a where
+--    freeIndexVariables :: a -> Set IndexVariableId
+--    applyIndexSubstitution :: IndexSubstitution -> a -> a
+--    mostGeneralIndexUnifier :: a -> a -> Maybe IndexSubstitution
+--    isIndexClosed :: a -> Bool
+--    isIndexClosed = Set.null . freeIndexVariables
+
+--instance HasIndexVariables Index where
+--    freeIndexVariables :: Index -> Set IndexVariableId
+--    freeIndexVariables (IndexVariable id) = Set.singleton id
+--    freeIndexVariables (Number _) = Set.empty
+--    freeIndexVariables (Plus i j) = freeIndexVariables i `Set.union` freeIndexVariables j
+--    freeIndexVariables (Max i j) = freeIndexVariables i `Set.union` freeIndexVariables j
+--    freeIndexVariables (Mult i j) = freeIndexVariables i `Set.union` freeIndexVariables j
+--    freeIndexVariables (Minus i j) = freeIndexVariables i `Set.union` freeIndexVariables j
+--    freeIndexVariables (Maximum id i j) = freeIndexVariables i `Set.union` Set.delete id (freeIndexVariables j)
+--    applyIndexSubstitution :: IndexSubstitution -> Index -> Index
+--    applyIndexSubstitution _ (Number n) = Number n
+--    applyIndexSubstitution sub i@(IndexVariable id) = Map.findWithDefault i id sub
+--    applyIndexSubstitution sub (Plus i j) = Plus (applyIndexSubstitution sub i) (applyIndexSubstitution sub j)
+--    applyIndexSubstitution sub (Max i j) = Max (applyIndexSubstitution sub i) (applyIndexSubstitution sub j)
+--    applyIndexSubstitution sub (Mult i j) = Mult (applyIndexSubstitution sub i) (applyIndexSubstitution sub j)
+--    applyIndexSubstitution sub (Minus i j) = Minus (applyIndexSubstitution sub i) (applyIndexSubstitution sub j)
+--    applyIndexSubstitution sub (Maximum id i j) = Maximum id (applyIndexSubstitution (Map.delete id sub) i) (applyIndexSubstitution sub j)
+--    mostGeneralIndexUnifier :: Index -> Index -> Maybe IndexSubstitution
+--    mostGeneralIndexUnifier (IndexVariable id) i = return $ Map.singleton id i
+--    mostGeneralIndexUnifier i (IndexVariable id) = return $ Map.singleton id i
+--    mostGeneralIndexUnifier (Number n) (Number m) | n == m = return Map.empty
+--    mostGeneralIndexUnifier (Plus i j) (Plus i' j') = do
+--        sub1 <- mostGeneralIndexUnifier i i'
+--        sub2 <- mostGeneralIndexUnifier (applyIndexSubstitution sub1 j) (applyIndexSubstitution sub1 j')
+--        return $ sub1 `compose` sub2
+--    mostGeneralIndexUnifier (Max i j) (Max i' j') = do
+--        sub1 <- mostGeneralIndexUnifier i i'
+--        sub2 <- mostGeneralIndexUnifier (applyIndexSubstitution sub1 j) (applyIndexSubstitution sub1 j')
+--        return $ sub1 `compose` sub2
+--    mostGeneralIndexUnifier (Mult i j) (Mult i' j') = do
+--        sub1 <- mostGeneralIndexUnifier i i'
+--        sub2 <- mostGeneralIndexUnifier (applyIndexSubstitution sub1 j) (applyIndexSubstitution sub1 j')
+--        return $ sub1 `compose` sub2
+--    mostGeneralIndexUnifier (Minus i j) (Minus i' j') = do
+--        sub1 <- mostGeneralIndexUnifier i i'
+--        sub2 <- mostGeneralIndexUnifier (applyIndexSubstitution sub1 j) (applyIndexSubstitution sub1 j')
+--        return $ sub1 `compose` sub2
+--    --mostGeneralIndexUnifier (Maximum id i j) (Maximum id' i' j') | id == id' = do
+--
+--assignVar :: IndexVariableId -> Index -> Maybe IndexSubstitution
+--assignVar id (IndexVariable id') | id == id' = return Map.empty
+--assignVar id b | id `Set.member` freeIndexVariables b = Nothing
+--assignVar id b = return $ Map.singleton id b
+--
+--
+--
+--
+--compose :: IndexSubstitution -> IndexSubstitution -> IndexSubstitution
+--compose sub1 sub2 = Map.union (Map.map (applyIndexSubstitution sub1) sub2) sub1
 
 --- SMT CONSTRAINT CHECKING ---------------------------------------------------------------------------------
 
@@ -157,7 +220,7 @@ simplify (Maximum id i j) = case simplify i of
         else if j' `nonDecreasingIn` id then simplify $ isub (Minus i' (Number 1)) id j'
         --otherwise return the simplified term and pray that an SMT solver will figure it out (it won't)
         else Maximum id i' j'
-    
+
 
 -- Allowed relations between indices
 data Constraint
@@ -247,84 +310,15 @@ querySMTWithContext theta c = unsafePerformIO $ do
         sanitize (c:cs) = c : sanitize cs
 
 -- Θ ⊨ i = j (figs. 10,15)
-checkEq :: IndexContext -> Index -> Index -> Bool
-checkEq theta i j = case (simplify i,simplify j) of
+checkEq :: Index -> Index -> Bool
+checkEq i j = case (simplify i,simplify j) of
     (Number n, Number m) -> n == m
-    (i',j') -> querySMTWithContext theta $ Eq i' j'
+    (i',j') -> let theta = freeVariables i' `Set.union` freeVariables j'
+        in querySMTWithContext theta $ Eq i' j'
 
 -- Θ ⊨ i ≤ j (figs. 12,15)
-checkLeq :: IndexContext -> Index -> Index -> Bool
-checkLeq theta i j = case (simplify i,simplify j) of
+checkLeq :: Index -> Index -> Bool
+checkLeq i j = case (simplify i,simplify j) of
     (Number n, Number m) -> n <= m
-    (i',j') -> querySMTWithContext theta $ Leq i' j'
-
-
----- Queries the SMT solver to check whether the given relation holds between the two indices
----- Returns () if the relation is valid, throws an SMTError otherwise
---querySMTWithContext' :: IndexRel -> IndexContext -> Index -> Index -> Bool
---querySMTWithContext' rel theta i j = unsafePerformIO $ do
---    withFile queryFile WriteMode $ \handle -> do
---        hPutStrLn handle $ "; " ++ pretty i ++ " " ++ embedRel rel ++ " " ++ pretty j
---        when maximaInvolved $ do
---            hPutStrLn handle "(set-logic HO_ALL)"
---            hPutStrLn handle "(set-option :fmf-fun true)" --enable recursive functions
---            hPutStrLn handle "(set-option :full-saturate-quant true)"
---            hPutStrLn handle "(set-option :fmf-mbqi fmc)"
---            hPutStrLn handle "(set-option :cegqi-inf-int true)"
---            hPutStrLn handle "(set-option :nl-cov true)"
---            hPutStrLn handle "(set-option :cegqi true)"
---            hPutStrLn handle "(set-option :dt-stc-ind true)"
---            hPutStrLn handle "(set-option :conjecture-gen true)"
---            hPutStrLn handle "(set-option :cegis-sample trust)"
---            hPutStrLn handle "(set-option :quant-ind true)"
---            hPutStrLn handle "(set-option :nl-ext-tplanes-interleave true)"
---        hPutStrLn handle "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x))"  --define max(x,y)
---        when maximaInvolved $
---            hPutStrLn handle "(define-fun-rec maximum ((f (-> Int Int)) (j Int)) Int (ite (= j 0) 0 (max (f j) (maximum f (- j 1)))))"
---        -- try to find a counterexample to the relation of the two indices
---        hPutStrLn handle "(assert (forall ("
---        forM_ theta $ \id -> do
---            -- for each index variable, initialize an unknown natural variable
---            hPutStrLn handle $ "(" ++ id ++ " Int)"
---        hPutStrLn handle ") (=> (and "
---        forM_ theta $ \id -> do
---            -- for each index variable, initialize an unknown natural variable
---            hPutStrLn handle $ "(>= " ++ id ++ " 0)"
---        hPutStrLn handle $ ") (" ++ embedRel rel ++ " " ++ embedIndex i ++ " " ++ embedIndex j ++ "))))"
---        hPutStrLn handle "(check-sat)"
---    -- run the SMT solver
---    resp <- try $ readProcess "cvc5" [queryFile, "-q"] []
---    withFile queryFile AppendMode $ \handle -> do
---        case resp of
---            Left (SomeException e) -> do
---                hPutStrLn handle $ "; Error thrown: " ++ show e
---                return False
---            Right resp -> if "sat" `isPrefixOf` resp then do
---                    hPutStrLn handle "; founds sat (valid)"
---                    return True
---                else if "unsat" `isPrefixOf` resp then do
---                    hPutStrLn handle "; found unsat (invalid)"
---                    return False
---                else do
---                    hPutStrLn handle $ "; got response: " ++ resp
---                    return False
---    where
---        queryFile :: FilePath
---        queryFile = "queries" </> sanitize (pretty i ++ " " ++ embedRel rel ++ " " ++ pretty j) <.> "smt2"
---        maximaInvolved :: Bool
---        maximaInvolved = containsMaximum i || containsMaximum j
---        containsMaximum :: Index -> Bool
---        containsMaximum (IndexVariable _) = False
---        containsMaximum (Number _) = False
---        containsMaximum (Plus i j) = containsMaximum i || containsMaximum j
---        containsMaximum (Max i j) = containsMaximum i || containsMaximum j
---        containsMaximum (Mult i j) = containsMaximum i || containsMaximum j
---        containsMaximum (Minus i j) = containsMaximum i || containsMaximum j
---        containsMaximum (Maximum {}) = True
---        sanitize :: String -> String
---        sanitize [] = []
---        sanitize (c1:c2:cs) | [c1,c2] == "<=" = "LEQ" ++ sanitize cs
---        sanitize (c:cs) | c == ' ' = sanitize cs
---        sanitize (c:cs) | c == '*' = "×" ++ sanitize cs
---        sanitize (c:cs) | c == '<' = "LT" ++ sanitize cs
---        sanitize (c:cs) = c : sanitize cs
+    (i',j') -> let theta = freeVariables i' `Set.union` freeVariables j'
+        in querySMTWithContext theta $ Leq i' j'

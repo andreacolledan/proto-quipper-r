@@ -9,7 +9,7 @@ import Parsing.Index
 
 spec :: Spec
 spec = do
-    describe "index parsing" $ do
+    describe "index parser" $ do
         it "parses a natural number" $ do
             parse parseIndex "" "123" `shouldBe` Right (Number 123)
         it "parses an index variable" $ do

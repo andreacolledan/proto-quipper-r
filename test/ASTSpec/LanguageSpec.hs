@@ -40,8 +40,8 @@ syntaxSpec = do
             wireCount (Lang.WireType Bit) `shouldBe` Number 1
             wireCount (Lang.WireType Qubit) `shouldBe` Number 1
         it "returns the sum of the wire counts of the components of a tensor type" $ do
-            wireCount (Lang.Tensor (Lang.WireType Bit) (Lang.WireType Qubit)) `shouldSatisfy` checkEq Set.empty (Number 2)
-            wireCount (Lang.Tensor (Lang.Tensor (Lang.WireType Bit) (Lang.WireType Qubit)) (Lang.WireType Qubit)) `shouldSatisfy` checkEq Set.empty (Number 3)
+            wireCount (Lang.Tensor (Lang.WireType Bit) (Lang.WireType Qubit)) `shouldSatisfy` checkEq (Number 2)
+            wireCount (Lang.Tensor (Lang.Tensor (Lang.WireType Bit) (Lang.WireType Qubit)) (Lang.WireType Qubit)) `shouldSatisfy` checkEq (Number 3)
         it "returns the arrows second annotation" $ do
             wireCount (Lang.Arrow (Lang.WireType Bit) (Lang.WireType Qubit) (Number 2) (Number 2)) `shouldBe` Number 2 
 

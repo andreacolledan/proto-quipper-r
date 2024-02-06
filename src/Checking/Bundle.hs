@@ -5,7 +5,8 @@ module Checking.Bundle (
     runBundleTypeInferenceWithRemaining,
     runBundleTypeChecking,
     runBundleTypeCheckingWithRemaining,
-    WireTypingError(..)
+    WireTypingError(..),
+    isBundleSubtype
 ) where
 
 import AST.Bundle
@@ -28,8 +29,6 @@ data WireTypingError
     | BundleTypeMismatch Bundle BundleType BundleType
     | ContextSynthesisMismatch Bundle BundleType
     | UnusedLabels LabelContext
-    | UnexpectedBundleListLength Bundle Index Index
-    | LengthZeroCons Bundle BundleType
     | UnexpectedBundleTypeContstructor Bundle BundleType BundleType
     deriving (Eq)
 
@@ -38,8 +37,6 @@ instance Show WireTypingError where
     show (BundleTypeMismatch b btype1 btype2) = "Expected bundle " ++ pretty b ++ " to have type " ++ pretty btype1 ++ ", got" ++ pretty btype2 ++ " instead"
     show (ContextSynthesisMismatch b btype) = "Cannot match structure of bundle " ++ pretty b ++ " and bundle type " ++ pretty btype ++ " to produce a label context"
     show (UnusedLabels q) = "Unused labels in label context: " ++ pretty q
-    show (UnexpectedBundleListLength b i1 i2) = "Expected list bundle " ++ pretty b ++ " to have length " ++ pretty i1 ++ ", got " ++ pretty i2 ++ " instead"
-    show (LengthZeroCons b btype) = "Non-empty list " ++ pretty b ++ " cannot be given the type " ++ pretty btype ++ " because it has length 0"
     show (UnexpectedBundleTypeContstructor b btype1 btype2) = "Expected bundle " ++ pretty b ++ " to have type " ++ printConstructor btype1 ++ ", got type " ++ pretty btype2 ++ " instead"
 
 printConstructor :: BundleType -> String

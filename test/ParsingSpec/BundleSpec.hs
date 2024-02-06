@@ -9,7 +9,7 @@ import Parsing.Bundle
 
 spec :: Spec
 spec = do
-    describe "bundle parsing" $ do
+    describe "bundle parser" $ do
         it "parses a label" $ do
             parse parseBundle "" "a" `shouldBe` Right (Label "a")
         it "parses a tuple" $ do

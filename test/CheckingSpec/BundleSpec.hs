@@ -25,17 +25,25 @@ spec = do
         --TODO
     describe "bundle type checking" $ do
         it "succeeds on the empty list" $ do
+            -- ∅ ⊢ [] <== List[0] Qubit
             runBundleTypeChecking Map.empty Nil (List (Number 0) (WireType Qubit)) `shouldSatisfy` isRight
+            -- ∅ ⊢ [] <== List[0] Bit
             runBundleTypeChecking Map.empty Nil (List (Number 0) (WireType Bit)) `shouldSatisfy` isRight
         it "succeeds on a list of the correct length" $ do
+            -- a:Qubit,b:Qubit ⊢ [a,b] <== List[2] Qubit
             runBundleTypeChecking (Map.fromList [("a",Qubit),("b",Qubit)]) (Cons (Label "a") (Cons (Label "b") Nil)) (List (Number 2) (WireType Qubit)) `shouldSatisfy` isRight
         it "fails on a list of the incorrect length" $ do
+            -- a:Qubit,b:Qubit ⊢ [a,b] <=/= List[1] Qubit
             runBundleTypeChecking (Map.fromList [("a",Qubit),("b",Qubit)]) (Cons (Label "a") (Cons (Label "b") Nil)) (List (Number 1) (WireType Qubit)) `shouldSatisfy` isLeft
         it "fails when there are unused labels in the context" $ do
+            -- a:Qubit ⊢ * <=/= Unit
             runBundleTypeChecking (Map.fromList [("a",Qubit)]) UnitValue UnitType `shouldSatisfy` isLeft
+            -- a:Qubit,b:Qubit ⊢ a <=/= Qubit
             runBundleTypeChecking (Map.fromList [("a",Qubit),("b",Qubit)]) (Label "a") (WireType Qubit) `shouldSatisfy` isLeft
-        it "fails when the synthesised type and the checked type do not match" $ do
+        it "fails when the checking against the incorrect type" $ do
+            -- a:Qubit ⊢ a <=/= Bit
             runBundleTypeChecking (Map.fromList [("a",Qubit)]) (Label "a") (WireType Bit) `shouldSatisfy` isLeft
+            -- a:Qubit,b:Bit ⊢ (a,b) <=/= Qubit ⊗ Qubit
             runBundleTypeChecking (Map.fromList [("a",Qubit),("b",Bit)]) (Pair (Label "a") (Label "b")) (Tensor (WireType Qubit) (WireType Qubit)) `shouldSatisfy` isLeft
     describe "context synthesis" $ do
         it "succeeds when a wire bundle and a wire type have the same shape" $ do
