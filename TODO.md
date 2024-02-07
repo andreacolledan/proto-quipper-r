@@ -70,4 +70,4 @@
 - [x] Parsing wire bundles
 - [x] Parsing indices
 - [ ] Parsing Circuits
-- [ ] Parsing PQR
+- [x] Parsing PQR

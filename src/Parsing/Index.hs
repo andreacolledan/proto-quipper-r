@@ -5,13 +5,13 @@ module Parsing.Index (
     parseIndex
 ) where
 
-import Text.Parsec.String
 import Text.Parsec.Expr
 import Text.Parsec.Token
 import Text.Parsec.Language
 import Text.Parsec (oneOf, alphaNum, lower, (<|>), try)
 import AST.Index
 
+import Parsing
 
 TokenParser{
     parens = m_parens,

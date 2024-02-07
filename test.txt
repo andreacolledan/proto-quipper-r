@@ -1,0 +1,2 @@
+\s::List[i] Qubit . let q = apply(init,())
+                        in return q:s

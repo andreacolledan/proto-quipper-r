@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -32,9 +32,12 @@ library
       Checking.Bundle
       Checking.Circuit
       Checking.Language
+      Parsing
       Parsing.Bundle
+      Parsing.BundleType
       Parsing.Index
       Parsing.Language
+      Parsing.Type
       PrettyPrinter
   other-modules:
       Paths_pqr

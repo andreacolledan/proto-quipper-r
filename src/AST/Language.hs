@@ -43,20 +43,20 @@ data Value
     | Nil                                   -- []
     | Cons Value Value                      -- V:W
     | Fold IndexVariableId Value Value      -- fold[i] V W
-    | Anno Value Type                       -- (V : t)
+    | Anno Value Type                       -- (V :: t)
     deriving (Eq, Show)
 instance Pretty Value where
-    pretty UnitValue = "*"
+    pretty UnitValue = "()"
     pretty (Label id) = id
     pretty (Variable id) = id
     pretty (Pair v w) = "(" ++ pretty v ++ ", " ++ pretty w ++ ")"
     pretty (BoxedCircuit _ c _) = "[" ++ pretty c ++ "]"
-    pretty (Abs x t m) = "(λ" ++ x ++ ":" ++ pretty t ++ ". " ++ pretty m ++ ")"
-    pretty (Lift m) = "lift(" ++ pretty m ++ ")"
+    pretty (Abs x t m) = "(\\" ++ x ++ ":" ++ pretty t ++ " -> " ++ pretty m ++ ")"
+    pretty (Lift m) = "(lift " ++ pretty m ++ ")"
     pretty Nil = "[]"
     pretty (Cons v w) = "(" ++ pretty v ++ ":" ++ pretty w ++ ")"
-    pretty (Fold i v w) = "fold[" ++ i ++ "] " ++ pretty v ++ " " ++ pretty w
-    pretty (Anno v t) = "(" ++ pretty v ++ " : " ++ pretty t ++ ")"
+    pretty (Fold i v w) = "(fold[" ++ i ++ "] " ++ pretty v ++ " " ++ pretty w ++ ")"
+    pretty (Anno v t) = "(" ++ pretty v ++ " :: " ++ pretty t ++ ")"
 
 -- The datatype of PQR terms
 -- Fig. 8
@@ -96,9 +96,9 @@ data Type
     | TypeVariable TypeVariableId       -- α
     deriving (Show, Eq)
 instance Pretty Type where
-    pretty UnitType = "Unit"
+    pretty UnitType = "()"
     pretty (WireType wt) = pretty wt
-    pretty (Tensor t1 t2) = "(" ++ pretty t1 ++ " ⊗ " ++ pretty t2 ++ ")"
+    pretty (Tensor t1 t2) = "(" ++ pretty t1 ++ ", " ++ pretty t2 ++ ")"
     pretty (Circ i inBtype outBtype) = "Circ [" ++ pretty i ++ "] (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
     pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " -o [" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
     pretty (Bang typ) = "!" ++ pretty typ
