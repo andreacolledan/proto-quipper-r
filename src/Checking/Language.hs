@@ -29,6 +29,7 @@ import Data.Either.Extra (mapLeft)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import PrettyPrinter
+import Debug.Trace (traceId, traceShowId, traceShowM, traceShow)
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map VariableId Type
@@ -65,6 +66,9 @@ data TypingError
     | UnusedLinearResources TypingContext LabelContext
     | UnexpectedBoxingType Term Type BundleType
     | UnboxableType Value Type
+    | UnfoldableType Value Type
+    | NonincreasingStepFunction Value Type Type
+    | IndexVariableCapture Value IndexVariableId Type
     deriving (Eq)
 
 data CircuitInterfaceType = Input | Output deriving (Eq)
@@ -91,6 +95,10 @@ instance Show TypingError where
     show (UnexpectedBoxingType m btype1 btype2) =
         "Expected input type of boxed circuit " ++ pretty m ++ " to be " ++ pretty btype1 ++ ", got " ++ pretty btype2 ++ " instead"
     show (UnboxableType v typ) = "Cannot box value " ++ pretty v ++ " of type " ++ pretty typ
+    show (UnfoldableType v typ) = "Cannot fold value " ++ pretty v ++ " of type " ++ pretty typ
+    show (NonincreasingStepFunction v typ1 typ2) =
+        "Expected step function " ++ pretty v ++ "'s output type to be" ++ pretty typ1 ++ ", got " ++ pretty typ2 ++ " instead"
+    show (IndexVariableCapture v id typ) = "Index variable " ++ id ++ " cannot occur in type " ++ pretty typ ++ " of step function " ++ pretty v
 
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
@@ -257,7 +265,21 @@ inferValueType (Cons v w) = do
             sub3 <- tryUnify typ1' (applyTypeSub sub2 typ1) $ UnexpectedType (Right w) (List i typ1) typ2
             return (List (Plus i (Number 1)) (applyTypeSub sub3 typ1), sub3 `compose` sub2 `compose` sub1)
         _ -> throwError $ UnexpectedTypeConstructor (Right w) (List (Number 0) UnitType) typ2
-inferValueType v@(Fold id v' w) = undefined
+inferValueType (Fold id v w) = do
+    (stepfuntyp, sub1) <- inferValueType v
+    case stepfuntyp of
+        Bang (Arrow (Tensor acctyp elemtyp) incacctyp i _) -> do
+            when (id `elem` freeVariables elemtyp) $ throwError $ IndexVariableCapture v id elemtyp
+            unless (checkTypeEq incacctyp (isub (Plus (IndexVariable id) (Number 1)) id acctyp)) $ throwError $ NonincreasingStepFunction v (isub (Plus (IndexVariable id) (Number 1)) id acctyp) incacctyp
+            substituteInEnvironment sub1
+            ((basetyp, sub2),resourceCount) <- withWireCount $ inferValueType w
+            let (elemtyp', acctyp') = (applyTypeSub sub2 elemtyp, applyTypeSub sub2 acctyp)
+            sub3 <- tryUnify basetyp (isub (Number 0) id acctyp) $ UnexpectedType (Right w) (isub (Number 0) id acctyp) basetyp
+            let (elemtyp'',acctyp'') = (applyTypeSub sub3 elemtyp', applyTypeSub sub3 acctyp')
+            id' <- freshVariableName
+            let e = Max resourceCount (Maximum id (IndexVariable id') (Plus i (Mult (Minus (IndexVariable id') (Plus (IndexVariable id) (Number 1))) (wireCount elemtyp''))))
+            return (Arrow (List (IndexVariable id') elemtyp'') (isub (IndexVariable id') id acctyp'') e resourceCount, sub2 `compose` sub1)
+        _ -> throwError $ UnfoldableType v stepfuntyp
 inferValueType (Anno v typ) = do
     (typ', sub) <- inferValueType v
     sub' <- tryUnify typ' typ $ UnexpectedType (Right v) typ typ'

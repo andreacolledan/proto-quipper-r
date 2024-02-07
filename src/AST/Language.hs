@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE InstanceSigs #-}
 module AST.Language(
     Value(..),
     Term(..),
@@ -118,6 +119,16 @@ instance Wide Type where
 
 -- PQR types are amenable to the notion of well-formedness with respect to an index context
 instance Indexed Type where
+    freeVariables :: Type -> Set IndexVariableId
+    freeVariables UnitType = Set.empty
+    freeVariables (WireType _) = Set.empty
+    freeVariables (Tensor t1 t2) = freeVariables t1 `Set.union` freeVariables t2
+    freeVariables (Circ i _ _) = freeVariables i
+    freeVariables (Arrow typ1 typ2 i j) = freeVariables typ1 `Set.union` freeVariables typ2 `Set.union` freeVariables i `Set.union` freeVariables j
+    freeVariables (Bang typ) = freeVariables typ
+    freeVariables (List i typ) = freeVariables i `Set.union` freeVariables typ
+    freeVariables (TypeVariable _) = Set.empty
+    wellFormed :: IndexContext -> Type -> Bool
     wellFormed _ UnitType = True
     wellFormed _ (WireType _) = True
     wellFormed theta (Tensor t1 t2) = wellFormed theta t1 && wellFormed theta t2
@@ -125,7 +136,8 @@ instance Indexed Type where
     wellFormed theta (Arrow typ1 typ2 i j) = wellFormed theta typ1 && wellFormed theta typ2 && wellFormed theta i && wellFormed theta j
     wellFormed theta (Bang typ) = wellFormed theta typ
     wellFormed theta (List i typ) = wellFormed theta i && wellFormed theta typ
-
+    wellFormed _ (TypeVariable _) = True
+    isub :: Index -> IndexVariableId -> Type -> Type
     isub _ _ UnitType = UnitType
     isub _ _ (WireType wtype) = WireType wtype
     isub i id (Tensor t1 t2) = Tensor (isub i id t1) (isub i id t2)
@@ -133,6 +145,7 @@ instance Indexed Type where
     isub i id (Arrow typ1 typ2 j k) = Arrow (isub i id typ1) (isub i id typ2) (isub i id j) (isub i id k)
     isub i id (Bang typ) = Bang (isub i id typ)
     isub i id (List j typ) = List (isub i id j) (isub i id typ)
+    isub _ _ tv@(TypeVariable _) = tv
 
 -- Returns True iff the given type is linear
 isLinear :: Type -> Bool
@@ -143,6 +156,7 @@ isLinear (Circ {}) = False
 isLinear (Arrow {}) = True
 isLinear (Bang _) = False
 isLinear (List _ typ) = isLinear typ
+isLinear (TypeVariable _) = True
 
 -- Turns a suitable PQR type into an identical bundle type
 toBundleType :: Type -> Maybe BundleType

@@ -97,6 +97,8 @@ inferBundleType b@(Cons b1 b2) = do
         _ -> throwError $ UnexpectedBundleTypeContstructor (Cons b1 b2) btype2 (List (Number 0) UnitType)
 
 -- Q <== l : T
+-- synthesizeLabelContext bundle bundleType returns the unique label context q such that q ⊢ bundle => bundleType, if it exists
+-- Used in circuit signature checking
 synthesizeLabelContext :: Bundle -> BundleType -> Either WireTypingError LabelContext
 synthesizeLabelContext UnitValue UnitType = Right Map.empty
 synthesizeLabelContext (Label id) (WireType wtype) = Right $ Map.fromList [(id,wtype)]
@@ -110,12 +112,15 @@ synthesizeLabelContext b btype = throwError $ ContextSynthesisMismatch b btype
 
 --- EXPOSED INFERENCE AND CHECKING FUNCTIONS --------------------------------------------------------------
 
-
+-- run type inference, if successful return both the type and the unused portion of thecontext
+-- Used in boxed circuit inference
 runBundleTypeInferenceWithRemaining :: LabelContext -> Bundle -> Either WireTypingError (BundleType, LabelContext)
 runBundleTypeInferenceWithRemaining context bundle = do
     ((t,_),InferenceEnv{labelContext = remaining}) <- runStateT (inferBundleType bundle) (InferenceEnv context 0)
     return (t, remaining)
 
+-- run the top-level type inference, if successful return the type
+-- This fails if there are unused labels in the context
 runBundleTypeInference :: LabelContext -> Bundle -> Either WireTypingError BundleType
 runBundleTypeInference context bundle = case runBundleTypeInferenceWithRemaining context bundle of
     Right (t, remaining) -> do
@@ -123,6 +128,8 @@ runBundleTypeInference context bundle = case runBundleTypeInferenceWithRemaining
         return t
     Left err -> throwError err
 
+-- run type checking, if successful return the unused portion of the context
+-- Used in circuit signature inference
 runBundleTypeCheckingWithRemaining :: LabelContext -> Bundle -> BundleType -> Either WireTypingError LabelContext
 runBundleTypeCheckingWithRemaining context bundle expected = do
     ((t,_), InferenceEnv{labelContext = remaining}) <- runStateT (inferBundleType bundle) (InferenceEnv context 0)
@@ -132,6 +139,8 @@ runBundleTypeCheckingWithRemaining context bundle expected = do
             return remaining
         Nothing -> throwError $ BundleTypeMismatch bundle expected t
 
+-- run the top-level type checking
+-- This fails if there are unused labels in the context
 runBundleTypeChecking :: LabelContext -> Bundle -> BundleType -> Either WireTypingError ()
 runBundleTypeChecking context bundle expected = case runBundleTypeCheckingWithRemaining context bundle expected of
     Right remaining -> unless (Map.null remaining) $ throwError $ UnusedLabels remaining

@@ -12,6 +12,7 @@ import qualified Data.Map as Map
 import PrettyPrinter
 import Test.Hspec
 import Data.Either.Extra (fromRight')
+import Debug.Trace (traceWith)
 
 -- HELPERS --
 
@@ -584,3 +585,12 @@ spec = do
                 -- ∅;∅;∅ ⊢ box:Qubit(lift(return(λx:Qubit.return x))) <=/= Unit ; 0
                 let (typ, index) = (UnitType, Number 0)
                 runTermTypeChecking gamma q term typ index `shouldSatisfy` isLeft
+    describe "fold typing" $ do
+        context "when inferring" $ do
+            it "succeeds when the premises hold" $ do
+                -- ∅;∅ ⊢ fold[i] lift(return λx:List[i] Qubit ⊗ Qubit. let (y,z) = x in return z:y) [] ==> List[x0] Qubit -o [x0,0] List[x0] Qubit
+                let stepfun = Abs "x" (Tensor (List (IndexVariable "i") (WireType Qubit)) (WireType Qubit)) (Dest "y" "z" (Variable "x") (Return (Cons (Variable "z") (Variable "y"))))
+                let term = Fold "i" (Lift (Return stepfun)) Nil
+                let typ = Arrow (List (IndexVariable "x1") (WireType Qubit)) (List (IndexVariable "x1") (WireType Qubit)) (IndexVariable "x1") (Number 0)
+                let (gamma,q) = (Map.empty,Map.empty)
+                simplifyType <$> runValueTypeInference gamma q term `shouldBe` Right typ

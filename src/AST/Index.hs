@@ -20,8 +20,6 @@ import PrettyPrinter
 import System.IO
 import System.FilePath
 import System.Process as Proc
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 
 type IndexVariableId = String
@@ -160,6 +158,7 @@ instance (Traversable t, Indexed a) => Indexed (t a) where
 
 --- SMT CONSTRAINT CHECKING ---------------------------------------------------------------------------------
 
+
 nonDecreasingIn :: Index -> IndexVariableId -> Bool
 nonDecreasingIn (IndexVariable _) _ = True
 nonDecreasingIn (Number _) _ = True
@@ -188,21 +187,32 @@ stableIn :: Index -> IndexVariableId -> Bool
 stableIn i id = i `nonDecreasingIn` id && i `nonIncreasingIn` id
 
 
--- Simplifies an index expression, evaluating an expression until it is a number or a variable is encountered
+-- Simplifies an index expression
 simplify :: Index -> Index
 simplify (Number n) = Number n
 simplify (Plus i j) = case (simplify i, simplify j) of
     (Number n, Number m) -> Number (n + m)
+    (i',Number 0) -> i'
+    (Number 0, j') -> j'
+    (i', Minus j' i'') | i' == i'' -> j' --happens very often
     (i',j') -> Plus i' j'
 simplify (Max i j) = case (simplify i, simplify j) of
     (Number n, Number m) -> Number (max n m)
+    (i',Number 0) -> i'
+    (Number 0, j') -> j'
     (i',j') -> Max i' j'
 simplify (Mult i j) = case (simplify i, simplify j) of
     (Number n, Number m) -> Number (n * m)
+    (_,Number 0) -> Number 0
+    (Number 0, _) -> Number 0
+    (i',Number 1) -> i'
+    (Number 1, j') -> j'
     (i',j') -> Mult i' j'
 simplify (Minus i j) = case (simplify i, simplify j) of
     (Number n, Number m) -> Number (n - m)
     (i',j') | i' == j' -> Number 0
+    (i',Number 0) -> i'
+    (Number 0, _) -> Number 0
     (i',j') -> Minus i' j'
 simplify (IndexVariable id) = IndexVariable id
 simplify (Maximum id i j) = case simplify i of
@@ -312,13 +322,16 @@ querySMTWithContext theta c = unsafePerformIO $ do
 -- Θ ⊨ i = j (figs. 10,15)
 checkEq :: Index -> Index -> Bool
 checkEq i j = case (simplify i,simplify j) of
-    (Number n, Number m) -> n == m
-    (i',j') -> let theta = freeVariables i' `Set.union` freeVariables j'
+    (i',j') | i' == j' -> True                                          -- identical indices are equal
+    (Number n, Number m) -> n == m                                      -- number indices are equal iff their values are equal
+    (IndexVariable id, IndexVariable id') -> id == id'                  -- variables are equal if they are the same name
+    (i',j') -> let theta = freeVariables i' `Set.union` freeVariables j'-- in all other cases, query the SMT solver
         in querySMTWithContext theta $ Eq i' j'
 
 -- Θ ⊨ i ≤ j (figs. 12,15)
 checkLeq :: Index -> Index -> Bool
 checkLeq i j = case (simplify i,simplify j) of
-    (Number n, Number m) -> n <= m
-    (i',j') -> let theta = freeVariables i' `Set.union` freeVariables j'
+    (i',j') | i' == j' -> True                                          -- identical indices are equal
+    (Number n, Number m) -> n <= m                                      -- number indices are lesser-or-equal iff their values are lesser-or-equal
+    (i',j') -> let theta = freeVariables i' `Set.union` freeVariables j'-- in all other cases, query the SMT solver
         in querySMTWithContext theta $ Leq i' j'
