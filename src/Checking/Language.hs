@@ -7,6 +7,7 @@ module Checking.Language(
     runTermTypeInference,
     runValueTypeChecking,
     runTermTypeChecking,
+    emptyctx
 ) where
 
 import AST.Bundle (Bundle, BundleType, Wide (wireCount), LabelId, isBundleSubtype)
@@ -48,6 +49,9 @@ data TypingEnvironment = TypingEnvironment {
 -- check if a typing environment contains any linear variable.
 envIsLinear :: TypingEnvironment -> Bool
 envIsLinear TypingEnvironment{typingContext = gamma, labelContext = q} = (any isLinear . Map.elems) gamma || Map.size q > 0
+
+emptyctx :: Map a b
+emptyctx = Map.empty
 
 --- TYPING ERRORS ---------------------------------------------------------------
 

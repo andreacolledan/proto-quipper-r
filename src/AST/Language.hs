@@ -100,7 +100,7 @@ instance Pretty Type where
     pretty (WireType wt) = pretty wt
     pretty (Tensor t1 t2) = "(" ++ pretty t1 ++ ", " ++ pretty t2 ++ ")"
     pretty (Circ i inBtype outBtype) = "Circ [" ++ pretty i ++ "] (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
-    pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " -o [" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
+    pretty (Arrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " ->[" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
     pretty (Bang typ) = "!" ++ pretty typ
     pretty (List i typ) = "List[" ++ pretty i ++ "] " ++ pretty typ
     pretty (TypeVariable id) = id

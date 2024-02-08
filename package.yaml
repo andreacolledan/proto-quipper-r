@@ -1,10 +1,10 @@
 name:                pqr
 version:             0.1.0.0
-github:              "githubuser/pqr"
+github:              "andcol/proto-quipper-r"
 license:             BSD-3-Clause
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2023 Author name here"
+author:              "Andrea Colledan"
+maintainer:          "andrea.colledan@unibo.it"
+copyright:           "2024 Andrea Colledan"
 
 extra-source-files:
 - README.md
@@ -28,6 +28,7 @@ dependencies:
 - process
 - filepath
 - parsec
+- argparser
 
 ghc-options:
 - -Wall
@@ -47,7 +48,7 @@ library:
   source-dirs: src
 
 executables:
-  pqr-exe:
+  pqr:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

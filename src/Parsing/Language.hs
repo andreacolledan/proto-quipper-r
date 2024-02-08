@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
 module Parsing.Language (
-    parseExpression
+    parseProgram
 ) where
 
 import Text.Parsec.Token
@@ -10,10 +10,11 @@ import Parsing.BundleType (parseBundleType)
 
 import AST.Language
 import Text.Parsec
-import Parsing.Index
 
 import Parsing
 import Parsing.Type
+import Data.Char
+import qualified Primitive
 
 
 
@@ -44,9 +45,22 @@ unitValue = m_reserved "()" >> return UnitValue <?> "unit value"
 
 variable :: Parser Value
 variable = do
-    name <- m_identifier
-    return $ Variable name
+    name@(first:_) <- m_identifier
+    if isLower first
+        then return $ Variable name
+        else fail "Variable names must start with a lowercase letter"
     <?> "variable"
+
+constant :: Parser Value
+constant = do
+    name <- m_identifier
+    case name of
+        "Hadamard" -> return Primitive.hadamard
+        "PauliX" -> return Primitive.pauliX
+        "QInit" -> return Primitive.qinit
+        "QDiscard" -> return Primitive.qdiscard
+        "CNot" -> return Primitive.cnot
+        _ -> fail "Unknown constant"
 
 lambda :: Parser Value
 lambda = do
@@ -87,6 +101,8 @@ fold = do
     return $ Fold i v w
     <?> "fold"
 
+
+
 parseValue :: Parser Value
 parseValue = chainl1 baseValue (m_reservedOp ":" >> return Cons)
     where baseValue =
@@ -96,7 +112,8 @@ parseValue = chainl1 baseValue (m_reservedOp ":" >> return Cons)
             <|> try lift
             <|> try list
             <|> try fold
-            <|> variable
+            <|> try variable
+            <|> constant
             <?> "value"
 
 --- TERM PARSING ---
@@ -183,3 +200,11 @@ parseExpression =
     Left <$> try parseTerm
     <|> Right <$> try parseValue
     <?> "expression"
+
+parseProgram :: Parser (Either Term Value)
+parseProgram = do
+    whiteSpace tokenParser
+    result <- parseExpression
+    eof
+    return result
+    <?> "program"

@@ -12,29 +12,12 @@ import qualified Data.Map as Map
 import PrettyPrinter
 import Test.Hspec
 import Data.Either.Extra (fromRight')
-import Debug.Trace (traceWith)
+import Primitive
 
 -- HELPERS --
 
 simplifyResult :: (Type, Index) -> (Type, Index)
 simplifyResult (typ, index) = (simplifyType typ, simplify index)
-
--- PRIMITIVE GATES --
-
-hadamard :: Value
-hadamard = BoxedCircuit (Bundle.Label "a") (Seq (Id (Map.fromList [("a",Qubit)])) Hadamard (Bundle.Label "a") (Bundle.Label "b")) (Bundle.Label "b")
-pauliX :: Value
-pauliX = BoxedCircuit (Bundle.Label "a") (Seq (Id (Map.fromList [("a",Qubit)])) PauliX (Bundle.Label "a") (Bundle.Label "b")) (Bundle.Label "b")
-qinit :: Value
-qinit = BoxedCircuit Bundle.UnitValue (Seq (Id Map.empty) Init Bundle.UnitValue (Bundle.Label "a")) (Bundle.Label "a")
-qdiscard :: Value
-qdiscard = BoxedCircuit (Bundle.Label "a") (Seq (Id (Map.fromList [("a",Qubit)])) Discard (Bundle.Label "a") Bundle.UnitValue) Bundle.UnitValue
-cnot :: Value
-cnot = BoxedCircuit (Bundle.Pair (Bundle.Label "a1") (Bundle.Label "a2"))
-    (Seq (Id (Map.fromList [("a1",Qubit),("a2",Qubit)])) CNot (Bundle.Pair (Bundle.Label "a1") (Bundle.Label "a2")) (Bundle.Pair (Bundle.Label "b1") (Bundle.Label "b2")))
-    (Bundle.Pair (Bundle.Label "b1") (Bundle.Label "b2"))
-
-
 
 -- SPECIFICATION --
 
