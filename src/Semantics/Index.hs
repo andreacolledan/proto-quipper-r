@@ -58,10 +58,11 @@ simplify (Plus i j) = case (simplify i, simplify j) of
     (Number n, Number m) -> Number (n + m)
     (i',Number 0) -> i'
     (Number 0, j') -> j'
-    (i', Minus j' i'') | i' == i'' -> j' --happens very often
+    (i', Minus j' i'') | checkEq i' i'' -> j' --happens very often
     (i',j') -> Plus i' j'
 simplify (Max i j) = case (simplify i, simplify j) of
     (Number n, Number m) -> Number (max n m)
+    (i',j') | checkEq i' j' -> i'
     (i',Number 0) -> i'
     (Number 0, j') -> j'
     (i',j') -> Max i' j'
