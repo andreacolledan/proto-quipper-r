@@ -10,7 +10,7 @@ import AST.Language
 import Text.Parsec.Expr
 import Parsing.Index
 import AST.Bundle (WireType (..))
-import Parsing
+import Text.Parsec.String
 import Parsing.BundleType
 
 typeLang :: LanguageDef st
@@ -68,7 +68,7 @@ unitType = m_reserved "()" >> return UnitType
 
 tensor :: Parser Type
 tensor = do
-    elems <- m_brackets $ m_commaSep1 parseType
+    elems <- m_parens $ m_commaSep1 parseType
     return $ foldl1 Tensor elems
 
 

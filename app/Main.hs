@@ -3,41 +3,41 @@ import PrettyPrinter
 import Parsing.Language
 import Text.Parsec
 import System.Console.ArgParser
+import System.TimeIt
 import Checking.Language
 import AST.Language (simplifyType)
-import AST.Index (simplify)
+import Semantics.Index
+import Control.Monad (when)
 
-newtype CommandLineArguments = CommandLineArguments {
-    filepath :: String
+
+data CommandLineArguments = CommandLineArguments {
+    filepath :: String,
+    verbose :: Bool
 }
 
 commandLineParser :: ParserSpec CommandLineArguments
 commandLineParser = CommandLineArguments
     `parsedBy` reqPos "filepath" `Descr` "The file to parse"
+    `andBy` boolFlag "verbose" `Descr` "Print verbose output (parser output)"
 
 main :: IO ()
 main = withParseResult commandLineParser $ \args -> do
-        let file = filepath args
-        putStrLn $ "Parsing " ++ file ++ "..."
+        let CommandLineArguments {filepath = file, verbose = verb} = args
+        when verb $ putStrLn $ "Parsing " ++ file ++ "..."
         contents <- readFile file
-        let outcome = parse parseProgram "" contents
+        outcome <- timeItIf verb $ return $ parse parseProgram "" contents
         case outcome of
             Left err -> print err
             Right ast -> do
-                putStrLn $ "Parsed successfully as \n\t" ++ pretty ast
-                putStrLn "Inferring type..."
-                case ast of
-                        (Left term) -> do
-                                let inferred = runTermTypeInference emptyctx emptyctx term
-                                case inferred of
-                                    Left err -> putStrLn $ "Inference failed: " ++ show err
-                                    Right inferred -> do
-                                        putStrLn $ "Inferred type: " ++ pretty (simplifyType $ fst inferred)
-                                        putStrLn $ "Inferred bound: " ++ pretty (simplify $ snd inferred)
-                        (Right value) -> do
-                                let inferred = runValueTypeInference emptyctx emptyctx value
-                                case inferred of
-                                    Left err -> putStrLn $ "Inference failed: " ++ show err
-                                    Right inferred -> do
-                                        putStrLn $ "Inferred type: " ++ pretty (simplifyType inferred)
+                when verb $ do
+                    putStrLn $ "Parsed successfully as \n\t" ++ pretty ast
+                    putStrLn "Inferring type..."
+                inferred <- timeItIf verb $ return $ runTermTypeInference emptyctx emptyctx ast
+                case inferred of
+                    Left err -> putStrLn $ "Inference failed: " ++ show err
+                    Right inferred -> do
+                        putStrLn $ "Inferred type: " ++ pretty (simplifyType $ fst inferred)
+                        putStrLn $ "Inferred bound: " ++ pretty (simplify $ snd inferred)
+        where
+            timeItIf verb = if verb then timeIt else id
 

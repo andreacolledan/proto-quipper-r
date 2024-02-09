@@ -1,8 +1,8 @@
 module ASTSpec.IndexSpec (spec) where
 
 import AST.Index
+import Semantics.Index
 
-import qualified Data.Set as Set
 import Test.Hspec
 
 

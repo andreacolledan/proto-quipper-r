@@ -2,9 +2,9 @@ module ASTSpec.LanguageSpec (spec) where
 
 import AST.Bundle as Bundle
 import AST.Index 
+import Semantics.Index
 import AST.Language as Lang
 
-import qualified Data.Set as Set
 import Test.Hspec
 
 

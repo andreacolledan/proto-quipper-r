@@ -4,12 +4,13 @@ module Parsing.Bundle (
     parseBundle
 ) where
 
+import Text.Parsec.String
 import Text.Parsec.Token
 import Text.Parsec.Language
 import Text.Parsec
 
 import AST.Bundle
-import Parsing
+
 
 
 bundleLang :: LanguageDef st

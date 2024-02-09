@@ -15,6 +15,7 @@ module AST.Bundle(
 ) where
 
 import AST.Index
+import Semantics.Index
 import qualified Data.Set as Set
 import PrettyPrinter
 import qualified Data.Map as Map

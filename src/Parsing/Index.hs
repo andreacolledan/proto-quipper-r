@@ -11,7 +11,7 @@ import Text.Parsec.Language
 import Text.Parsec (oneOf, alphaNum, lower, (<|>), try)
 import AST.Index
 
-import Parsing
+import Text.Parsec.String
 
 TokenParser{
     parens = m_parens,

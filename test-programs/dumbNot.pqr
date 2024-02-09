@@ -1,0 +1,27 @@
+-- init1 initializes a qubit to the 1 basis state
+let init1 = lift \_ :: () . let q = apply(QInit,()) in apply(PauliX,q)
+in
+
+
+-- dumbNot implements negation of a qubit q in a dumb way
+-- by initializing an ancillary qubit a to 1 and
+-- applying a cnot with target q and control a
+let dumbNot = lift \q :: Qubit .
+                let init = force init1 in
+                let a = init () in
+                let res = apply(CNot,(a,q)) in
+                let (a,q) = res in
+                let _ = apply(QDiscard,a) in
+                q
+in
+
+
+-- doubleNot applies dumbNot twice to its input qubit
+let doubleNot = \q :: Qubit .
+                let dn = force dumbNot in
+                let q = dn q in
+                let dn = force dumbNot in
+                dn q
+in doubleNot
+
+-- expected type : Qubit ->[2,0] Qubit

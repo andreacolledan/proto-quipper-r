@@ -11,7 +11,7 @@ import Parsing.BundleType (parseBundleType)
 import AST.Language
 import Text.Parsec
 
-import Parsing
+import Text.Parsec.String
 import Parsing.Type
 import Data.Char
 import qualified Primitive
@@ -20,10 +20,11 @@ import qualified Primitive
 
 languageDef :: LanguageDef st
 languageDef = emptyDef {
-    identStart = letter,
-    identLetter = alphaNum,
-    reservedNames = ["()","[]"],
-    reservedOpNames = ["\\","->","force","lift","let","in","box","apply","return",":","fold","=","."]
+    commentLine = "--",
+    identStart = letter <|> char '_',
+    identLetter = alphaNum <|> char '_',
+    reservedOpNames = ["\\","->","force","lift","let","in","box","apply","return",":","fold","=","."],
+    reservedNames = ["force","lift","let","in","box","apply","return","fold"]
 }
 
 tokenParser :: TokenParser st
@@ -104,16 +105,17 @@ fold = do
 
 
 parseValue :: Parser Value
-parseValue = chainl1 baseValue (m_reservedOp ":" >> return Cons)
+parseValue = chainr1 baseValue (m_reservedOp ":" >> return Cons)
     where baseValue =
-            try unitValue
-            <|> try tuple
-            <|> try lambda
-            <|> try lift
-            <|> try list
-            <|> try fold
+            unitValue
+            <|> tuple
+            <|> lambda
+            <|> lift
+            <|> list
+            <|> fold
+            <|> m_parens parseValue
+            <|> try constant
             <|> try variable
-            <|> constant
             <?> "value"
 
 --- TERM PARSING ---
@@ -186,25 +188,21 @@ ret = do
 
 parseTerm :: Parser Term
 parseTerm =
-    try force
-    <|> try letin
-    <|> try box
-    <|> try apply
-    <|> try ret
+    try letin
     <|> try dest
-    <|> app
+    <|> force
+    <|> box
+    <|> apply
+    <|> ret
+    <|> try app
+    <|> try (m_parens parseTerm)
+    <|> Return <$> try parseValue
     <?> "term"
 
-parseExpression :: Parser (Either Term Value)
-parseExpression =
-    Left <$> try parseTerm
-    <|> Right <$> try parseValue
-    <?> "expression"
-
-parseProgram :: Parser (Either Term Value)
+parseProgram :: Parser Term
 parseProgram = do
     whiteSpace tokenParser
-    result <- parseExpression
+    result <- parseTerm
     eof
     return result
     <?> "program"

@@ -21,6 +21,7 @@ import AST.Bundle(LabelId, Bundle, BundleType, WireType, Wide(..))
 import qualified AST.Bundle as Bundle
 import AST.Circuit
 import AST.Index
+import Semantics.Index
 
 import PrettyPrinter
 import qualified Data.Map as Map

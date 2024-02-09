@@ -3,14 +3,15 @@
 module Parsing.BundleType (
     parseBundleType
 ) where
-    
+
+
 import Text.Parsec.Token
 import Text.Parsec.Language
 import Text.Parsec
 
 import Parsing.Index
 
-import Parsing
+import Text.Parsec.String
 
 import AST.Bundle
 
@@ -30,18 +31,19 @@ bundleTypeTokenParser@TokenParser{
 } = makeTokenParser bundleTypeLang
 
 unitType :: Parser BundleType
-unitType =  m_reserved "()" >> return UnitType
+unitType =  m_reserved "()" >> return UnitType <?> "unit type"
 
 bit :: Parser BundleType
-bit = m_reserved "Bit" >> return (WireType Bit)
+bit = m_reserved "Bit" >> return (WireType Bit) <?> "bit type"
 
 qubit :: Parser BundleType
-qubit = m_reserved "Qubit" >> return (WireType Qubit)
+qubit = m_reserved "Qubit" >> return (WireType Qubit) <?> "qubit type"
 
 tensor :: Parser BundleType
 tensor = do
-    elems <- m_brackets $ m_commaSep1 parseBundleType
+    elems <- m_parens $ m_commaSep1 parseBundleType
     return $ foldl1 Tensor elems
+    <?> "tensor type"
 
 listType :: Parser BundleType
 listType = do
@@ -49,8 +51,9 @@ listType = do
     i <- m_brackets parseIndex
     typ <- parseBundleType
     return $ List i typ
+    <?> "list type"
 
 parseBundleType :: Parser BundleType
 parseBundleType =
-    try unitType <|> try bit <|> try qubit <|> try tensor <|> listType <?> "bundle type"
+    try unitType <|> try bit <|> try qubit <|> try tensor <|> try listType <?> "bundle type"
 

@@ -4,6 +4,7 @@ import AST.Bundle (WireType (Qubit, Bit))
 import qualified AST.Bundle as Bundle
 import AST.Circuit
 import AST.Index
+import Semantics.Index
 import AST.Language (Value(..), Term(..), Type(..), simplifyType, checkTypeEq)
 import Checking.Language
 

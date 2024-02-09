@@ -14,6 +14,7 @@ import AST.Bundle (Bundle, BundleType, Wide (wireCount), LabelId, isBundleSubtyp
 import qualified AST.Bundle as Bundle
 import AST.Circuit
 import AST.Index
+import Semantics.Index 
 import AST.Language
 import Checking.Bundle
     ( runBundleTypeInferenceWithRemaining,
