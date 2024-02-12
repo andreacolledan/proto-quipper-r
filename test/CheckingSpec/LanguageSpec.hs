@@ -5,7 +5,8 @@ import qualified AST.Bundle as Bundle
 import AST.Circuit
 import AST.Index
 import Semantics.Index
-import AST.Language (Value(..), Term(..), Type(..), simplifyType, checkTypeEq)
+import AST.Language (Value(..), Term(..), Type(..))
+import Semantics.Type (simplifyType, checkTypeEq)
 import Checking.Language
 
 import Data.Either (isRight, isLeft)
@@ -18,7 +19,7 @@ import Primitive
 -- HELPERS --
 
 simplifyResult :: (Type, Index) -> (Type, Index)
-simplifyResult (typ, index) = (simplifyType typ, simplify index)
+simplifyResult (typ, index) = (simplifyType typ, simplifyIndex index)
 
 -- SPECIFICATION --
 
@@ -575,6 +576,6 @@ spec = do
                 -- ∅;∅ ⊢ fold[i] lift(return λx:List[i] Qubit ⊗ Qubit. let (y,z) = x in return z:y) [] ==> List[x0] Qubit -o [x0,0] List[x0] Qubit
                 let stepfun = Abs "x" (Tensor (List (IndexVariable "i") (WireType Qubit)) (WireType Qubit)) (Dest "y" "z" (Variable "x") (Return (Cons (Variable "z") (Variable "y"))))
                 let term = Fold "i" (Lift (Return stepfun)) Nil
-                let typ = Arrow (List (IndexVariable "x1") (WireType Qubit)) (List (IndexVariable "x1") (WireType Qubit)) (IndexVariable "x1") (Number 0)
+                let typ = Arrow (List (IndexVariable "i1") (WireType Qubit)) (List (IndexVariable "i1") (WireType Qubit)) (IndexVariable "i1") (Number 0)
                 let (gamma,q) = (Map.empty,Map.empty)
                 simplifyType <$> runValueTypeInference gamma q term `shouldBe` Right typ

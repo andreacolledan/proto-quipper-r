@@ -18,13 +18,13 @@ type IndexVariableId = String
 -- Syntax of indices: arithmetic expressions over natural numbers and index variables
 -- (fig. 8)
 data Index
-    = IndexVariable IndexVariableId
-    | Number Int
-    | Plus Index Index
-    | Max Index Index
-    | Mult Index Index
-    | Minus Index Index
-    | Maximum IndexVariableId Index Index
+    = IndexVariable IndexVariableId         -- id
+    | Number Int                            -- n
+    | Plus Index Index                      -- i + j
+    | Max Index Index                       -- max(i, j)
+    | Mult Index Index                      -- i * j
+    | Minus Index Index                     -- i - j
+    | Maximum IndexVariableId Index Index   -- max[id < i] j
     deriving (Show, Eq)
 
 instance Pretty Index where

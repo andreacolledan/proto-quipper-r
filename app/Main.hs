@@ -5,7 +5,7 @@ import Text.Parsec
 import System.Console.ArgParser
 import System.TimeIt
 import Checking.Language
-import AST.Language (simplifyType)
+import Semantics.Type (simplifyType)
 import Semantics.Index
 import Control.Monad (when)
 
@@ -37,7 +37,7 @@ main = withParseResult commandLineParser $ \args -> do
                     Left err -> putStrLn $ "Inference failed: " ++ show err
                     Right inferred -> do
                         putStrLn $ "Inferred type: " ++ pretty (simplifyType $ fst inferred)
-                        putStrLn $ "Inferred bound: " ++ pretty (simplify $ snd inferred)
+                        putStrLn $ "Inferred bound: " ++ pretty (simplifyIndex $ snd inferred)
         where
             timeItIf verb = if verb then timeIt else id
 
