@@ -10,7 +10,12 @@ let hadamardStep = lift \x :: (List[i] Qubit, Qubit) .
 in
 
 -- the function that applies the hadamard gate to a list of qubits
-let hadamardN = fold[i] hadamardStep [] in
-hadamardN
+let hadamardN = fold[i] hadamardStep [] in 
+--hadamardN
+-- -- expected type : List[j] Qubit ->[j] List[j] Qubit or equivalent
 
--- expected type : List[j] Qubit ->[j] List[j] Qubit or equivalent
+-- This fails because we have no index variable instantiation
+let x = apply(QInit,()) in
+let y = apply(QInit,()) in
+hadamardN [x,y]
+

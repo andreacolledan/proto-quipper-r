@@ -16,9 +16,11 @@ Qubit ->[2,0] (Qubit, Qubit)
 which correctly reflects the idea that `dumbNot` takes as input a qubit and produces a circuit of width 2 (the first annotation on the arrow) which outputs two qubits.
 Note that the second annotation on the arrow tells us that this function does not capture any wires from the surrounding environment.
 
+More examples programs can be found in the `examples` folder.
+
 
 ## Installing
-Note: Proto-Quipper-R requires [cvc5](https://cvc5.github.io) to be installed and present in your PATH.
+Note: Proto-Quipper-R requires [cvc5](https://cvc5.github.io) to be installed and present in your `PATH`.
 
 ```
 $ git clone https://github.com/andcol/proto-quipper-r
@@ -30,8 +32,8 @@ $ stack install
 
 Usage:
 ```
-$ pqr filepath
+$ pqr filepath [-v] [-h] [--version]
 ```
 
 ## Tests
-To run tests with `stack test`
+You can run tests with `stack test`

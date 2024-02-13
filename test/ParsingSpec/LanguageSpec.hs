@@ -7,6 +7,7 @@ import Parsing.Language
 import qualified Primitive
 import Test.Hspec
 import Text.Parsec (parse)
+import AST.Index 
 
 spec :: Spec
 spec = do
@@ -29,8 +30,12 @@ spec = do
       parse parseProgram "" "lift return x" `shouldBe` Right (Return (Lift (Return (Variable "x"))))
     it "parses a fold" $ do
       parse parseProgram "" "fold[i] step base" `shouldBe` Right (Return (Fold "i" (Variable "step") (Variable "base")))
+    it "parses an annotation" $ do
+      parse parseProgram "" "x :: List[i] Qubit" `shouldBe` Right (Return (Anno (Variable "x") (List (IndexVariable "i") (WireType Qubit))))
     it "parses cons's right-associatively" $ do
       parse parseProgram "" "():():tail" `shouldBe` Right (Return (Cons UnitValue (Cons UnitValue (Variable "tail"))))
+    it "parses annotations with precedence over cons's" $ do
+      parse parseProgram "" "x:xs :: List[i+1] Qubit" `shouldBe` Right (Return (Anno (Cons (Variable "x") (Variable "xs")) (List (Plus (IndexVariable "i") (Number 1)) (WireType Qubit))))
     it "parses nested prefix constructors correctly" $ do
       parse parseProgram "" "lift force lift return x" `shouldBe` Right (Return (Lift (Force (Lift (Return (Variable "x"))))))
   describe "term parser" $ do

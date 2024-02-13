@@ -16,6 +16,7 @@ import Text.Parsec
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
+import Text.Parsec.Expr (buildExpressionParser, Operator (Postfix, Infix), Assoc (AssocRight))
 
 languageDef :: LanguageDef st
 languageDef =
@@ -118,13 +119,22 @@ fold =
     return $ Fold i v w
     <?> "fold"
 
+consOperator :: Parser (Value -> Value -> Value)
+consOperator = m_reservedOp ":" >> return Cons
+
+annOperator :: Parser (Value -> Value)
+annOperator = do
+  m_reservedOp "::"
+  t <- parseType
+  return $ \v -> Anno v t
+
+
 -- Parser for values
 parseValue :: Parser Value
 -- the parsing of cons is left-recursive, so we need chainr1
-parseValue = chainr1 baseValue (m_reservedOp ":" >> return Cons) <?> "value"
-  where
-    baseValue =
-      unitValue
+parseValue = let
+  operators = [[Infix consOperator AssocRight], [Postfix annOperator]]
+  baseValue = unitValue
         <|> tuple
         <|> lambda
         <|> lift
@@ -134,6 +144,8 @@ parseValue = chainr1 baseValue (m_reservedOp ":" >> return Cons) <?> "value"
         <|> try constant
         <|> try variable
         <?> "value"
+  in buildExpressionParser operators baseValue
+      
 
 
 --- TERM PARSING -----------------------------------------------
