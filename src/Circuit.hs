@@ -9,10 +9,6 @@ module Circuit
 where
 
 import Bundle.AST
-  ( Bundle,
-    BundleType (Tensor, UnitType, WireType),
-    WireType (Qubit),
-  )
 import Bundle.Infer
   ( LabelContext,
     WireTypingError,
@@ -42,11 +38,11 @@ instance Pretty QuantumOperation where
 
 -- Returns the signature (input/output types) of a quantum operation
 sig :: QuantumOperation -> (BundleType, BundleType)
-sig Init = (UnitType, WireType Qubit)
-sig Discard = (WireType Qubit, UnitType)
-sig Hadamard = (WireType Qubit, WireType Qubit)
-sig PauliX = (WireType Qubit, WireType Qubit)
-sig CNot = (Tensor (WireType Qubit) (WireType Qubit), Tensor (WireType Qubit) (WireType Qubit))
+sig Init = (BTUnit, BTWire Qubit)
+sig Discard = (BTWire Qubit, BTUnit)
+sig Hadamard = (BTWire Qubit, BTWire Qubit)
+sig PauliX = (BTWire Qubit, BTWire Qubit)
+sig CNot = (BTPair (BTWire Qubit) (BTWire Qubit), BTPair (BTWire Qubit) (BTWire Qubit))
 
 -- Returns the net change in the number of qubits after applying a quantum operation
 -- E.g. if a quantum operation consumes 2 qubits and produces 1 qubit, then the net change is -1

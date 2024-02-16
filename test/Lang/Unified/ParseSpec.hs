@@ -1,7 +1,6 @@
 module Lang.Unified.ParseSpec (spec) where
 
-import Bundle.AST (WireType (..))
-import qualified Bundle.AST as Bundle
+import Bundle.AST (WireType (..), BundleType (..))
 import Index.AST
 import Lang.Type.AST
 import Lang.Unified.AST
@@ -21,7 +20,7 @@ spec = do
     it "parses an uppercase identifier as a constant" $ do
       parse parseProgram "" "Hadamard" `shouldBe` Right (EConst Hadamard)
     it "parses '\\x :: () . (x,x)' as an abstraction" $ do
-      parse parseProgram "" "\\x :: () . (x,x)" `shouldBe` Right (EAbs "x" UnitType (EPair (EVar "x") (EVar "x")))
+      parse parseProgram "" "\\x :: () . (x,x)" `shouldBe` Right (EAbs "x" TUnit (EPair (EVar "x") (EVar "x")))
     it "parses 'let x = () in x' as a let binding" $ do
       parse parseProgram "" "let x = () in x" `shouldBe` Right (ELet "x" EUnit (EVar "x"))
     it "parses 'let (x,y) = ((),[]) in ([],())' as a destructuring let" $ do
@@ -33,13 +32,13 @@ spec = do
     it "parses 'force e' as forcing" $ do
       parse parseProgram "" "force e" `shouldBe` Right (EForce (EVar "e"))
     it "parses 'box[Qubit] f' as boxing" $ do
-      parse parseProgram "" "box[Qubit] f" `shouldBe` Right (EBox (Bundle.WireType Qubit) (EVar "f"))
+      parse parseProgram "" "box[Qubit] f" `shouldBe` Right (EBox (BTWire Qubit) (EVar "f"))
     it "parses 'f x' as function application" $ do
       parse parseProgram "" "f x" `shouldBe` Right (EApp (EVar "f") (EVar "x"))
     it "parses 'x:xs' as list cons" $ do
       parse parseProgram "" "x:xs" `shouldBe` Right (ECons (EVar "x") (EVar "xs"))
     it "parses 'e :: List[3] Qubit' as type annotation" $ do
-      parse parseProgram "" "e :: List[3] Qubit" `shouldBe` Right (EAnno (EVar "e") (List (Number 3) (WireType Qubit)))
+      parse parseProgram "" "e :: List[3] Qubit" `shouldBe` Right (EAnno (EVar "e") (TList (Number 3) (TWire Qubit)))
     it "parses 'fold(f,acc)' as folding" $ do
       parse parseProgram "" "fold(f,acc)" `shouldBe` Right (EFold (EVar "f") (EVar "acc"))
     it "parses 'forall i . e' as index abstraction" $ do
@@ -57,15 +56,15 @@ spec = do
     it "cons'ing is right associative" $ do
       parse parseProgram "" "x:y:z:[]" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ECons (EVar "z") ENil)))
     it "nested built-in operators are right associative" $ do
-      parse parseProgram "" "box[Qubit] let f = force x in lift f" `shouldBe` Right (EBox (Bundle.WireType Qubit) (ELet "f" (EForce (EVar "x")) (ELift (EVar "f"))))
+      parse parseProgram "" "box[Qubit] let f = force x in lift f" `shouldBe` Right (EBox (BTWire Qubit) (ELet "f" (EForce (EVar "x")) (ELift (EVar "f"))))
   describe "precedence" $ do
     it "application has precedence over abstraction" $ do
-      parse parseProgram "" "\\x :: () . x y" `shouldBe` Right (EAbs "x" UnitType (EApp (EVar "x") (EVar "y")))
+      parse parseProgram "" "\\x :: () . x y" `shouldBe` Right (EAbs "x" TUnit (EApp (EVar "x") (EVar "y")))
     it "cons'ing has precedence over abstraction" $ do
-      parse parseProgram "" "\\x :: () . x:y:[]" `shouldBe` Right (EAbs "x" UnitType (ECons (EVar "x") (ECons (EVar "y") ENil)))
+      parse parseProgram "" "\\x :: () . x:y:[]" `shouldBe` Right (EAbs "x" TUnit (ECons (EVar "x") (ECons (EVar "y") ENil)))
     it "application has precedence over cons'ing" $ do
       parse parseProgram "" "f x:y:[]" `shouldBe` Right (ECons (EApp (EVar "f") (EVar "x")) (ECons (EVar "y") ENil))
     it "annotation has precedence over abstraction" $ do
-      parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () ->[1,0] Qubit" `shouldBe` Right (EAbs "x" UnitType (EAnno (EApply (EConst QInit0) (EVar "x")) (Arrow UnitType (WireType Qubit) (Number 1) (Number 0))))
+      parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () ->[1,0] Qubit" `shouldBe` Right (EAbs "x" TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
     it "index application has precedence over index abstraction" $ do
       parse parseProgram "" "forall i . e @ i" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "i")))

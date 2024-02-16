@@ -38,11 +38,11 @@ instance Show WireTypingError where
   show (UnexpectedBundleTypeContstructor b btype1 btype2) = "Expected bundle " ++ pretty b ++ " to have type " ++ printConstructor btype1 ++ ", got type " ++ pretty btype2 ++ " instead"
 
 printConstructor :: BundleType -> String
-printConstructor UnitType = "unit type"
-printConstructor (WireType _) = "wire type"
-printConstructor (Tensor _ _) = "tensor type"
-printConstructor (List _ _) = "list type"
-printConstructor (TypeVariable _) = "type variable"
+printConstructor BTUnit = "unit type"
+printConstructor (BTWire _) = "wire type"
+printConstructor (BTPair _ _) = "BTPair type"
+printConstructor (BTList _ _) = "BTList type"
+printConstructor (BTVar _) = "type variable"
 
 --- BUNDLE TYPE INFERENCE ---------------------------------------------------------------------------------
 
@@ -51,9 +51,9 @@ data InferenceEnv = InferenceEnv
     freeVarCounter :: Int           --the free variable counter used in inference
   }
 
--- freshTypeVariableName describes a computation returning a fresh type variable name
-freshTypeVariableName :: StateT InferenceEnv (Either WireTypingError) BundleTypeVariableId
-freshTypeVariableName = do
+-- freshBTVarName describes a computation returning a fresh type variable name
+freshBTVarName :: StateT InferenceEnv (Either WireTypingError) BTVarId
+freshBTVarName = do
   env@InferenceEnv {freeVarCounter = c} <- get
   put $ env {freeVarCounter = c + 1}
   return $ "a" ++ show c
@@ -78,33 +78,33 @@ labelContextLookup id = do
 -- inferBundleType b describes the type inference computation on b.
 -- If succesful, it returns the type of b together with the substitution accumulated during inference
 inferBundleType :: Bundle -> StateT InferenceEnv (Either WireTypingError) (BundleType, BundleTypeSubstitution)
-inferBundleType UnitValue = return (UnitType, Map.empty)
+inferBundleType UnitValue = return (BTUnit, Map.empty)
 inferBundleType (Label id) = do
   btype <- labelContextLookup id
-  return (WireType btype, Map.empty)
+  return (BTWire btype, Map.empty)
 inferBundleType (Pair b1 b2) = do
   (btype1, sub1) <- inferBundleType b1
   (btype2, sub2) <- inferBundleType b2
-  return (Tensor btype1 btype2, compose sub1 sub2)
+  return (BTPair btype1 btype2, compose sub1 sub2)
 inferBundleType Nil = do
-  a <- freshTypeVariableName
-  return (List (Number 0) (TypeVariable a), Map.empty)
+  a <- freshBTVarName
+  return (BTList (Number 0) (BTVar a), Map.empty)
 inferBundleType b@(Cons b1 b2) = do
   (btype1, sub1) <- inferBundleType b1
   (btype2, sub2) <- inferBundleType b2
   case btype2 of
-    List i btype1' -> do
-      sub3 <- tryUnify (btsub sub1 btype1') (btsub sub2 btype1) $ BundleTypeMismatch b (List i btype1) btype2
-      return (List (Plus i (Number 1)) (btsub sub3 btype1), sub3 `compose` sub2 `compose` sub1)
-    _ -> throwError $ UnexpectedBundleTypeContstructor (Cons b1 b2) btype2 (List (Number 0) UnitType)
+    BTList i btype1' -> do
+      sub3 <- tryUnify (btsub sub1 btype1') (btsub sub2 btype1) $ BundleTypeMismatch b (BTList i btype1) btype2
+      return (BTList (Plus i (Number 1)) (btsub sub3 btype1), sub3 `compose` sub2 `compose` sub1)
+    _ -> throwError $ UnexpectedBundleTypeContstructor (Cons b1 b2) btype2 (BTList (Number 0) BTUnit)
 
 -- Q <== l : T
 -- synthesizeLabelContext bundle bundleType returns the unique label context q such that q ⊢ bundle => bundleType, if it exists
 -- Used in circuit signature checking
 synthesizeLabelContext :: Bundle -> BundleType -> Either WireTypingError LabelContext
-synthesizeLabelContext UnitValue UnitType = Right Map.empty
-synthesizeLabelContext (Label id) (WireType wtype) = Right $ Map.fromList [(id, wtype)]
-synthesizeLabelContext (Pair b1 b2) (Tensor btype1 btype2) = do
+synthesizeLabelContext UnitValue BTUnit = Right Map.empty
+synthesizeLabelContext (Label id) (BTWire wtype) = Right $ Map.fromList [(id, wtype)]
+synthesizeLabelContext (Pair b1 b2) (BTPair btype1 btype2) = do
   q1 <- synthesizeLabelContext b1 btype1
   q2 <- synthesizeLabelContext b2 btype2
   return $ Map.union q1 q2

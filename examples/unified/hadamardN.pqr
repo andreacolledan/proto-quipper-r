@@ -6,7 +6,7 @@ let hadamardStep = lift \x :: (List[i] Qubit, Qubit) .
 in
 
 -- the function that applies the hadamard gate to a list of qubits
-let hadamardN = fold[i] hadamardStep [] in 
+let hadamardN = fold(hadamardStep, []) in 
 hadamardN
 --:: List[j] Qubit ->[j,0] List[j] Qubit 
 

@@ -20,7 +20,7 @@
 
 ### PQR Language checking
 
-- [ ] Language constructs
+- [x] Language constructs
   - [x] Boxed circuits and apply
     - [x] Implementing boxed circuits
     - [x] Testing boxed circuits
@@ -49,13 +49,13 @@
   - [x] Circuit boxing
     - [x] Implementing box
     - [x] Testing box
-  - [ ] Lists and fold
+  - [x] Lists and fold
     - [x] Implementing lists
     - [x] Testing lists
     - [x] Implementing fold
-    - [ ] Testing fold
+    - [x] Testing fold
 - [x] Well-formedness constraints
-- [ ] Subsumption (e.g. `⊢ m : Circ 1 (Qubit,Qubit) ; 5` entails `⊢ m : Circ 2 (Qubit,Qubit) ; 8`)
+- [x] Subsumption (e.g. `⊢ m : Circ 1 (Qubit,Qubit) ; 5` entails `⊢ m : Circ 2 (Qubit,Qubit) ; 8`)
   - [x] Decide whether to implement subsumption as a distinct case or within rules. Decided the former.
   - [x] Implement subsumption
     - [x] Implement subtyping

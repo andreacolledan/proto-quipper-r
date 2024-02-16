@@ -72,33 +72,33 @@ parseBundle = try unitValue <|> tuple <|> list <|> lab <?> "bundle"
 
 -- Parses "()" as UnitType
 unitType :: Parser BundleType
-unitType = m_reserved "()" >> return UnitType <?> "unit type"
+unitType = m_reserved "()" >> return BTUnit <?> "unit type"
 
--- Parses "Bit" as WireType Bit
+-- Parses "Bit" as BTWire Bit
 bit :: Parser BundleType
-bit = m_reserved "Bit" >> return (WireType Bit) <?> "bit type"
+bit = m_reserved "Bit" >> return (BTWire Bit) <?> "bit type"
 
--- Parses "Qubit" as WireType Qubit
+-- Parses "Qubit" as BTWire Qubit
 qubit :: Parser BundleType
-qubit = m_reserved "Qubit" >> return (WireType Qubit) <?> "qubit type"
+qubit = m_reserved "Qubit" >> return (BTWire Qubit) <?> "qubit type"
 
--- Parses "(t1, t2, ..., tn)" as (Tensor (Tensor ... (Tensor t1 t2) ... tn)
+-- Parses "(t1, t2, ..., tn)" as (BTPair (BTPair ... (BTPair t1 t2) ... tn)
 -- Sugar: n-tensors are desugared left-associatively
 tensor :: Parser BundleType
 tensor =
   do
     elems <- m_parens $ m_commaSep1 parseBundleType
-    return $ foldl1 Tensor elems
+    return $ foldl1 BTPair elems
     <?> "tensor type"
 
--- Parses "List[i] bt" as (List i bt)
+-- Parses "List[i] bt" as (BTList i bt)
 listType :: Parser BundleType
 listType =
   do
     m_reserved "List"
     i <- m_brackets parseIndex
     bt <- parseBundleType
-    return $ List i bt
+    return $ BTList i bt
     <?> "list type"
 
 -- Parses a bundle type

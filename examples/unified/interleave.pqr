@@ -6,7 +6,7 @@ let interleaveStep = ((lift \arg :: (List[2*i] Qubit, Qubit) .
 in
 
 -- interleave qs produces a new list of qubits in which a fresh qubit is added after each qubit in qs
-let interleave = fold[i] interleaveStep [] in
+let interleave = fold(interleaveStep, []) in
 interleave
 
 -- Expected type: "List[k] Qubit ->[2 * k,0] List[(2 * k)] Qubit" or equivalent

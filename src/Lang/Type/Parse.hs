@@ -41,7 +41,7 @@ arrowOperator = do
     _ <- m_comma
     j <- parseIndex
     return (i, j)
-  return $ \t1 t2 -> Arrow t1 t2 i j
+  return $ \t1 t2 -> TArrow t1 t2 i j
 
 -- Parses "Circ[i](btype1, btype2)" as (Circ i btype1 btype2)
 circ :: Parser Type
@@ -53,36 +53,37 @@ circ = do
     _ <- m_comma
     btype2 <- parseBundleType
     return (btype1, btype2)
-  return $ Circ i btype1 btype2
+  return $ TCirc i btype1 btype2
 
--- Parses "Bit" as (WireType Bit)
+-- Parses "Bit" as (TWire Bit)
 bit :: Parser Type
-bit = m_reserved "Bit" >> return (WireType Bit)
+bit = m_reserved "Bit" >> return (TWire Bit)
 
--- Parses "Qubit" as (WireType Qubit)
+-- Parses "Qubit" as (TWire Qubit)
 qubit :: Parser Type
-qubit = m_reserved "Qubit" >> return (WireType Qubit)
+qubit = m_reserved "Qubit" >> return (TWire Qubit)
 
--- Parses "()" as UnitType
+-- Parses "()" as TUnit
 unitType :: Parser Type
-unitType = m_reserved "()" >> return UnitType
+unitType = m_reserved "()" >> return TUnit
 
--- Parses "(t1, t2, ..., tn)" as (Tensor (Tensor ... (Tensor t1 t2) ... tn))
+-- Parses "(t1, t2, ..., tn)" as (TPair (TPair ... (TPair t1 t2) ... tn))
 -- Sugar: n-tensors are desugared left-associatively
 tensor :: Parser Type
 tensor = do
   elems <- m_parens $ m_commaSep1 parseType
-  return $ foldl1 Tensor elems
+  return $ foldl1 TPair elems
 
--- Parses "List[i]" as a prefix operator t |-> List[i] t
+-- Parses "List[i]" as a prefix operator t |-> TList i t
 listOperator :: Parser (Type -> Type)
 listOperator = do
   m_reservedOp "List"
   i <- m_brackets parseIndex
-  return $ List i
+  return $ TList i
 
+-- Parses "!" as a prefix operator TBang
 bangOperator :: Parser (Type -> Type)
-bangOperator = m_reservedOp "!" >> return Bang
+bangOperator = m_reservedOp "!" >> return TBang
 
 -- Parses a type
 parseType :: Parser Type

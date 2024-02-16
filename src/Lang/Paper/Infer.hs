@@ -12,7 +12,7 @@ module Lang.Paper.Infer
   )
 where
 
-import Bundle.AST (Bundle, BundleType, LabelId, Wide (wireCount), isBundleSubtype)
+import Bundle.AST (Bundle, BundleType (..), LabelId, Wide (wireCount), isBundleSubtype, WireType)
 import qualified Bundle.AST as Bundle
 import Index.AST
 import Lang.Paper.AST
@@ -114,13 +114,13 @@ instance Show TypingError where
 
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
-printConstructor UnitType = "unit type"
-printConstructor (WireType _) = "wire type"
-printConstructor (Tensor _ _) = "tensor type"
-printConstructor (Circ {}) = "circuit type"
-printConstructor (Arrow {}) = "arrow type"
-printConstructor (Bang _) = "bang type"
-printConstructor (List _ _) = "list type"
+printConstructor TUnit = "unit type"
+printConstructor (TWire _) = "wire type"
+printConstructor (TPair _ _) = "TPair type"
+printConstructor (TCirc {}) = "circuit type"
+printConstructor (TArrow {}) = "TArrow type"
+printConstructor (TBang _) = "TBang type"
+printConstructor (TList _ _) = "TList type"
 printConstructor (TVar _) = "type variable"
 printConstructor (TForall _ _) = "forall type"
 
@@ -139,7 +139,7 @@ typingContextLookup id = do
 
 -- labelContextLookup l looks up label l in the label context and removes it
 -- throws Unbound UnboundLabel if the label is absent
-labelContextLookup :: LabelId -> StateT TypingEnvironment (Either TypingError) Bundle.WireType
+labelContextLookup :: LabelId -> StateT TypingEnvironment (Either TypingError) WireType
 labelContextLookup id = do
   env@TypingEnvironment {labelContext = q} <- get
   outcome <- maybe (throwError $ WireTypingError $ UnboundLabel id) return (Map.lookup id q)
@@ -248,11 +248,11 @@ embedWireBundle (Bundle.Cons b1 b2) = Cons (embedWireBundle b1) (embedWireBundle
 
 -- embedBundleType bt returns the PQR type equivalent to bt
 embedBundleType :: BundleType -> Type
-embedBundleType Bundle.UnitType = UnitType
-embedBundleType (Bundle.WireType wtype) = WireType wtype
-embedBundleType (Bundle.Tensor b1 b2) = Tensor (embedBundleType b1) (embedBundleType b2)
-embedBundleType (Bundle.List i b) = List i (embedBundleType b)
-embedBundleType (Bundle.TypeVariable id) = TVar id
+embedBundleType BTUnit = TUnit
+embedBundleType (BTWire wtype) = TWire wtype
+embedBundleType (BTPair b1 b2) = TPair (embedBundleType b1) (embedBundleType b2)
+embedBundleType (BTList i b) = TList i (embedBundleType b)
+embedBundleType (BTVar id) = TVar id
 
 
 --- PQR TYPE INFERENCE ---------------------------------------------------------------
@@ -260,10 +260,10 @@ embedBundleType (Bundle.TypeVariable id) = TVar id
 -- inferValueType v describes the type inference computation on value v.
 -- If succesful, it returns the type of v together with the substitution accumulated during inference
 inferValueType :: Value -> StateT TypingEnvironment (Either TypingError) (Type, TypeSubstitution)
-inferValueType UnitValue = return (UnitType, Map.empty)
+inferValueType UnitValue = return (TUnit, Map.empty)
 inferValueType (Label id) = do
   wtype <- labelContextLookup id
-  return (WireType wtype, Map.empty)
+  return (TWire wtype, Map.empty)
 inferValueType (Variable id) = do
   typ <- typingContextLookup id
   return (typ, Map.empty)
@@ -271,37 +271,37 @@ inferValueType (Pair v w) = do
   (typ1, sub1) <- inferValueType v
   substituteInEnvironment sub1
   (typ2, sub2) <- inferValueType w
-  return (Tensor (tsub sub2 typ1) typ2, compose sub1 sub2)
+  return (TPair (tsub sub2 typ1) typ2, compose sub1 sub2)
 inferValueType (BoxedCircuit inB circ outB) = lift $ do
   (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
   (inBtype, inQ') <- mapLeft WireTypingError $ runBundleTypeInferenceWithRemaining inQ inB
   (outBtype, outQ') <- mapLeft WireTypingError $ runBundleTypeInferenceWithRemaining outQ outB
   unless (Map.null inQ') $ throwError $ MismatchedCircuitInterface Input circ inQ' inB
   unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
-  return (Circ (Number $ width circ) inBtype outBtype, Map.empty)
+  return (TCirc (Number $ width circ) inBtype outBtype, Map.empty)
 inferValueType (Abs x intyp m) = do
   ((outtyp, i, sub), j) <- withWireCount $ withBoundVariable x intyp $ inferTermType m
-  return (Arrow (tsub sub intyp) outtyp i j, sub)
+  return (TArrow (tsub sub intyp) outtyp i j, sub)
 inferValueType (Lift m) = do
   (typ, i, sub) <- withNonLinearContext $ inferTermType m
   unless (checkEq i (Number 0)) (throwError $ UnexpectedWidthAnnotation m (Number 0) i)
-  return (Bang typ, sub)
+  return (TBang typ, sub)
 inferValueType Nil = do
   a <- freshTypeVariableName
-  return (List (Number 0) (TVar a), Map.empty)
+  return (TList (Number 0) (TVar a), Map.empty)
 inferValueType (Cons v w) = do
   (typ1, sub1) <- inferValueType v
   substituteInEnvironment sub1
   (typ2, sub2) <- inferValueType w
   case typ2 of
-    List i typ1' -> do
-      sub3 <- tryUnify typ1' (tsub sub2 typ1) $ UnexpectedType (Right w) (List i typ1) typ2
-      return (List (Plus i (Number 1)) (tsub sub3 typ1), sub3 `compose` sub2 `compose` sub1)
-    _ -> throwError $ UnexpectedTypeConstructor (Right w) (List (Number 0) UnitType) typ2
+    TList i typ1' -> do
+      sub3 <- tryUnify typ1' (tsub sub2 typ1) $ UnexpectedType (Right w) (TList i typ1) typ2
+      return (TList (Plus i (Number 1)) (tsub sub3 typ1), sub3 `compose` sub2 `compose` sub1)
+    _ -> throwError $ UnexpectedTypeConstructor (Right w) (TList (Number 0) TUnit) typ2
 inferValueType (Fold id v w) = do
   (stepfuntyp, sub1) <- inferValueType v
   case stepfuntyp of
-    Bang (Arrow (Tensor acctyp elemtyp) incacctyp i _) -> do
+    TBang (TArrow (TPair acctyp elemtyp) incacctyp i _) -> do
       when (id `elem` ifv elemtyp) $ throwError $ IndexVariableCapture v id elemtyp
       unless (checkTypeEq incacctyp (isub (Plus (IndexVariable id) (Number 1)) id acctyp)) $ throwError $ NonincreasingStepFunction v (isub (Plus (IndexVariable id) (Number 1)) id acctyp) incacctyp
       substituteInEnvironment sub1
@@ -311,7 +311,7 @@ inferValueType (Fold id v w) = do
       let (elemtyp'', acctyp'') = (tsub sub3 elemtyp', tsub sub3 acctyp')
       id' <- freshIndexVariableName
       let e = Max resourceCount (Maximum id (IndexVariable id') (Plus i (Mult (Minus (IndexVariable id') (Plus (IndexVariable id) (Number 1))) (wireCount elemtyp''))))
-      return (Arrow (List (IndexVariable id') elemtyp'') (isub (IndexVariable id') id acctyp'') e resourceCount, sub2 `compose` sub1)
+      return (TArrow (TList (IndexVariable id') elemtyp'') (isub (IndexVariable id') id acctyp'') e resourceCount, sub2 `compose` sub1)
     _ -> throwError $ UnfoldableType v stepfuntyp
 inferValueType (Anno v typ) = do
   (typ', sub) <- inferValueType v
@@ -330,17 +330,17 @@ inferTermType (Return v) = do
 inferTermType (App v w) = do
   (ftyp, sub1) <- inferValueType v
   case ftyp of
-    Arrow intyp outtyp i _ -> do
+    TArrow intyp outtyp i _ -> do
       substituteInEnvironment sub1
       (argtyp, sub2) <- inferValueType w
       sub3 <- tryUnify intyp (tsub sub2 argtyp) $ UnexpectedType (Right w) intyp argtyp
       return (tsub sub3 outtyp, i, sub3 `compose` sub2 `compose` sub1)
-    _ -> throwError $ UnexpectedTypeConstructor (Right v) (Arrow UnitType UnitType (Number 0) (Number 0)) ftyp
+    _ -> throwError $ UnexpectedTypeConstructor (Right v) (TArrow TUnit TUnit (Number 0) (Number 0)) ftyp
 inferTermType (Force v) = do
   (vtyp, sub) <- inferValueType v
   case vtyp of
-    Bang typ -> return (typ, Number 0, sub)
-    _ -> throwError $ UnexpectedTypeConstructor (Right v) (Bang UnitType) vtyp
+    TBang typ -> return (typ, Number 0, sub)
+    _ -> throwError $ UnexpectedTypeConstructor (Right v) (TBang TUnit) vtyp
 inferTermType (Let x m n) = do
   (ltype, i, sub1) <- inferTermType m
   substituteInEnvironment sub1
@@ -349,30 +349,30 @@ inferTermType (Let x m n) = do
 inferTermType (Box inbtype v) = do
   (ftyp, sub1) <- inferValueType v
   case ftyp of
-    Bang (Arrow intyp outtyp i _) -> do
+    TBang (TArrow intyp outtyp i _) -> do
       substituteInEnvironment sub1
       inbtype' <- maybe (throwError $ UnboxableType v ftyp) return (toBundleType intyp)
       unless (isBundleSubtype inbtype inbtype') $ throwError $ UnexpectedBoxingType (Box inbtype v) intyp inbtype
       outbtype <- maybe (throwError $ UnboxableType v ftyp) return (toBundleType outtyp)
-      return (Circ i inbtype outbtype, Number 0, sub1)
+      return (TCirc i inbtype outbtype, Number 0, sub1)
     _ -> throwError $ UnboxableType v ftyp
 inferTermType (Apply v w) = do
   (ctype, sub1) <- inferValueType v
   case ctype of
-    Circ i inBtype outBtype -> do
+    TCirc i inBtype outBtype -> do
       substituteInEnvironment sub1
       (inBtype', sub2) <- inferValueType w
       sub3 <- tryUnify inBtype' (embedBundleType inBtype) $ UnexpectedType (Right w) (embedBundleType inBtype) inBtype'
       return (embedBundleType outBtype, i, sub3 `compose` sub2 `compose` sub1)
-    _ -> throwError $ UnexpectedTypeConstructor (Right v) (Circ (Number 0) Bundle.UnitType Bundle.UnitType) ctype
+    _ -> throwError $ UnexpectedTypeConstructor (Right v) (TCirc (Number 0) BTUnit BTUnit) ctype
 inferTermType (Dest x y v m) = do
   (ltyp, sub1) <- inferValueType v
   case ltyp of
-    Tensor ltyp1 ltyp2 -> do
+    TPair ltyp1 ltyp2 -> do
       substituteInEnvironment sub1
       (rtype, j, sub2) <- withBoundVariable x ltyp1 $ withBoundVariable y ltyp2 $ inferTermType m
       return (rtype, j, sub2 `compose` sub1)
-    _ -> throwError $ UnexpectedTypeConstructor (Right v) (Tensor UnitType UnitType) ltyp
+    _ -> throwError $ UnexpectedTypeConstructor (Right v) (TPair TUnit TUnit) ltyp
 
 
 

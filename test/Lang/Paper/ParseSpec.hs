@@ -1,7 +1,6 @@
 module Lang.Paper.ParseSpec (spec) where
 
-import Bundle.AST (WireType (..))
-import qualified Bundle.AST as Bundle
+import Bundle.AST (WireType (..), BundleType (..))
 import Lang.Paper.AST
 import Lang.Paper.Parse
 import qualified Primitive
@@ -25,17 +24,17 @@ spec = do
     it "parses a list" $ do
       parse parseProgram "" "[x, y]" `shouldBe` Right (Return (Cons (Variable "x") (Cons (Variable "y") Nil)))
     it "parses a lambda" $ do
-      parse parseProgram "" "\\x::Qubit . return x" `shouldBe` Right (Return (Abs "x" (WireType Qubit) (Return (Variable "x"))))
+      parse parseProgram "" "\\x::Qubit . return x" `shouldBe` Right (Return (Abs "x" (TWire Qubit) (Return (Variable "x"))))
     it "parses a lifted value" $ do
       parse parseProgram "" "lift return x" `shouldBe` Right (Return (Lift (Return (Variable "x"))))
     it "parses a fold" $ do
       parse parseProgram "" "fold[i] step base" `shouldBe` Right (Return (Fold "i" (Variable "step") (Variable "base")))
     it "parses an annotation" $ do
-      parse parseProgram "" "x :: List[i] Qubit" `shouldBe` Right (Return (Anno (Variable "x") (List (IndexVariable "i") (WireType Qubit))))
+      parse parseProgram "" "x :: List[i] Qubit" `shouldBe` Right (Return (Anno (Variable "x") (TList (IndexVariable "i") (TWire Qubit))))
     it "parses cons's right-associatively" $ do
       parse parseProgram "" "():():tail" `shouldBe` Right (Return (Cons UnitValue (Cons UnitValue (Variable "tail"))))
     it "parses annotations with precedence over cons's" $ do
-      parse parseProgram "" "x:xs :: List[i+1] Qubit" `shouldBe` Right (Return (Anno (Cons (Variable "x") (Variable "xs")) (List (Plus (IndexVariable "i") (Number 1)) (WireType Qubit))))
+      parse parseProgram "" "x:xs :: List[i+1] Qubit" `shouldBe` Right (Return (Anno (Cons (Variable "x") (Variable "xs")) (TList (Plus (IndexVariable "i") (Number 1)) (TWire Qubit))))
     it "parses nested prefix constructors correctly" $ do
       parse parseProgram "" "lift force lift return x" `shouldBe` Right (Return (Lift (Force (Lift (Return (Variable "x"))))))
   describe "term parser" $ do
@@ -49,7 +48,7 @@ spec = do
       parse parseProgram "" "box[(Qubit,Qubit)] (lift return f)"
         `shouldBe` Right
           ( Box
-              (Bundle.Tensor (Bundle.WireType Qubit) (Bundle.WireType Qubit))
+              (BTPair (BTWire Qubit) (BTWire Qubit))
               (Lift (Return (Variable "f")))
           )
     it "parses force" $ do
