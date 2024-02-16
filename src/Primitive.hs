@@ -7,11 +7,11 @@ module Primitive
   )
 where
 
-import AST.Bundle (WireType (..))
-import qualified AST.Bundle as Bundle
-import AST.Circuit
-import AST.Language (Value (..))
+import Bundle.AST (WireType (..))
+import qualified Bundle.AST as Bundle
+import Circuit
 import qualified Data.Map as Map
+import Lang.Paper.AST (Value (..))
 
 -- Hadamard gate, maps a single qubit to a superposition of 0 and 1
 hadamard :: Value

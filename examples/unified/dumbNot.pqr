@@ -1,0 +1,17 @@
+-- dumbNot implements negation of a qubit q in a dumb way
+-- by initializing an ancillary qubit a to 1 and
+-- applying a cnot with target q and control a
+let dumbNot = lift \q :: Qubit .
+  let a = apply(QInit1,()) in
+  let (a,q) = apply(CNot,(a,q)) in
+  let _ = apply(QDiscard,a) in
+  q
+in
+
+-- doubleNot applies dumbNot twice to its input qubit
+let doubleNot = \q :: Qubit .
+  let q = (force dumbNot) q in
+  (force dumbNot) q
+in doubleNot
+
+-- expected type : Qubit ->[2,0] Qubit

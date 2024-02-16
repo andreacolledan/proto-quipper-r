@@ -1,11 +1,7 @@
--- the function that applies the hadamard gate to a single qubit
-let hadamard = lift \q :: Qubit . apply(Hadamard,q) in
-
 -- the step function to be used in fold
 let hadamardStep = lift \x :: (List[i] Qubit, Qubit) .
                         let (qs,q) = x in
-                        let h = force hadamard in
-                        let q = h q in
+                        let q = apply(Hadamard,q) in
                         q:qs
 in
 

@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.36.0.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -25,22 +25,24 @@ source-repository head
 
 library
   exposed-modules:
-      AST.Bundle
-      AST.Circuit
-      AST.Index
-      AST.Language
-      Checking.Bundle
-      Checking.Circuit
-      Checking.Language
-      Parsing.Bundle
-      Parsing.BundleType
-      Parsing.Index
-      Parsing.Language
-      Parsing.Type
+      Bundle.AST
+      Bundle.Infer
+      Bundle.Parse
+      Circuit
+      Index.AST
+      Index.Parse
+      Index.Semantics
+      Lang.Paper.AST
+      Lang.Paper.Infer
+      Lang.Paper.Parse
+      Lang.Type.AST
+      Lang.Type.Parse
+      Lang.Type.Semantics
+      Lang.Unified.AST
+      Lang.Unified.Infer
+      Lang.Unified.Parse
       PrettyPrinter
       Primitive
-      Semantics.Index
-      Semantics.Type
       Solving.CVC5
   other-modules:
       Paths_pqr
@@ -89,14 +91,15 @@ test-suite pqr-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      ASTSpec.CircuitSpec
-      ASTSpec.IndexSpec
-      ASTSpec.LanguageSpec
-      CheckingSpec.BundleSpec
-      CheckingSpec.LanguageSpec
-      ParsingSpec.BundleSpec
-      ParsingSpec.IndexSpec
-      ParsingSpec.LanguageSpec
+      Bundle.InferSpec
+      Bundle.ParseSpec
+      CircuitSpec
+      Index.ParseSpec
+      Index.SemanticsSpec
+      Lang.Paper.ASTSpec
+      Lang.Paper.InferSpec
+      Lang.Paper.ParseSpec
+      Lang.Unified.ParseSpec
       Paths_pqr
   autogen-modules:
       Paths_pqr
