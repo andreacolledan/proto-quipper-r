@@ -12,6 +12,7 @@ simplifyType (TArrow t1 t2 i j) = TArrow (simplifyType t1) (simplifyType t2) (si
 simplifyType (TBang t) = TBang (simplifyType t)
 simplifyType (TList i t) = TList (simplifyIndex i) (simplifyType t)
 simplifyType (TCirc i inBtype outBtype) = TCirc (simplifyIndex i) inBtype outBtype
+simplifyType (TIForall id t i j) = TIForall id (simplifyType t) (simplifyIndex i) (simplifyIndex j)
 simplifyType t = t
 
 -- Θ ⊢ t1 <: t2 (Figure 15)

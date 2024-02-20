@@ -24,11 +24,11 @@ widthSpec = do
       width (Seq (Seq (Id $ Map.fromList [("q", Qubit)]) Hadamard (Label "q") (Label "q")) PauliX (Label "q") (Label "q")) `shouldBe` 1
     it "should increase when an init is applied and no discarded qubits exist" $ do
       -- width (ID_∅; Init(*) -> q) = 1
-      width (Seq (Id Map.empty) Init UnitValue (Label "q")) `shouldBe` 1
+      width (Seq (Id Map.empty) (QInit False) UnitValue (Label "q")) `shouldBe` 1
       -- width (ID_{q:Qubit}; H(q) -> q; Init(*) -> r) = 2
-      width (Seq (Seq (Id $ Map.fromList [("q", Qubit)]) Hadamard (Label "q") (Label "q")) Init UnitValue (Label "r")) `shouldBe` 2
+      width (Seq (Seq (Id $ Map.fromList [("q", Qubit)]) Hadamard (Label "q") (Label "q")) (QInit False) UnitValue (Label "r")) `shouldBe` 2
       -- width (ID_∅; Init(*) -> q; Init(*) -> r) = 2
-      width (Seq (Seq (Id Map.empty) Init UnitValue (Label "q")) Init UnitValue (Label "r")) `shouldBe` 2
+      width (Seq (Seq (Id Map.empty) (QInit False) UnitValue (Label "q")) (QInit False) UnitValue (Label "r")) `shouldBe` 2
 
 spec :: Spec
 spec = do

@@ -5,6 +5,16 @@ module Circuit
     Circuit (..),
     width,
     inferCircuitSignature,
+    qinit0,
+    qinit1,
+    qdiscard,
+    measure,
+    cnot,
+    toffoli,
+    hadamard,
+    pauliX,
+    pauliY,
+    pauliZ,
   )
 where
 
@@ -22,33 +32,51 @@ import PrettyPrinter (Pretty (..))
 
 -- The datatype of elementary quantum operations
 data QuantumOperation
-  = Init
+  = QInit Bool
   | Discard
+  | Measure
   | Hadamard
   | PauliX
+  | PauliY
+  | PauliZ
+  | Phase
+  | Toffoli
+  | R Int
   | CNot
   deriving (Eq, Show)
 
 instance Pretty QuantumOperation where
-  pretty Init = "Init"
-  pretty Discard = "Discard"
+  pretty (QInit b) = "QInit" ++ if b then "1" else "0"
+  pretty Discard = "QDiscard"
   pretty Hadamard = "H"
   pretty PauliX = "X"
+  pretty PauliY = "Y"
+  pretty PauliZ = "Z"
+  pretty Measure = "Meas"
+  pretty Phase = "S"
+  pretty Toffoli = "Toffoli"
+  pretty (R n) = "R(π/" ++ show n ++ ")"
   pretty CNot = "CNot"
 
 -- Returns the signature (input/output types) of a quantum operation
 sig :: QuantumOperation -> (BundleType, BundleType)
-sig Init = (BTUnit, BTWire Qubit)
+sig (QInit _) = (BTUnit, BTWire Qubit)
 sig Discard = (BTWire Qubit, BTUnit)
+sig Measure = (BTWire Qubit, BTWire Bit)
 sig Hadamard = (BTWire Qubit, BTWire Qubit)
 sig PauliX = (BTWire Qubit, BTWire Qubit)
+sig PauliY = (BTWire Qubit, BTWire Qubit)
+sig PauliZ = (BTWire Qubit, BTWire Qubit)
+sig Phase = (BTWire Qubit, BTWire Qubit)
+sig Toffoli = (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit), BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit))
+sig (R _) = (BTWire Qubit, BTWire Qubit)
 sig CNot = (BTPair (BTWire Qubit) (BTWire Qubit), BTPair (BTWire Qubit) (BTWire Qubit))
 
 -- Returns the net change in the number of qubits after applying a quantum operation
 -- E.g. if a quantum operation consumes 2 qubits and produces 1 qubit, then the net change is -1
 -- E.g. if a quantum operation consumes 0 qubits and produces 1 qubit, then the net change is 1
 net :: QuantumOperation -> Int
-net Init = 1
+net (QInit _) = 1
 net Discard = -1
 net _ = 0
 
@@ -88,3 +116,35 @@ inferCircuitSignature (Seq circ op bin bout) = do
   qout1 <- runBundleTypeCheckingWithRemaining qmid bin btype1
   qout2 <- synthesizeLabelContext bout btype2
   return (qin, Map.union qout1 qout2)
+
+--- PRIMITIVE CIRCUITS ---------------------------------------------------------------------------------
+
+qinit0 :: Circuit
+qinit0 = Seq (Id Map.empty) (QInit False) UnitValue (Label "a")
+
+qinit1 :: Circuit
+qinit1 = Seq (Id Map.empty) (QInit True) UnitValue (Label "a")
+
+qdiscard :: Circuit
+qdiscard = Seq (Id (Map.fromList [("a", Qubit)])) Discard (Label "a") UnitValue
+
+measure :: Circuit
+measure = Seq (Id (Map.fromList [("a", Qubit)])) Measure (Label "a") (Label "b")
+
+cnot :: Circuit
+cnot = Seq (Id (Map.fromList [("a", Qubit), ("b", Qubit)])) CNot (Pair (Label "a") (Label "b")) (Pair (Label "c") (Label "d"))
+
+toffoli :: Circuit
+toffoli = Seq (Id (Map.fromList [("a", Qubit), ("b", Qubit), ("c", Qubit)])) Toffoli (Pair (Pair (Label "a") (Label "b")) (Label "c")) (Pair (Pair (Label "d") (Label "e")) (Label "f"))
+
+hadamard :: Circuit
+hadamard = Seq (Id (Map.fromList [("a", Qubit)])) Hadamard (Label "a") (Label "b")
+
+pauliX :: Circuit
+pauliX = Seq (Id (Map.fromList [("a", Qubit)])) PauliX (Label "a") (Label "b")
+
+pauliY :: Circuit
+pauliY = Seq (Id (Map.fromList [("a", Qubit)])) PauliY (Label "a") (Label "b")
+
+pauliZ :: Circuit
+pauliZ = Seq (Id (Map.fromList [("a", Qubit)])) PauliZ (Label "a") (Label "b")

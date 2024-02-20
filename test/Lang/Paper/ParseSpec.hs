@@ -3,7 +3,6 @@ module Lang.Paper.ParseSpec (spec) where
 import Bundle.AST (WireType (..), BundleType (..))
 import Lang.Paper.AST
 import Lang.Paper.Parse
-import qualified Primitive
 import Test.Hspec
 import Text.Parsec (parse)
 import Index.AST
@@ -14,7 +13,7 @@ spec = do
     it "parses a variable name" $ do
       parse parseProgram "" "x" `shouldBe` Right (Return (Variable "x"))
     it "parses a constant name" $ do
-      parse parseProgram "" "Hadamard" `shouldBe` Right (Return Primitive.hadamard)
+      parse parseProgram "" "Hadamard" `shouldBe` Right (Return hadamard)
     it "parses a unit value" $ do
       parse parseProgram "" "()" `shouldBe` Right (Return UnitValue)
     it "parses a pair" $ do

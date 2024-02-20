@@ -2,7 +2,7 @@ module Main (main) where
 
 import Control.Monad (when)
 import Index.Semantics
-import Lang.Paper.Infer
+import Lang.Paper.Infer as P
 import qualified Lang.Paper.Parse as P
 import Lang.Type.Semantics (simplifyType)
 import Lang.Unified.Infer
@@ -41,7 +41,7 @@ main = withParseResult commandLineParser $ \args -> do
           when verb $ do
             putStrLn $ "Parsed successfully as \n\t" ++ pretty ast
             putStrLn "Inferring type..."
-          let outcome = runTermTypeInference emptyctx emptyctx ast
+          let outcome = runTermTypeInference P.emptyctx P.emptyctx ast
           case outcome of
             Left err -> putStrLn $ "Inference failed: " ++ show err
             Right inferred -> do

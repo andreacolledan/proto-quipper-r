@@ -51,7 +51,7 @@ data Expr =
   | ELift Expr
   | ENil
   | ECons Expr Expr
-  | EFold Expr Expr
+  | EFold Expr Expr Expr
   | ECirc Bundle Circuit Bundle
   | EApp Expr Expr
   | EApply Expr Expr
@@ -77,7 +77,7 @@ instance Pretty Expr where
   pretty (EForce e) = "(force " ++ pretty e ++ ")"
   pretty ENil = "[]"
   pretty (ECons e1 e2) = "(" ++ pretty e1 ++ ":" ++ pretty e2 ++ ")"
-  pretty (EFold e1 e2) = "fold (" ++ pretty e1 ++ ", " ++ pretty e2 ++ ")"
+  pretty (EFold e1 e2 e3) = "fold (" ++ pretty e1 ++ ", " ++ pretty e2 ++ ", " ++ pretty e3 ++ ")"
   pretty (EAnno e t) = "(" ++ pretty e ++ " :: " ++ pretty t ++ ")"
   pretty (EApply e1 e2) = "apply(" ++ pretty e1 ++ ", " ++ pretty e2 ++ ")"
   pretty (EBox bt e) = "(box ::" ++ pretty bt ++ " " ++ pretty e ++ ")"

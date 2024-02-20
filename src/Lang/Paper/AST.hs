@@ -12,12 +12,19 @@ module Lang.Paper.AST
     tsub,
     mgtu,
     compose,
-    TVarId
+    TVarId,
+    hadamard,
+    pauliX,
+    qinit,
+    qdiscard,
+    cnot,
   )
 where
 
 import Bundle.AST (Bundle, BundleType, LabelId)
-import Circuit
+import qualified Bundle.AST as Bundle
+import Circuit (Circuit)
+import qualified Circuit
 import Index.AST
 import PrettyPrinter
 import Lang.Type.AST
@@ -73,6 +80,30 @@ instance Pretty Term where
   pretty (Let x m n) = "(let " ++ x ++ " = " ++ pretty m ++ " in " ++ pretty n ++ ")"
   pretty (App m n) = "(" ++ pretty m ++ " " ++ pretty n ++ ")"
   pretty (Force v) = "force(" ++ pretty v ++ ")"
+
+
+  --- PRIMITIVE BOXED CIRCUITS ---------------------------------------------------------------------------------
+
+  -- Hadamard gate, maps a single qubit to a superposition of 0 and 1
+hadamard :: Value
+hadamard = BoxedCircuit (Bundle.Label "a") Circuit.hadamard (Bundle.Label "b")
+
+-- Pauli X gate, flips the state of a single qubit
+pauliX :: Value
+pauliX = BoxedCircuit (Bundle.Label "a") Circuit.pauliX (Bundle.Label "b")
+
+-- Initializes a single qubit to the 0 state
+qinit :: Value
+qinit = BoxedCircuit Bundle.UnitValue Circuit.qinit0 (Bundle.Label "a")
+
+-- Discards a single qubit
+qdiscard :: Value
+qdiscard = BoxedCircuit (Bundle.Label "a") Circuit.qdiscard Bundle.UnitValue
+
+-- Controlled not gate, two-qubit gate, flips the second qubit if the first qubit is 1
+cnot :: Value
+cnot =
+  BoxedCircuit (Bundle.Pair (Bundle.Label "a") (Bundle.Label "b")) Circuit.cnot (Bundle.Pair (Bundle.Label "c") (Bundle.Label "d"))
 
 
 

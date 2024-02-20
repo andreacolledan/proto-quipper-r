@@ -2,17 +2,16 @@ module Lang.Paper.InferSpec (spec) where
 
 import Bundle.AST (WireType(..), BundleType(..))
 import qualified Bundle.AST as Bundle
-import Circuit
+import qualified Circuit
 import Data.Either (isLeft, isRight)
 import Data.Either.Extra (fromRight')
 import qualified Data.Map as Map
 import Index.AST
 import Index.Semantics
-import Lang.Paper.AST (Term (..), Type (..), Value (..))
+import Lang.Paper.AST
 import Lang.Paper.Infer
 import Lang.Type.Semantics (checkTypeEq, simplifyType)
 import PrettyPrinter
-import Primitive
 import Test.Hspec
 
 -- HELPERS --
@@ -53,15 +52,15 @@ spec = do
     context "when inferring" $ do
       it "fails when the input or output interfaces do not match tha circuit's actual output" $ do
         -- ∅;∅ ⊢ (a,Hadamard,*) =/=>
-        let term = BoxedCircuit (Bundle.Label "a") (Seq (Id (Map.fromList [("a", Qubit)])) Hadamard (Bundle.Label "a") (Bundle.Label "b")) Bundle.UnitValue
+        let term = BoxedCircuit (Bundle.Label "a") Circuit.hadamard Bundle.UnitValue
         let (gamma, q) = (Map.empty, Map.empty)
         runValueTypeInference gamma q term `shouldSatisfy` isLeft
         -- ∅;∅ ⊢ (*,Hadamard,b) =/=>
-        let term = BoxedCircuit Bundle.UnitValue (Seq (Id (Map.fromList [("a", Qubit)])) Hadamard (Bundle.Label "a") (Bundle.Label "b")) (Bundle.Label "b")
+        let term = BoxedCircuit Bundle.UnitValue Circuit.hadamard (Bundle.Label "b")
         let (gamma, q) = (Map.empty, Map.empty)
         runValueTypeInference gamma q term `shouldSatisfy` isLeft
         -- ∅;∅ ⊢ (a,Init,b) =/=>
-        let term = BoxedCircuit (Bundle.Label "a") (Seq (Id Map.empty) Init Bundle.UnitValue (Bundle.Label "b")) (Bundle.Label "b")
+        let term = BoxedCircuit (Bundle.Label "a") Circuit.qinit0 (Bundle.Label "b")
         let (gamma, q) = (Map.empty, Map.empty)
         runValueTypeInference gamma q term `shouldSatisfy` isLeft
     context "when checking" $ do

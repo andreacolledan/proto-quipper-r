@@ -18,29 +18,27 @@ type TVarId = String
 -- The datatype of PQR types
 -- Fig. 8
 data Type
-  = TUnit -- ()
-  | TWire WireType -- Bit | Qubit
-  | TPair Type Type -- (t1, t2)
-  | TCirc Index BundleType BundleType -- Circ[i](bt1, vt2)
-  | TArrow Type Type Index Index -- t1 ->[i,j] t2
-  | TBang Type -- !t
-  | TList Index Type -- TList[I] t
-  | TVar TVarId -- α
-  | TForall Index Type -- ∀i . t
-  | TNat -- Nat
+  = TUnit                                     -- ()
+  | TWire WireType                            -- Bit | Qubit
+  | TPair Type Type                           -- (t1, t2)
+  | TCirc Index BundleType BundleType         -- Circ[i](bt1, vt2)
+  | TArrow Type Type Index Index              -- t1 -o[i,j] t2
+  | TBang Type                                -- !t
+  | TList Index Type                          -- TList[I] t
+  | TVar TVarId                               -- α
+  | TIForall IndexVariableId Type Index Index -- i ->[i,j] t
   deriving (Show, Eq)
 
 instance Pretty Type where
   pretty TUnit = "()"
   pretty (TWire wt) = pretty wt
   pretty (TPair t1 t2) = "(" ++ pretty t1 ++ ", " ++ pretty t2 ++ ")"
-  pretty (TCirc i inBtype outBtype) = "TCirc [" ++ pretty i ++ "] (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
-  pretty (TArrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " ->[" ++ pretty i ++ "," ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
+  pretty (TCirc i inBtype outBtype) = "Circ [" ++ pretty i ++ "] (" ++ pretty inBtype ++ ", " ++ pretty outBtype ++ ")"
+  pretty (TArrow typ1 typ2 i j) = "(" ++ pretty typ1 ++ " -o[" ++ pretty i ++ ", " ++ pretty j ++ "] " ++ pretty typ2 ++ ")"
   pretty (TBang typ) = "!" ++ pretty typ
-  pretty (TList i typ) = "TList[" ++ pretty i ++ "] " ++ pretty typ
+  pretty (TList i typ) = "List[" ++ pretty i ++ "] " ++ pretty typ
   pretty (TVar id) = id
-  pretty (TForall i typ) = "∀" ++ pretty i ++ " . " ++ pretty typ
-  pretty TNat = "Nat"
+  pretty (TIForall id typ i j) = "(" ++ id ++ " ->[" ++ pretty i ++ ", " ++ pretty j ++ "] " ++ pretty typ ++ ")"
 
 -- PQR types are amenable to wire counting
 -- Def. 2 (Wire Count)
@@ -49,11 +47,10 @@ instance Wide Type where
   wireCount (TWire _) = Number 1
   wireCount (TPair t1 t2) = Plus (wireCount t1) (wireCount t2)
   wireCount (TCirc {}) = Number 0
-  wireCount (TArrow _ _ _ j) = j
+  wireCount (TArrow _ _ _ i) = i
   wireCount (TBang _) = Number 0
   wireCount (TList i t) = Mult i (wireCount t)
-  wireCount (TForall _ t) = wireCount t
-  wireCount TNat = Number 0
+  wireCount (TIForall _ _ _ i) = i
   wireCount (TVar _) = error "Cannot count wires of a type variable"
 
 -- PQR types are amenable to the notion of well-formedness with respect to an index context
@@ -66,9 +63,8 @@ instance HasIndex Type where
   ifv (TArrow typ1 typ2 i j) = ifv typ1 `Set.union` ifv typ2 `Set.union` ifv i `Set.union` ifv j
   ifv (TBang typ) = ifv typ
   ifv (TList i typ) = ifv i `Set.union` ifv typ
-  ifv TNat = Set.empty
   ifv (TVar _) = error "unimplemented"
-  ifv (TForall i typ) = error "unimplemented"
+  ifv (TIForall id typ i j) = Set.delete id (ifv typ `Set.union` ifv i `Set.union` ifv j)
   isub :: Index -> IndexVariableId -> Type -> Type
   isub _ _ TUnit = TUnit
   isub _ _ (TWire wtype) = TWire wtype
@@ -77,9 +73,9 @@ instance HasIndex Type where
   isub i id (TArrow typ1 typ2 j k) = TArrow (isub i id typ1) (isub i id typ2) (isub i id j) (isub i id k)
   isub i id (TBang typ) = TBang (isub i id typ)
   isub i id (TList j typ) = TList (isub i id j) (isub i id typ)
-  isub _ _ TNat = TNat
   isub _ _ tv@(TVar _) = error "unimplemented"
-  isub i id (TForall j typ) = error "unimplemented"
+  isub i id (TIForall id' typ j e) | id == id' = TIForall id' typ j e
+                                   | otherwise = TIForall id' (isub i id typ) (isub i id j) (isub i id e)
 
 -- Returns True iff the given type is linear
 isLinear :: Type -> Bool
@@ -90,9 +86,8 @@ isLinear (TCirc {}) = False
 isLinear (TArrow {}) = True
 isLinear (TBang _) = False
 isLinear (TList _ typ) = isLinear typ
-isLinear TNat = False
 isLinear (TVar _) = True
-isLinear (TForall _ typ) = isLinear typ
+isLinear (TIForall _ typ _ i) = isLinear typ && checkEq i (Number 0) --TODO I really don't like this
 
 -- Turns a suitable PQR type into an identical bundle type
 toBundleType :: Type -> Maybe BundleType
@@ -117,9 +112,8 @@ tfv (TCirc {}) = Set.empty
 tfv (TArrow t1 t2 _ _) = tfv t1 `Set.union` tfv t2
 tfv (TBang t) = tfv t
 tfv (TList _ t) = tfv t
-tfv TNat = Set.empty
 tfv (TVar id) = Set.singleton id
-tfv (TForall _ t) = tfv t
+tfv (TIForall _ t _ _) = tfv t
 
 -- tsub sub t applies the type substitution sub to the type t
 tsub :: TypeSubstitution -> Type -> Type
@@ -130,9 +124,8 @@ tsub _ typ@(TCirc {}) = typ
 tsub sub (TArrow typ1 typ2 i j) = TArrow (tsub sub typ1) (tsub sub typ2) i j
 tsub sub (TBang typ) = TBang (tsub sub typ)
 tsub sub (TList i typ) = TList i (tsub sub typ)
-tsub _ TNat = TNat
 tsub sub typ@(TVar id) = Map.findWithDefault typ id sub
-tsub sub (TForall i typ) = error "unimplemented"
+tsub sub (TIForall i typ _ _) = error "unimplemented"
 
 -- sub1 `compose` sub2 composes the type substitutions sub1 and sub2
 -- according to sub2 ∘ sub1 = sub1 U (sub1 sub2)
@@ -165,10 +158,11 @@ mgtu (TPair t1 t2) (TPair t1' t2') = do
   sub2 <- mgtu (tsub sub1 t2) (tsub sub1 t2')
   return $ compose sub2 sub1
 mgtu (TCirc i inBtype outBtype) (TCirc i' inBtype' outBtype') | checkEq i i' && inBtype == inBtype' && outBtype == outBtype' = return Map.empty
-mgtu (TArrow typ1 typ2 i j) (TArrow typ1' typ2' i' j') | checkEq i i' && checkEq j j' = do
+mgtu (TArrow typ1 typ2 i j) (TArrow typ1' typ2' i' j') | checkLeq i i' && checkEq j j' = do
   sub1 <- mgtu typ1 typ1'
   sub2 <- mgtu (tsub sub1 typ2) (tsub sub1 typ2')
   return $ compose sub2 sub1
 mgtu (TBang typ) (TBang typ') = mgtu typ typ'
 mgtu (TList i typ) (TList i' typ') | checkEq i i' = mgtu typ typ'
+mgtu (TIForall id typ i j) (TIForall id' typ' i' j') | id == id' && checkLeq i i' && checkEq j j' = mgtu typ typ' --TODO alpha conversion
 mgtu _ _ = Nothing

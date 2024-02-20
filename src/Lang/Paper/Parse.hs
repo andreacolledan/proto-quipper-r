@@ -10,7 +10,6 @@ import Lang.Paper.AST
 import Data.Char
 import Bundle.Parse (parseBundleType)
 import Lang.Type.Parse (parseType)
-import qualified Primitive
 import Text.Parsec
 import Text.Parsec.Language
 import Text.Parsec.String
@@ -60,11 +59,11 @@ constant :: Parser Value
 constant = do
   name <- m_identifier
   case name of
-    "Hadamard" -> return Primitive.hadamard
-    "PauliX" -> return Primitive.pauliX
-    "QInit" -> return Primitive.qinit
-    "QDiscard" -> return Primitive.qdiscard
-    "CNot" -> return Primitive.cnot
+    "Hadamard" -> return hadamard
+    "PauliX" -> return pauliX
+    "QInit" -> return qinit
+    "QDiscard" -> return qdiscard
+    "CNot" -> return cnot
     _ -> fail "Unknown constant"
 
 -- Parses "\x :: t . m" as (Abs x t m)

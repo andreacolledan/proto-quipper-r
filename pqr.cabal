@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.36.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -42,7 +42,6 @@ library
       Lang.Unified.Infer
       Lang.Unified.Parse
       PrettyPrinter
-      Primitive
       Solving.CVC5
   other-modules:
       Paths_pqr
@@ -99,6 +98,7 @@ test-suite pqr-test
       Lang.Paper.ASTSpec
       Lang.Paper.InferSpec
       Lang.Paper.ParseSpec
+      Lang.Unified.InferSpec
       Lang.Unified.ParseSpec
       Paths_pqr
   autogen-modules:

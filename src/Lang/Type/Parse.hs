@@ -13,12 +13,14 @@ import Text.Parsec.Expr
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
+import Data.Char (isLower)
+import Control.Monad
 
 typeLang :: LanguageDef st
 typeLang =
   emptyDef
-    { reservedOpNames = ["->", "!", "List", "Circ"],
-      reservedNames = ["Bit", "Qubit", "()"]
+    { reservedOpNames = ["->","-o", "!"],
+      reservedNames = ["Bit", "Qubit","List", "Circ"]
     }
 
 typeTokenParser :: TokenParser st
@@ -32,16 +34,28 @@ typeTokenParser@TokenParser
     commaSep1 = m_commaSep1
   } = makeTokenParser typeLang
 
--- Parses "t1 ->[i,j] t2" as (Arrow t1 t2 i j)
+-- Parses "t1 -o[i,j] t2" as (Arrow t1 t2 i j)
 arrowOperator :: Parser (Type -> Type -> Type)
 arrowOperator = do
-  m_reservedOp "->"
+  m_reservedOp "-o"
   (i, j) <- m_brackets $ do
     i <- parseIndex
     _ <- m_comma
     j <- parseIndex
     return (i, j)
   return $ \t1 t2 -> TArrow t1 t2 i j
+
+-- Parses "id ->[i,j] t" as (IForall id t i j)
+forallOperator :: Parser (Type -> Type)
+forallOperator = do
+  id <- m_identifier
+  m_reservedOp "->"
+  (i, j) <- m_brackets $ do
+    i <- parseIndex
+    _ <- m_comma
+    j <- parseIndex
+    return (i, j)
+  return $ \t -> TIForall id t i j
 
 -- Parses "Circ[i](btype1, btype2)" as (Circ i btype1 btype2)
 circ :: Parser Type
@@ -90,7 +104,8 @@ parseType :: Parser Type
 parseType =
   let table =
         [ [Prefix listOperator, Prefix bangOperator],
-          [Infix arrowOperator AssocRight] -- arrows have lower precedence than bangs and list constructors
+          [Infix arrowOperator AssocRight], -- arrows have lower precedence than bangs and list constructors
+          [Prefix forallOperator]
         ]
       baseType = try unitType <|> bit <|> qubit <|> tensor <|> circ <?> "type"
    in buildExpressionParser table baseType <?> "type"

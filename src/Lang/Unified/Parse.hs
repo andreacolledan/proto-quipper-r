@@ -182,12 +182,14 @@ annOp = do
 fold :: Parser Expr
 fold = do
   m_reserved "fold"
-  (e1,e2) <- m_parens $ do
+  (e1,e2,e3) <- m_parens $ do
     e1 <- parseExpr
     _ <- m_comma
     e2 <- parseExpr
-    return (e1,e2)
-  return $ EFold e1 e2
+    _ <- m_comma
+    e3 <- parseExpr
+    return (e1,e2,e3)
+  return $ EFold e1 e2 e3
   <?> "fold"
 
 -- parse "apply(e1,e2)" as (EApply e1 e2)
@@ -210,10 +212,10 @@ iappOp = do
   return $ flip EIApp i
   <?> "index application"
 
--- parse "forall i . e" as (EIAbs i e)
+-- parse "@i . e" as (EIAbs i e)
 iabs :: Parser Expr
 iabs = do
-  m_reserved "forall"
+  m_reservedOp "@"
   i <- m_identifier
   m_reservedOp "."
   e <- parseExpr

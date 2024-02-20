@@ -21,7 +21,6 @@ simplifyIndex (Plus i j) = case (simplifyIndex i, simplifyIndex j) of
   (Number n, Number m) -> Number (n + m)
   (i', Number 0) -> i' -- zero is right identity
   (Number 0, j') -> j' -- zero is left identity
-  --(i', Minus j' i'') | checkEq i' i'' -> j' -- (a + (b - a)) = b     --TODO this is true iff b >= a
   (i', j') -> Plus i' j' -- do not reduce further
 simplifyIndex (Max i j) = case (simplifyIndex i, simplifyIndex j) of
   (Number n, Number m) -> Number (max n m)
@@ -55,14 +54,14 @@ simplifyIndex (Maximum id i j) = case simplifyIndex i of
      in -- if the body of does not mention id, then just return the body
         if id `notElem` ifv j'
           then j'
-          --else -- if the body does not increase in i, then return the body at id=0
+          else -- if the body does not increase in i, then return the body at id=0
 
-            --if j' `nonIncreasingIn` id
-              --then simplifyIndex $ isub (Number 0) id j'
-              --else -- if the body of the maximum does not decrease in i, then return the body at id=i-1
+            if j' `nonIncreasingIn` id
+              then simplifyIndex $ isub (Number 0) id j'
+              else -- if the body of the maximum does not decrease in i, then return the body at id=i-1
 
-                --if j' `nonDecreasingIn` id
-                  --then simplifyIndex $ isub (Minus i' (Number 1)) id j'
+                if j' `nonDecreasingIn` id
+                  then simplifyIndex $ isub (Minus i' (Number 1)) id j'
                   else -- otherwise return the simplified term and pray that an SMT solver will figure it out (it won't)
                     Maximum id i' j'
     where

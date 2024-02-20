@@ -39,11 +39,11 @@ spec = do
       parse parseProgram "" "x:xs" `shouldBe` Right (ECons (EVar "x") (EVar "xs"))
     it "parses 'e :: List[3] Qubit' as type annotation" $ do
       parse parseProgram "" "e :: List[3] Qubit" `shouldBe` Right (EAnno (EVar "e") (TList (Number 3) (TWire Qubit)))
-    it "parses 'fold(f,acc)' as folding" $ do
-      parse parseProgram "" "fold(f,acc)" `shouldBe` Right (EFold (EVar "f") (EVar "acc"))
-    it "parses 'forall i . e' as index abstraction" $ do
-      parse parseProgram "" "forall i . e" `shouldBe` Right (EIAbs "i" (EVar "e"))
-    it "parses 'e @ i' as index application" $ do
+    it "parses 'fold(f,acc,arg)' as folding" $ do
+      parse parseProgram "" "fold(f,acc,arg)" `shouldBe` Right (EFold (EVar "f") (EVar "acc") (EVar "arg"))
+    it "parses '@i . e' as index abstraction" $ do
+      parse parseProgram "" "@ i . e" `shouldBe` Right (EIAbs "i" (EVar "e"))
+    it "parses 'e @i' as index application" $ do
       parse parseProgram "" "e @ i" `shouldBe` Right (EIApp (EVar "e") (IndexVariable "i"))
   describe "desugaring" $ do
     it "parses '(x,y,z,w)' as (((x,y),z),w)" $ do
@@ -67,4 +67,4 @@ spec = do
     it "annotation has precedence over abstraction" $ do
       parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () ->[1,0] Qubit" `shouldBe` Right (EAbs "x" TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
     it "index application has precedence over index abstraction" $ do
-      parse parseProgram "" "forall i . e @ i" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "i")))
+      parse parseProgram "" "@i . e @ i" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "i")))

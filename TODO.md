@@ -60,8 +60,8 @@
   - [x] Implement subsumption
     - [x] Implement subtyping
       - [x] Interface with SMT solver
-- [ ] Instantiation (e.g. `⊢ f : List i Qubit -o [i,0] List i Qubit` entails `⊢ f : List 3 Qubit -o [3,0] List 3 Qubit`)
-  - [ ] Implement instantiation
+- [x] Instantiation (e.g. `⊢ f : List i Qubit -o [i,0] List i Qubit` entails `⊢ f : List 3 Qubit -o [3,0] List 3 Qubit`)
+  - [x] Implement instantiation
 
 - [x] Better error messages
   

@@ -1,12 +1,12 @@
 -- the step function to be used in fold
-let hadamardStep = lift \x :: (List[i] Qubit, Qubit) .
+let hadamardStep = lift @i . \x :: (List[i] Qubit, Qubit) .
                         let (qs,q) = x in
                         let q = apply(Hadamard,q) in
                         q:qs
 in
 
 -- the function that applies the hadamard gate to a list of qubits
-let hadamardN = fold(hadamardStep, []) in 
+let hadamardN = @j . \x :: List[j] Qubit . fold(hadamardStep, [], x) in 
 hadamardN
 --:: List[j] Qubit ->[j,0] List[j] Qubit 
 

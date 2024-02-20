@@ -115,14 +115,14 @@ instance Show TypingError where
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
 printConstructor TUnit = "unit type"
-printConstructor (TWire _) = "wire type"
-printConstructor (TPair _ _) = "TPair type"
+printConstructor (TWire {}) = "wire type"
+printConstructor (TPair {}) = "TPair type"
 printConstructor (TCirc {}) = "circuit type"
 printConstructor (TArrow {}) = "TArrow type"
-printConstructor (TBang _) = "TBang type"
-printConstructor (TList _ _) = "TList type"
-printConstructor (TVar _) = "type variable"
-printConstructor (TForall _ _) = "forall type"
+printConstructor (TBang {}) = "TBang type"
+printConstructor (TList {}) = "TList type"
+printConstructor (TVar {}) = "type variable"
+printConstructor (TIForall {}) = "forall type"
 
 
 --- TYPING ENVIRONMENT OPERATIONS ---------------------------------------------------------------

@@ -2,16 +2,18 @@ module Lang.Unified.Infer
   ( runTypeInference,
     runTypeInferenceWith,
     InferenceResult (..),
+    makeEnv,
+    makeEnvForall,
+    emptyEnv,
+    emptyctx,
+    TypingError,
   )
 where
 
 import Bundle.AST hiding (compose)
 import qualified Bundle.AST as Bundle
-import Circuit (Circuit, inferCircuitSignature, width)
-import Index.AST
-import Lang.Unified.AST
-import Lang.Type.AST
 import Bundle.Infer
+import Circuit (Circuit, inferCircuitSignature, width)
 import Control.Exception (assert)
 import Control.Monad
 import Control.Monad.Error.Class
@@ -19,8 +21,13 @@ import Control.Monad.State
 import Data.Either.Extra (mapLeft)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import PrettyPrinter
+import Index.AST
 import Index.Semantics
+import Lang.Type.AST
+import Lang.Unified.AST
+import PrettyPrinter
+import Lang.Type.Semantics (simplifyType)
+import Debug.Trace
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map.Map VariableId Type
@@ -36,6 +43,15 @@ data TypingEnvironment = TypingEnvironment
     freeVarCounter :: Int -- the counter used to initialize fresh variable names
   }
 
+emptyEnv :: TypingEnvironment
+emptyEnv = TypingEnvironment emptyctx emptyctx emptyictx 0
+
+makeEnv :: TypingContext -> LabelContext -> TypingEnvironment
+makeEnv gamma q = TypingEnvironment gamma q emptyictx 0
+
+makeEnvForall :: IndexContext -> TypingContext -> LabelContext -> TypingEnvironment
+makeEnvForall theta gamma q = TypingEnvironment gamma q theta 0
+
 -- check if a typing environment contains any linear variable.
 envIsLinear :: TypingEnvironment -> Bool
 envIsLinear TypingEnvironment {typingContext = gamma, labelContext = q} = (any isLinear . Map.elems) gamma || Map.size q > 0
@@ -50,24 +66,21 @@ data TypingError
   | ShadowedLinearVariable VariableId
   | LinearResourcesInLiftedExpression
   | UnexpectedType Expr Type Type
-  | MismatchedCircuitInterface CircuitInterfaceType Circuit LabelContext Bundle
+  | MismatchedInputInterface Circuit LabelContext Bundle
+  | MismatchedOutputInterface Circuit LabelContext Bundle
   | UnexpectedWidthAnnotation Expr Index Index
   | UnexpectedTypeConstructor Expr Type Type
   | UnusedLinearResources TypingContext LabelContext
   | UnexpectedBoxingType Expr Type BundleType
   | UnboxableType Expr Type
-  | UnfoldableType Expr Type
+  | UnfoldableStepfunction Expr Type
+  | UnfoldableAccumulator Expr Type
+  | UnfoldableArg Expr Type
   | NonincreasingStepFunction Expr Type Type
   | IndexVariableCapture Expr IndexVariableId Type
   | UnboundIndexVariable Type IndexVariableId
+  | ShadowedIndexVariable IndexVariableId
   deriving (Eq)
-
--- Useful for error messages
-data CircuitInterfaceType = Input | Output deriving (Eq)
-
-instance Show CircuitInterfaceType where
-  show Input = "input"
-  show Output = "output"
 
 instance Show TypingError where
   show (WireTypingError err) = show err
@@ -76,43 +89,37 @@ instance Show TypingError where
   show (ShadowedLinearVariable id) = "Shadowed linear variable " ++ id
   show LinearResourcesInLiftedExpression = "Linear resources consumed in a lifted expression"
   show (UnexpectedType exp typ1 typ2) =
-    "Expected expression " ++ pretty exp ++ " to have type " ++ pretty typ1 ++ ", got " ++ pretty typ2 ++ " instead"
-  show (MismatchedCircuitInterface interfaceType c q b) =
-    "Bundle "
-      ++ pretty b
-      ++ " is not a valid "
-      ++ show interfaceType
-      ++ " interface for TCircuit "
-      ++ pretty c
-      ++ ", whose "
-      ++ show interfaceType
-      ++ " labels are "
-      ++ pretty q
+    "Expected expression " ++ pretty exp ++ " to have type " ++ pretty (simplifyType typ1) ++ ", got " ++ pretty (simplifyType typ2) ++ " instead"
+  show (MismatchedInputInterface c q b) = "Bundle " ++ pretty b ++ " is not a valid input interface for TCircuit " ++ pretty c ++ ", whose input labels are " ++ pretty q
+  show (MismatchedOutputInterface c q b) = "Bundle " ++ pretty b ++ " is not a valid output interface for TCircuit " ++ pretty c ++ ", whose output labels are " ++ pretty q
   show (UnexpectedWidthAnnotation m i j) =
     "Expected term " ++ pretty m ++ " to have width annotation " ++ pretty i ++ ", got " ++ pretty j ++ " instead"
   show (UnexpectedTypeConstructor exp typ1 typ2) =
-    "Expected expression " ++ pretty exp ++ " to have " ++ printConstructor typ1 ++ ", got type " ++ pretty typ2 ++ " instead"
+    "Expected expression " ++ pretty exp ++ " to have " ++ printConstructor (simplifyType typ1) ++ ", got type " ++ pretty (simplifyType typ2) ++ " instead"
   show (UnusedLinearResources gamma q) = "Unused linear resources in typing contexts: " ++ pretty gamma ++ " ; " ++ pretty q
   show (UnexpectedBoxingType m btype1 btype2) =
     "Expected input type of boxed TCircuit " ++ pretty m ++ " to be " ++ pretty btype1 ++ ", got " ++ pretty btype2 ++ " instead"
-  show (UnboxableType v typ) = "Cannot box value " ++ pretty v ++ " of type " ++ pretty typ
-  show (UnfoldableType v typ) = "Cannot fold value " ++ pretty v ++ " of type " ++ pretty typ
+  show (UnboxableType v typ) = "Cannot box value " ++ pretty v ++ " of type " ++ pretty (simplifyType typ)
+  show (UnfoldableStepfunction v typ) = "Expression " ++ pretty v ++ " of type " ++ pretty (simplifyType typ) ++ " is not a valid step function"
+  show (UnfoldableAccumulator v typ) = "Expression " ++ pretty v ++ " of type " ++ pretty (simplifyType typ) ++ " is not a valid accumulator"
+  show (UnfoldableArg v typ) = "Expression " ++ pretty v ++ " of type " ++ pretty typ ++ " is not a valid fold argument"
   show (NonincreasingStepFunction v typ1 typ2) =
-    "Expected step function " ++ pretty v ++ "'s output type to be" ++ pretty typ1 ++ ", got " ++ pretty typ2 ++ " instead"
-  show (IndexVariableCapture v id typ) = "Index variable " ++ id ++ " cannot occur in type " ++ pretty typ ++ " of step function " ++ pretty v
-  show (UnboundIndexVariable t id) = "Unbound index variable " ++ id ++ " in type annotation " ++ pretty t
+    "Expected step function " ++ pretty v ++ "'s output type to be" ++ pretty (simplifyType typ1) ++ ", got " ++ pretty (simplifyType typ2) ++ " instead"
+  show (IndexVariableCapture v id typ) = "Index variable " ++ id ++ " cannot occur in type " ++ pretty (simplifyType typ) ++ " of step function " ++ pretty v
+  show (UnboundIndexVariable t id) = "Unbound index variable " ++ id ++ " in type annotation " ++ pretty (simplifyType t)
+  show (ShadowedIndexVariable id) = "Shadowed index variable " ++ id
 
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
 printConstructor TUnit = "unit type"
-printConstructor (TWire _) = "wire type"
-printConstructor (TPair _ _) = "TPair type"
-printConstructor (TCirc {}) = "TCircuit type"
-printConstructor (TArrow {}) = "TArrow type"
-printConstructor (TBang _) = "TBang type"
-printConstructor (TList _ _) = "TList type"
-printConstructor (TVar _) = "type variable"
-printConstructor (TForall _ _) = "forall type"
+printConstructor (TWire {}) = "wire type"
+printConstructor (TPair {}) = "tensor type"
+printConstructor (TCirc {}) = "circuit type"
+printConstructor (TArrow {}) = "arrow type"
+printConstructor (TBang {}) = "bang type"
+printConstructor (TList {}) = "list type"
+printConstructor (TVar {}) = "type variable"
+printConstructor (TIForall {}) = "forall type"
 
 --- TYPING ENVIRONMENT OPERATIONS ---------------------------------------------------------------
 
@@ -156,12 +163,21 @@ substituteInEnvironment sub = do
   let gamma' = Map.map (tsub sub) gamma
   put env {typingContext = gamma'}
 
-checkWellFormedness :: Type -> StateT TypingEnvironment (Either TypingError) ()
-checkWellFormedness typ = do
+--TODO: factor these two together
+
+checkTypeWellFormedness :: Type -> StateT TypingEnvironment (Either TypingError) ()
+checkTypeWellFormedness typ = do
   theta <- gets indexContext
   case ifv typ Set.\\ theta of
     fv | Set.null fv -> return () -- all the free variables in the type are also in the context, good
     fv -> throwError $ UnboundIndexVariable typ (Set.findMin fv) -- some free variables are not in scope, bad
+
+checkIndexWellFormedness :: Index -> StateT TypingEnvironment (Either TypingError) ()
+checkIndexWellFormedness i = do
+  theta <- gets indexContext
+  case ifv i Set.\\ theta of
+    fv | Set.null fv -> return () -- all the free variables in the index are also in the context, good
+    fv -> throwError $ UnboundIndexVariable (TVar "i") (Set.findMin fv) -- some free variables are not in scope, bad
 
 --- DERIVATION COMBINATORS ---------------------------------------------------------------
 
@@ -230,6 +246,16 @@ tryUnify t1 t2 err = case mgtu t1 t2 of
   Just s -> return s
   Nothing -> throwError err
 
+withBoundIndexVariable :: IndexVariableId -> StateT TypingEnvironment (Either TypingError) a -> StateT TypingEnvironment (Either TypingError) a
+withBoundIndexVariable id der = do
+  env@TypingEnvironment {indexContext = theta} <- get
+  when (Set.member id theta) $ throwError $ ShadowedIndexVariable id
+  put env {indexContext = Set.insert id theta}
+  outcome <- der
+  env@TypingEnvironment {indexContext = theta} <- get
+  put env {indexContext = Set.delete id theta}
+  return outcome
+
 --- BUNDLE CHECKING WITHIN TYPE CHECKING ------------------------------------------------------------
 
 -- embedWireBundle b returns the PQR value equivalent to b
@@ -272,6 +298,7 @@ data InferenceResult = InferenceResult
 -- >> j,j1,j2, etc. when they are type annotations
 -- >> wc,wc1,wc2, etc. when they are wire counts
 -- >> k,k1,k2, etc. when they are synthesized as part of the rule
+-- >> g,g1,g2, etc. when they are used as terms (e.g. in index application)
 inferType :: Expr -> StateT TypingEnvironment (Either TypingError) InferenceResult
 inferType EUnit = return $ InferenceResult TUnit Map.empty (Number 0)
 inferType (ELabel id) = do
@@ -292,7 +319,7 @@ inferType ENil = do
   id <- freshTypeVariableName
   return $ InferenceResult (TList (Number 0) (TVar id)) Map.empty (Number 0)
 inferType (EAbs x annotyp e) = do
-  checkWellFormedness annotyp
+  checkTypeWellFormedness annotyp
   (InferenceResult typ sub i, wc) <- withWireCount $ withBoundVariable x annotyp $ inferType e
   let annotyp' = tsub sub annotyp
   return $ InferenceResult (TArrow annotyp' typ i wc) sub wc
@@ -313,23 +340,41 @@ inferType (ECons e1 e2) = do
       let k = Max (Plus i1 wc) (Max (Plus i2 (wireCount typ1'')) (Mult (Plus j (Number 1)) (wireCount typ1'')))
       return $ InferenceResult (TList (Plus j (Number 1)) typ1'') (sub1 `compose` sub2 `compose` sub3) k
     _ -> throwError $ UnexpectedTypeConstructor e2 (TList (Number 0) TUnit) typ2
-inferType (EFold e1 e2) = do
-  InferenceResult typ1 sub1 i1 <- inferType e1
+inferType (EFold e1 e2 e3) = do --naming conventions are not satisfied here because the rule is HARD to parse
+  InferenceResult steptyp sub1 i1 <- inferType e1
   substituteInEnvironment sub1
-  (InferenceResult typ2 sub2 i2, wc) <- withWireCount $ inferType e2
-  let typ1' = tsub sub2 typ1
-  case typ1' of
-    TBang (TForall id (TArrow (TPair acctyp elemtyp) acctyp' i j)) -> do
-      undefined -- TODO
-    _ -> throwError $ UnfoldableType e1 typ1'
+  case steptyp of
+    TBang (TIForall id (TArrow (TPair acctyp elemtyp) acctyp' stepwidth o1) o2 o3) | checkEq o1 (Number 0) && checkEq o2 (Number 0) && checkEq o3 (Number 0) -> do
+      subacc' <- tryUnify acctyp' (isub (Plus (IndexVariable id) (Number 1)) id acctyp) $ UnfoldableStepfunction e1 steptyp
+      substituteInEnvironment subacc'
+      -- TODO propagate subacc' to existing types
+      (InferenceResult acctyp'' sub2 i2, wc1) <-withWireCount $ inferType e2
+      subacc'' <- tryUnify acctyp'' (isub (Number 0) id acctyp) $ UnfoldableAccumulator e2 acctyp''
+      substituteInEnvironment subacc''
+      -- TODO propagate subacc'' to existing types
+      (InferenceResult argtyp sub3 i3, wc2) <- withWireCount $ inferType e3
+      substituteInEnvironment sub3
+      case argtyp of
+        TList arglen elemtyp' -> do
+          subelem' <- tryUnify elemtyp' elemtyp $ UnfoldableArg e3 argtyp
+          -- TODO propagate subelem' to existing types
+          -- width upper bound of ONLY fold execution: max(#(acctyp{0/i},maximum[i<arglen] stepwidth + (arglen-(i+1))*#(elemtyp)))
+          let k1 = Max (wireCount (isub (Number 0) id acctyp)) (Maximum id arglen (Plus stepwidth (Mult (Minus arglen (Plus (IndexVariable id) (Number 1))) (wireCount elemtyp))))
+          -- the total upper bound takes into consideration the evaluation of e1, e2, e3 and the fold execution
+          -- max(i1 + wires in e2 and e3, i2 + wires in e3, i3 + wires in the result of e2, k1):
+          let k2 = Max (Plus i1 (Plus wc1 wc2)) (Max (Plus i2 wc2) (Max (Plus i3 (wireCount (isub (Number 0) id acctyp))) k1))
+          let sub = sub1 `compose` subacc' `compose` sub2 `compose` subacc'' `compose` sub3 `compose` subelem'
+          return $ InferenceResult (isub arglen id acctyp) sub k2
+        _ -> throwError $ UnfoldableArg e3 argtyp
+    _ -> throwError $ UnfoldableStepfunction e1 steptyp
 inferType (ECirc b1 c b2) = do
   (inbt, inrem, outbt, outrem) <- lift $ mapLeft WireTypingError $ do
     (inlabels, outlabels) <- inferCircuitSignature c
     (inbt, inrem) <- runBundleTypeInferenceWithRemaining inlabels b1
     (outbt, outrem) <- runBundleTypeInferenceWithRemaining outlabels b2
     return (inbt, inrem, outbt, outrem)
-  unless (null inrem) $ throwError $ MismatchedCircuitInterface Input c inrem b1
-  unless (null outrem) $ throwError $ MismatchedCircuitInterface Output c outrem b2
+  unless (null inrem) $ throwError $ MismatchedInputInterface c inrem b1
+  unless (null outrem) $ throwError $ MismatchedOutputInterface c outrem b2
   return $ InferenceResult (TCirc (Number (width c)) inbt outbt) Map.empty (Number 0)
 inferType (EApp e1 e2) = do
   -- function application
@@ -391,7 +436,7 @@ inferType (EDest x y e1 e2) = do
   let k = Max (Plus i1 wc) i2
   return $ InferenceResult typ5 (sub1 `compose` sub2 `compose` sub3) k
 inferType (EAnno e annotyp) = do
-  checkWellFormedness annotyp
+  checkTypeWellFormedness annotyp
   InferenceResult typ sub1 i <- inferType e
   sub2 <- tryUnify typ annotyp $ UnexpectedType e annotyp typ
   -- annotation type should change to the inferred type
@@ -403,8 +448,16 @@ inferType (EForce e) = do
   case typ of
     TBang typ' -> return $ InferenceResult typ' sub i
     _ -> throwError $ UnexpectedTypeConstructor e (TBang TUnit) typ
-inferType (EIAbs id e) = undefined
-inferType (EIApp e i) = undefined
+inferType (EIAbs id e) = do
+  (InferenceResult typ sub i, wc) <- withWireCount $ withBoundIndexVariable id $ inferType e
+  return $ InferenceResult (TIForall id typ i wc) sub i
+inferType (EIApp e g) = do
+  InferenceResult typ1 sub i <- inferType e
+  case typ1 of
+    TIForall id typ2 j1 _ -> do
+      checkIndexWellFormedness j1
+      return $ InferenceResult (isub g id typ2) sub (Max i (isub g id j1))
+    _ -> throwError $ UnexpectedTypeConstructor e (TIForall "i" TUnit (Number 0) (Number 0)) typ1
 inferType (EConst c) =
   let typ = case c of
         QInit0 -> TCirc (Number 1) BTUnit (BTWire Qubit)
@@ -417,8 +470,9 @@ inferType (EConst c) =
         PauliZ -> TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
         CNot -> TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit))
         Toffoli -> TCirc (Number 3) (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit)) (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit))
-        MakeRGate -> TBang (TArrow TNat (TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)) (Number 0) (Number 0))
-        in return $ InferenceResult typ Map.empty (Number 0)
+        MakeRGate -> TBang (TIForall "i" (TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)) (Number 1) (Number 0))
+   in return $ InferenceResult typ Map.empty (Number 0)
+
 
 --- EXPORTED WRAPPER FUNCTIONS ---------------------------------------------------------------
 
