@@ -1,0 +1,3 @@
+@i.\list::List[i] Qubit.
+  let revStep = lift @j.\acc::(List[j] Qubit, Qubit). let (qs, q) = acc in q:qs
+  in fold(revStep, [], list)
