@@ -7,7 +7,7 @@ module Index.AST(
     HasIndex(..),
     Constraint(..),
     IRel(..),
-    emptyictx
+    emptyictx,
 ) where
 
 import Data.Set (Set)
