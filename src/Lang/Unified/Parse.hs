@@ -15,6 +15,8 @@ import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
 import Data.Char
+import Debug.Trace (traceId, traceM)
+
 
 unifiedLang :: LanguageDef st
 unifiedLang =
@@ -210,51 +212,55 @@ apply = do
 -- parse "@ i" as the postfix operator (\e -> EIApp e i)
 iappOp :: Parser (Expr -> Expr)
 iappOp = do
-  m_reservedOp "@"
-  i <- parseIndex
+  i <- try $ do
+    m_reservedOp "@"
+    delimitedIndex
   return $ flip EIApp i
   <?> "index application"
 
 -- parse "@i . e" as (EIAbs i e)
 iabs :: Parser Expr
 iabs = do
-  m_reservedOp "@"
-  i <- m_identifier
-  m_reservedOp "."
+  i <- try $ do
+    m_reservedOp "@"
+    i <- m_identifier
+    m_reservedOp "."
+    return i
   e <- parseExpr
-  return $ EIAbs i e 
-  <?> "universal quantification"
+  return $ EIAbs i e
+  <?> "index abstraction"
 
 -- parse spaces as the infix operator EApp
-appOp :: Parser (Expr -> Expr -> Expr)  
+appOp :: Parser (Expr -> Expr -> Expr)
 appOp = m_whiteSpace >> return EApp <?> "application"
 
+delimitedExpr = unitValue
+    <|> nil
+    <|> tuple
+    <|> list
+    <|> m_parens parseExpr
+    <|> apply
+    <|> fold
+    <|> constant
+    <|> variable
+    <?> "delimited expression"
 
 -- parse a PQR unified expression
 parseExpr :: Parser Expr
 parseExpr = let
   operatorTable = [
+    [Postfix annOp, Postfix iappOp],
     [Infix appOp AssocLeft],
-    [Infix consOp AssocRight],
-    [Postfix annOp, Postfix iappOp]
+    [Infix consOp AssocRight]
     ]
-  simpleExpr 
-    = unitValue
-    <|> nil
-    <|> tuple
-    <|> list
+  simpleExpr = delimitedExpr
     <|> lambda
-    <|> try iabs
+    <|> iabs
     <|> lift
     <|> dest
     <|> letIn
     <|> box
     <|> force
-    <|> apply
-    <|> fold
-    <|> constant
-    <|> variable
-    <|> m_parens parseExpr
     <?> "simple expression"
   in buildExpressionParser operatorTable simpleExpr <?> "expression"
 

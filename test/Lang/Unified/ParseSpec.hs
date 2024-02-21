@@ -42,9 +42,9 @@ spec = do
     it "parses 'fold(f,acc,arg)' as folding" $ do
       parse parseProgram "" "fold(f,acc,arg)" `shouldBe` Right (EFold (EVar "f") (EVar "acc") (EVar "arg"))
     it "parses '@i . e' as index abstraction" $ do
-      parse parseProgram "" "@ i . e" `shouldBe` Right (EIAbs "i" (EVar "e"))
+      parse parseProgram "" "@i . e" `shouldBe` Right (EIAbs "i" (EVar "e"))
     it "parses 'e @i' as index application" $ do
-      parse parseProgram "" "e @ i" `shouldBe` Right (EIApp (EVar "e") (IndexVariable "i"))
+      parse parseProgram "" "e @i" `shouldBe` Right (EIApp (EVar "e") (IndexVariable "i"))
   describe "desugaring" $ do
     it "parses '(x,y,z,w)' as (((x,y),z),w)" $ do
       parse parseProgram "" "(x,y,z,w)" `shouldBe` Right (EPair (EPair (EPair (EVar "x") (EVar "y")) (EVar "z")) (EVar "w"))
@@ -66,7 +66,9 @@ spec = do
       parse parseProgram "" "f x:y:[]" `shouldBe` Right (ECons (EApp (EVar "f") (EVar "x")) (ECons (EVar "y") ENil))
     it "annotation has precedence over abstraction" $ do
       parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () -o[1,0] Qubit" `shouldBe` Right (EAbs "x" TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
+    it "annotation has precedence over application" $ do
+      parse parseProgram "" "f x :: ()" `shouldBe` Right (EApp (EVar "f") (EAnno (EVar "x") TUnit))
     it "index application has precedence over index abstraction" $ do
       parse parseProgram "" "@i . e @ i" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "i")))
-    it "index and term application are parsed with the same precedence, left to right" $ do
-      parse parseProgram "" "f x @(i) a " `shouldBe` Right (EApp (EIApp (EApp (EVar "f") (EVar "x")) (IndexVariable "i")) (EVar "y"))
+    it "index application has precedence over regular application" $ do
+      parse parseProgram "" "f x @i y" `shouldBe` Right (EApp (EApp (EVar "f") (EIApp (EVar "x") (IndexVariable "i"))) (EVar "y"))
