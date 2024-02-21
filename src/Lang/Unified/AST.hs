@@ -1,4 +1,8 @@
-module Lang.Unified.AST where
+module Lang.Unified.AST (
+  Expr(..),
+  Constant(..),
+  VariableId
+) where
 
 import Bundle.AST
 import Index.AST

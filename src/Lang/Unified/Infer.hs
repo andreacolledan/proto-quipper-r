@@ -27,7 +27,6 @@ import Lang.Type.AST
 import Lang.Unified.AST
 import PrettyPrinter
 import Lang.Type.Semantics (simplifyType)
-import Debug.Trace
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map.Map VariableId Type

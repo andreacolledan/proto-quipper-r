@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
 module Lang.Unified.Parse (
   parseProgram
 ) where

@@ -13,8 +13,6 @@ import Text.Parsec.Expr
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
-import Data.Char (isLower)
-import Control.Monad
 
 typeLang :: LanguageDef st
 typeLang =

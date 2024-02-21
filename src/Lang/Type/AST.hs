@@ -1,6 +1,17 @@
 {-# LANGUAGE InstanceSigs #-}
 
-module Lang.Type.AST where
+module Lang.Type.AST (
+  Type(..),
+  TVarId,
+  TypeSubstitution,
+  tfv,
+  tsub,
+  compose,
+  mgtu,
+  isLinear,
+  toBundleType
+
+) where
 
 import Bundle.AST ( BundleType (..), WireType, Wide(..) )
 import Data.Map (Map)
@@ -49,7 +60,7 @@ instance Wide Type where
   wireCount (TCirc {}) = Number 0
   wireCount (TArrow _ _ _ i) = i
   wireCount (TBang _) = Number 0
-  wireCount (TList (Number 0) t) = Number 0
+  wireCount (TList (Number 0) _) = Number 0
   wireCount (TList i t) = Mult i (wireCount t)
   wireCount (TIForall _ _ _ i) = i
   wireCount (TVar _) = error "Cannot count wires of a type variable"

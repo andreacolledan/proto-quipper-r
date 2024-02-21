@@ -69,4 +69,4 @@ spec = do
     it "index application has precedence over index abstraction" $ do
       parse parseProgram "" "@i . e @ i" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "i")))
     it "index and term application are parsed with the same precedence, left to right" $ do
-      parse parseProgram "" "f x @i a " `shouldBe` Right (EApp (EIApp (EApp (EVar "f") (EVar "x")) (IndexVariable "i")) (EVar "y"))
+      parse parseProgram "" "f x @(i) a " `shouldBe` Right (EApp (EIApp (EApp (EVar "f") (EVar "x")) (IndexVariable "i")) (EVar "y"))

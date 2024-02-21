@@ -1,7 +1,8 @@
-module Solving.CVC5 where
+module Solving.CVC5 (
+  querySMTWithContext
+) where
 
 
-import Control.Exception
 import Control.Monad
 import Data.List (isPrefixOf)
 import GHC.IO (unsafePerformIO)
@@ -16,13 +17,13 @@ import GHC.IO.Exception (ExitCode(ExitSuccess, ExitFailure))
 
 -- toSafeString i returns a representation of i that is safe to use as a valid filename
 toSafeString :: Index -> String
-toSafeString (IndexVariable id) = "" ++ id ++ ""
-toSafeString (Number n) = "" ++ show n ++ ""
-toSafeString (Plus i j) = "" ++ toSafeString i ++ "PLUS" ++ toSafeString j ++ ""
-toSafeString (Max i j) = "MAX" ++ toSafeString i ++ "AND" ++ toSafeString j ++ ""
-toSafeString (Mult i j) = "" ++ toSafeString i ++ "TIMES" ++ toSafeString j ++ ""
-toSafeString (Minus i j) = "" ++ toSafeString i ++ "MINUS" ++ toSafeString j ++ ""
-toSafeString (Maximum id i j) = "MAX" ++ id ++ "LT" ++ toSafeString i ++ "" ++ toSafeString j
+toSafeString (IndexVariable id) = id
+toSafeString (Number n) = show n
+toSafeString (Plus i j) = toSafeString i ++ "PLUS" ++ toSafeString j 
+toSafeString (Max i j) = "MAX" ++ toSafeString i ++ "AND" ++ toSafeString j 
+toSafeString (Mult i j) = toSafeString i ++ "TIMES" ++ toSafeString j 
+toSafeString (Minus i j) = toSafeString i ++ "MINUS" ++ toSafeString j 
+toSafeString (Maximum id i j) = "MAX" ++ id ++ "LT" ++ toSafeString i ++ " " ++ toSafeString j
 
 -- Converts an index expression to and SMTLIB arithmetical expression
 embedIndex :: Index -> String
@@ -32,7 +33,7 @@ embedIndex (Plus i j) = "(+ " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 embedIndex (Max i j) = "(max " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 embedIndex (Mult i j) = "(* " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 embedIndex (Minus i j) = "(- " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
-embedIndex (Maximum _ i j) = "max_" ++ toSafeString i ++ "_" ++ toSafeString j
+embedIndex (Maximum {}) = error "Internal: maximum expression should have been desugared"
 
 -- Converts an index relation to the corresponding SMTLIB symbol
 embedConstraint :: IRel -> String
@@ -84,8 +85,8 @@ desugar' (Maximum id i j) = do
 -- querySMTWithContext theta c queries the CVC5 solver to check if the index constraint
 -- c holds for every natural value of the index variables in theta.
 -- Returns true if the constraint holds, false otherwise or if the solver throws an error.
-querySMTWithContext :: IndexContext -> Constraint -> Bool
-querySMTWithContext theta c@(Constraint rel i j) = unsafePerformIO $ do
+querySMTWithContext :: Constraint -> Bool
+querySMTWithContext c@(Constraint rel i j) = unsafePerformIO $ do
     withFile queryFile WriteMode $ \handle -> do
         hPutStrLn handle $ "; PROVE " ++ pretty c
         hPutStrLn handle "(set-logic HO_ALL)"
