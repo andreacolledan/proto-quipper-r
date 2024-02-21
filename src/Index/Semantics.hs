@@ -6,7 +6,6 @@ module Index.Semantics
 where
 
 import Index.AST
-import qualified Data.Set as Set
 import Solving.CVC5
 
 -- Index semantics in terms of a reduction function
@@ -56,13 +55,13 @@ simplifyIndex (Maximum id i j) = case simplifyIndex i of
           then j'
           else -- if the body does not increase in i, then return the body at id=0
 
-            --if j' `nonIncreasingIn` id
-              --then simplifyIndex $ isub (Number 0) id j'
-              --else -- if the body of the maximum does not decrease in i, then return the body at id=i-1
+            if j' `nonIncreasingIn` id
+              then simplifyIndex $ isub (Number 0) id j'
+              else -- if the body of the maximum does not decrease in i, then return the body at id=i-1
 
-                --if j' `nonDecreasingIn` id
-                  --then simplifyIndex $ isub (Minus i' (Number 1)) id j'
-                  --else -- otherwise return the simplified term and pray that an SMT solver will figure it out (it won't)
+                if j' `nonDecreasingIn` id
+                  then simplifyIndex $ isub (Minus i' (Number 1)) id j'
+                  else -- otherwise return the simplified term and pray that an SMT solver will figure it out (it won't)
                     Maximum id i' j'
     where
       -- If i `nonDecreasingIn` id returns True, then j >= id implies i{j/id} >= i
@@ -101,9 +100,7 @@ checkEq i j = case (simplifyIndex i, simplifyIndex j) of
   (i', j') | i' == j' -> True -- identical indices are equal
   (Number n, Number m) -> n == m -- number indices are equal iff their values are equal
   (IndexVariable id, IndexVariable id') -> id == id' -- variables are equal if they are the same name
-  (i', j') ->
-    let theta = ifv i' `Set.union` ifv j' -- in all other cases, query the SMT solver
-     in querySMTWithContext theta $ Constraint Eq i' j'
+  (i', j') -> querySMTWithContext $ Constraint Eq i' j' -- in all other cases, query the solver
 
 -- Θ ⊨ i ≤ j (figs. 12,15)
 -- in this implementation, Θ implicitly contains all the free variables in i and j
@@ -111,6 +108,4 @@ checkLeq :: Index -> Index -> Bool
 checkLeq i j = case (simplifyIndex i, simplifyIndex j) of
   (i', j') | i' == j' -> True -- identical indices are equal
   (Number n, Number m) -> n <= m -- number indices are lesser-or-equal iff their values are lesser-or-equal
-  (i', j') ->
-    let theta = ifv i' `Set.union` ifv j' -- in all other cases, query the SMT solver
-     in querySMTWithContext theta $ Constraint Leq i' j'
+  (i', j') -> querySMTWithContext $ Constraint Leq i' j' -- in all other cases, query the solver
