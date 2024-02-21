@@ -5,6 +5,7 @@
 
 module Index.Parse
   ( parseIndex,
+    delimitedIndex
   )
 where
 
@@ -52,40 +53,74 @@ parseIndexVariable = do
 -- Parses "max(i, j)" as (Max i j)
 parseMax :: Parser Index
 parseMax = do
-  m_reserved "max"
-  m_parens $ do
-    i1 <- parseIndex
-    m_symbol ","
-    i2 <- parseIndex
-    return $ Max i1 i2
+  try $ do
+    m_reserved "max"
+    m_symbol "("
+  i1 <- parseIndex
+  m_symbol ","
+  i2 <- parseIndex
+  m_symbol ")"
+  return $ Max i1 i2
   <?> "max expression"
 
 -- Parses "max[id < i] j" as Maximum id i j
 parseMaximum :: Parser Index
 parseMaximum = do
-  m_reserved "max"
-  m_symbol "["
+  try $ do
+    m_reserved "max"
+    m_symbol "["
   ivar <- m_identifier
   m_reservedOp "<"
   i <- parseIndex
   m_symbol "]"
-  j <- m_parens parseIndex
+  j <- parseIndex
   return $ Maximum ivar i j
   <?> "maximum expression"
+
+multOp :: Parser (Index -> Index -> Index)
+multOp = do
+  m_reservedOp "*"
+  return Mult
+  <?> "multiplication"
+
+plusOp :: Parser (Index -> Index -> Index)
+plusOp = do
+  m_reservedOp "+"
+  return Plus
+  <?> "plus"
+
+minusOp :: Parser (Index -> Index -> Index)
+minusOp = do
+  m_reservedOp "-"
+  return Minus
+  <?> "minus"
+
+maximumOp :: Parser (Index -> Index)
+maximumOp = do
+  try $ do
+    m_reserved "max"
+    m_symbol "["
+  i <- m_identifier
+  m_reservedOp "<"
+  j <- parseIndex
+  m_symbol "]"
+  return $ Maximum i j
+
+delimitedIndex :: Parser Index
+delimitedIndex = m_parens parseIndex
+          <|> parseNat
+          <|> parseIndexVariable
+          <|> parseMax
+          <?> "delimited index"
 
 -- Parses an index expression
 parseIndex :: Parser Index
 parseIndex =
   let -- Usual arithmetic operator associativity and precedence
       indexOperators =
-        [ [Infix (m_reservedOp "*" >> return Mult) AssocLeft],
-          [Infix (m_reservedOp "+" >> return Plus) AssocLeft, Infix (m_reservedOp "-" >> return Minus) AssocLeft]
+        [
+          [Infix multOp AssocLeft],
+          [Infix plusOp AssocLeft, Infix minusOp AssocLeft]
         ]
-      baseIndexTerm =
-        m_parens parseIndex
-          <|> parseNat
-          <|> parseIndexVariable
-          <|> try parseMax
-          <|> parseMaximum
-          <?> "index expression"
-   in buildExpressionParser indexOperators baseIndexTerm <?> "index expression"
+      simpleIndex = delimitedIndex <|> parseMaximum
+  in buildExpressionParser indexOperators simpleIndex <?> "index expression"
