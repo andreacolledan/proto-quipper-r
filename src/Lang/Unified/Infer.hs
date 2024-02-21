@@ -470,7 +470,7 @@ inferType (EConst c) =
         PauliZ -> TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
         CNot -> TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit))
         Toffoli -> TCirc (Number 3) (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit)) (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit))
-        MakeRGate -> TBang (TIForall "i" (TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)) (Number 1) (Number 0))
+        MakeCRGate -> TBang (TIForall "i" (TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit))) (Number 0) (Number 0))
    in return $ InferenceResult typ Map.empty (Number 0)
 
 

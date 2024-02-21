@@ -25,7 +25,7 @@ data Constant
   -- Three qubit gates
   | Toffoli
   -- Functions
-  | MakeRGate
+  | MakeCRGate
   deriving (Eq, Show)
 
 instance Pretty Constant where
@@ -39,7 +39,7 @@ instance Pretty Constant where
   pretty PauliZ = "PauliZ"
   pretty CNot = "CNot"
   pretty Toffoli = "Toffoli"
-  pretty MakeRGate = "MakeRGate"
+  pretty MakeCRGate = "MakeCRGate"
 
 -- The datatype of PQR expressions
 data Expr =

@@ -65,6 +65,8 @@ spec = do
     it "application has precedence over cons'ing" $ do
       parse parseProgram "" "f x:y:[]" `shouldBe` Right (ECons (EApp (EVar "f") (EVar "x")) (ECons (EVar "y") ENil))
     it "annotation has precedence over abstraction" $ do
-      parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () ->[1,0] Qubit" `shouldBe` Right (EAbs "x" TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
+      parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () -o[1,0] Qubit" `shouldBe` Right (EAbs "x" TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
     it "index application has precedence over index abstraction" $ do
       parse parseProgram "" "@i . e @ i" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "i")))
+    it "index and term application are parsed with the same precedence, left to right" $ do
+      parse parseProgram "" "f x @i a " `shouldBe` Right (EApp (EIApp (EApp (EVar "f") (EVar "x")) (IndexVariable "i")) (EVar "y"))

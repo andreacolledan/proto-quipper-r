@@ -49,6 +49,7 @@ instance Wide Type where
   wireCount (TCirc {}) = Number 0
   wireCount (TArrow _ _ _ i) = i
   wireCount (TBang _) = Number 0
+  wireCount (TList (Number 0) t) = Number 0
   wireCount (TList i t) = Mult i (wireCount t)
   wireCount (TIForall _ _ _ i) = i
   wireCount (TVar _) = error "Cannot count wires of a type variable"
@@ -63,7 +64,7 @@ instance HasIndex Type where
   ifv (TArrow typ1 typ2 i j) = ifv typ1 `Set.union` ifv typ2 `Set.union` ifv i `Set.union` ifv j
   ifv (TBang typ) = ifv typ
   ifv (TList i typ) = ifv i `Set.union` ifv typ
-  ifv (TVar _) = error "unimplemented"
+  ifv (TVar _) = Set.empty
   ifv (TIForall id typ i j) = Set.delete id (ifv typ `Set.union` ifv i `Set.union` ifv j)
   isub :: Index -> IndexVariableId -> Type -> Type
   isub _ _ TUnit = TUnit
@@ -73,7 +74,7 @@ instance HasIndex Type where
   isub i id (TArrow typ1 typ2 j k) = TArrow (isub i id typ1) (isub i id typ2) (isub i id j) (isub i id k)
   isub i id (TBang typ) = TBang (isub i id typ)
   isub i id (TList j typ) = TList (isub i id j) (isub i id typ)
-  isub _ _ tv@(TVar _) = error "unimplemented"
+  isub _ _ (TVar a) = TVar a
   isub i id (TIForall id' typ j e) | id == id' = TIForall id' typ j e
                                    | otherwise = TIForall id' (isub i id typ) (isub i id j) (isub i id e)
 
@@ -125,7 +126,7 @@ tsub sub (TArrow typ1 typ2 i j) = TArrow (tsub sub typ1) (tsub sub typ2) i j
 tsub sub (TBang typ) = TBang (tsub sub typ)
 tsub sub (TList i typ) = TList i (tsub sub typ)
 tsub sub typ@(TVar id) = Map.findWithDefault typ id sub
-tsub sub (TIForall i typ _ _) = error "unimplemented"
+tsub sub (TIForall id typ i j) = TIForall id (tsub sub typ) i j
 
 -- sub1 `compose` sub2 composes the type substitutions sub1 and sub2
 -- according to sub2 ∘ sub1 = sub1 U (sub1 sub2)

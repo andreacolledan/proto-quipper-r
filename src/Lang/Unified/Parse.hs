@@ -59,16 +59,16 @@ nil = do
 
 -- parse a lowercase identifier as a variable
 variable :: Parser Expr
-variable = do
+variable = try $ do
   name@(first : _) <- m_identifier
   if isLower first
     then return $ EVar name
     else fail "Variable names must start with a lowercase letter"
-  <?> "variable"
+    <?> "variable"
 
 -- parse an uppercase identifier as a constant
 constant :: Parser Expr
-constant = do
+constant = try $ do
   name <- m_identifier
   case name of
     "QInit0" -> return $ EConst QInit0
@@ -81,9 +81,9 @@ constant = do
     "PauliZ" -> return $ EConst PauliZ
     "CNot" -> return $ EConst CNot
     "Toffoli" -> return $ EConst Toffoli
-    "MakeRGate" -> return $ EConst MakeRGate
+    "MakeCRGate" -> return $ EConst MakeCRGate
     _ -> fail $ "Unrecognized constant \"" ++ name ++ "\""
-  <?> "constant"
+    <?> "constant"
 
 -- parse "\x :: t . e" as the (EAbs x t e)
 lambda :: Parser Expr
@@ -133,12 +133,13 @@ force = do
 -- parse "let (x,y) = e1 in e2" as (EDest x y e1 e2)
 dest :: Parser Expr
 dest = do
-  m_reserved "let"
-  (x, y) <- m_parens $ do
-    x <- m_identifier
-    _ <- m_comma
-    y <- m_identifier
-    return (x, y)
+  (x, y) <- try $ do
+    m_reserved "let"
+    m_parens $ do
+      x <- m_identifier
+      _ <- m_comma
+      y <- m_identifier
+      return (x, y)
   m_reservedOp "="
   e1 <- parseExpr
   m_reserved "in"
@@ -149,8 +150,9 @@ dest = do
 -- parse "let x = e1 in e2" as (ELet x e1 e2)
 letIn :: Parser Expr
 letIn = do
-  m_reserved "let"
-  x <- m_identifier
+  x <- try $ do
+    m_reserved "let"
+    m_identifier
   m_reservedOp "="
   e1 <- parseExpr
   m_reserved "in"
@@ -236,21 +238,21 @@ parseExpr = let
     [Postfix annOp, Postfix iappOp]
     ]
   simpleExpr 
-    = try unitValue
-    <|> try nil
-    <|> try tuple
+    = unitValue
+    <|> nil
+    <|> tuple
     <|> list
     <|> lambda
     <|> try iabs
-    <|> try lift
-    <|> try dest
-    <|> try letIn
-    <|> try box
-    <|> try force
-    <|> try apply
-    <|> try fold
-    <|> try constant
-    <|> try variable
+    <|> lift
+    <|> dest
+    <|> letIn
+    <|> box
+    <|> force
+    <|> apply
+    <|> fold
+    <|> constant
+    <|> variable
     <|> m_parens parseExpr
     <?> "simple expression"
   in buildExpressionParser operatorTable simpleExpr <?> "expression"

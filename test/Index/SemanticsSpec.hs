@@ -96,8 +96,7 @@ spec = do
       -- ∀j.max[i<j] 10 - max(i,10-i) <= j
       let j = IndexVariable "j"
       checkLeq i j `shouldBe` True
-
--- ∀k.max[j<k] (j + max[i<j] 10 - max(i,10-i) <= 2*k)
--- let e = Maximum "j" (IndexVariable "k") (Plus (IndexVariable "j") i)
--- let j = Mult (Number 2) (IndexVariable "k")
--- checkLeq e j `shouldBe` True
+      -- ∀k.max[j<k] (j + max[i<j] 10 - max(i,10-i) <= 2*k)
+      let e = Maximum "j" (IndexVariable "k") (Plus (IndexVariable "j") i)
+      let j = Mult (Number 2) (IndexVariable "k")
+      checkLeq e j `shouldBe` True
