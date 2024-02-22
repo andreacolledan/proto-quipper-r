@@ -34,4 +34,4 @@ let qft = @i.\qs :: List[i] Qubit.
   fold(qftStep, [], qs)
 in
 
-qft @4 [apply(QInit0,()),apply(QInit0,()),apply(QInit0,()),apply(QInit0,())]
+qft

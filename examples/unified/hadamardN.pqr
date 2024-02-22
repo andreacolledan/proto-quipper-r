@@ -1,20 +1,8 @@
--- the step function to be used in fold
-let hadamardStep = lift @i . \x :: (List[i] Qubit, Qubit) .
-                        let (qs,q) = x in
-                        let q = apply(Hadamard,q) in
-                        q:qs
-in
-
 -- the function that applies the hadamard gate to a list of qubits
-let hadamardN = @j . \x :: List[j] Qubit . fold(hadamardStep, [], x) in 
+let hadamardN = @i . \x :: List[i] Qubit .
+  let hadamardStep = lift @j . \(qs,q) :: (List[j] Qubit, Qubit).
+    let q = apply(Hadamard,q) in
+    q:qs
+  in fold(hadamardStep, [], x)
+in
 hadamardN
---:: List[j] Qubit ->[j,0] List[j] Qubit 
-
---hadamardN
--- -- expected type : List[j] Qubit ->[j] List[j] Qubit or equivalent
-
--- This fails because we have no index variable instantiation
---let x = apply(QInit,()) in
---let y = apply(QInit,()) in
---hadamardN [x,y]
-

@@ -1,0 +1,26 @@
+{-
+  Basic quantum arithmetic operations.
+  from Vlatko Vedral, Adriano Barenco and Artur Ekert. Quantum Networks for Elementary Arithmetic Operations. Physical Review A, 54(2):147-153, 1996.
+  This implementation of quantum arithmetic is by no means state-of-the-art, but it employs ancillary qubits
+  to perform the operations, so its analysis is interesting.
+-}
+
+-- short-hands
+let not = lift \a :: Qubit. apply(PauliX, a) in
+let cnot = lift \a :: Qubit.\b :: Qubit. apply(CNot, (a,b)) in
+let toffoli = lift \a :: Qubit.\b :: Qubit.\c :: Qubit. apply(Toffoli, (a,b,c)) in
+
+let carry = lift \(c, a, b, cnext) :: (Qubit, Qubit, Qubit, Qubit).
+  let (a, b, cnext) = (force toffoli) a b cnext in
+  let (a,b) = (force cnot) a b in
+  let (c, b, cnext) = (force toffoli) c b cnext in
+  (c, a, b, cnext)
+in
+
+let sum = lift \(c, a, b) :: (Qubit, Qubit, Qubit).
+  let (a,b) = (force cnot) a b in
+  let (c, b) = (force cnot) c b in
+  (c, a, b)
+in
+
+sum
