@@ -66,9 +66,15 @@ spec = do
       parse parseProgram "" "f x:y:[]" `shouldBe` Right (ECons (EApp (EVar "f") (EVar "x")) (ECons (EVar "y") ENil))
     it "annotation has precedence over abstraction" $ do
       parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () -o[1,0] Qubit" `shouldBe` Right (EAbs "x" TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
-    it "annotation has precedence over application" $ do
-      parse parseProgram "" "f x :: ()" `shouldBe` Right (EApp (EVar "f") (EAnno (EVar "x") TUnit))
+    it "annotation has precedence over let" $ do
+      parse parseProgram "" "let x = () in x :: ()" `shouldBe` Right (ELet "x" EUnit (EAnno (EVar "x") TUnit))
+    it "application has precedence over annotation" $ do
+      parse parseProgram "" "f x :: ()" `shouldBe` Right (EAnno (EApp (EVar "f") (EVar "x")) TUnit)
+    it "cons has precedence over annotation" $ do
+      parse parseProgram "" "x:y:[] :: List[3] Qubit" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") ENil) `EAnno` TList (Number 3) (TWire Qubit))
     it "index application has precedence over index abstraction" $ do
-      parse parseProgram "" "@i . e @ i" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "i")))
-    it "index application has precedence over regular application" $ do
-      parse parseProgram "" "f x @i y" `shouldBe` Right (EApp (EApp (EVar "f") (EIApp (EVar "x") (IndexVariable "i"))) (EVar "y"))
+      parse parseProgram "" "@i . e @ j" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "j")))
+    it "application has precedence over index application" $ do
+      parse parseProgram "" "(f x @i) y" `shouldBe` Right (EApp (EIApp (EApp (EVar "f") (EVar "x")) (IndexVariable "i")) (EVar "y"))
+    it "cons has precedence over index application" $ do
+      parse parseProgram "" "x:y:xs @i" `shouldBe` Right (EIApp (ECons (EVar "x") (ECons (EVar "y") (EVar "xs"))) (IndexVariable "i"))

@@ -40,6 +40,10 @@ embedConstraint :: IRel -> String
 embedConstraint Eq = "="
 embedConstraint Leq = "<="
 
+
+-- desugar c desugars bounded maxima into fresh, appropriately constrained variables
+-- it returns a pair (d, c') where d is a string containing the SMTLIB declarations and constraints
+-- and c' is c where each occurrence of a bounded maximum is replaced by the appropriate variable
 desugar :: Constraint -> (String, Constraint)
 desugar (Constraint rel i j) = flip evalState 0 $ do
     (di, i') <- desugar' i
@@ -71,10 +75,13 @@ desugar' (Maximum id i j) = do
   let argMaxName = "_argmax" ++ show count
   (di, i') <- desugar' i
   (dj, j') <- desugar' (isub (IndexVariable argMaxName) id j)
-  let d0 = "(declare-const " ++ maxName ++ " Int)\n"
+  -- the following declarations must occur before the constraints of the sub-terms
+  let d0 = "; the following variables stand for the max value and argmax of " ++ pretty (Maximum id i j) ++ "\n"
+        ++ "(declare-const " ++ maxName ++ " Int)\n"
         ++ "(assert (<= 0 " ++ maxName ++ "))\n"
         ++ "(declare-const " ++ argMaxName ++ " Int)\n"
         ++ "(assert (<= 0 " ++ argMaxName ++ "))\n"
+  -- the following declrations must occur after the constraints of the sub-terms
   let d =  "; the following block ensures that " ++ maxName ++ " = " ++ pretty (Maximum id i j) ++ "\n"
         ++ "(assert (=> (<= " ++ embedIndex i' ++ " 0) (= " ++ maxName ++ " 0)))\n"
         ++ "(assert (=> (> " ++ embedIndex i' ++ " 0) (= " ++ maxName ++ " " ++ embedIndex j' ++ ")))\n"
@@ -83,26 +90,27 @@ desugar' (Maximum id i j) = do
   return (d0 ++ di ++ dj ++ d, IndexVariable maxName)
 
 -- querySMTWithContext theta c queries the CVC5 solver to check if the index constraint
--- c holds for every natural value of the index variables in theta.
--- Returns true if the constraint holds, false otherwise or if the solver throws an error.
+-- c holds for every possible assignment of its free variables
+-- Returns true if the constraint holds, false otherwise
+-- Throws an error if the solver does
 querySMTWithContext :: Constraint -> Bool
 querySMTWithContext c@(Constraint rel i j) = unsafePerformIO $ do
     withFile queryFile WriteMode $ \handle -> do
         hPutStrLn handle $ "; PROVE " ++ pretty c
-        hPutStrLn handle "(set-logic HO_ALL)"
-        hPutStrLn handle "(set-option :fmf-fun true)" --enable recursive functions
-        hPutStrLn handle "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)"
+        hPutStrLn handle "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
+        hPutStrLn handle "(set-option :fmf-fun true)" --enable recursive functions TODO: this might no longer be necessary, check
+        hPutStrLn handle "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
         let (constraints, Constraint _ i' j') = desugar c
         forM_ (ifv i `Set.union` ifv j) $ \id -> do
-            -- for each index variable, initialize an unknown natural variable
+            -- for each free index variable in c, initialize an unknown natural variable:
             hPutStrLn handle $ "(declare-const " ++ id ++ " Int)"
             hPutStrLn handle $ "(assert (<= 0 " ++ id ++ "))"
-        hPutStr handle constraints
-        -- try to find a counterexample to the relation of the two indices
+        hPutStr handle constraints -- dump the constraints that desugar bounded maxima
+        -- try to find a counterexample to c:
         hPutStrLn handle $ "(assert (not (" ++ embedConstraint rel ++ " " ++ embedIndex i' ++ " " ++ embedIndex j' ++ ")))"
         hPutStrLn handle "(check-sat)"
     (ec, out, err) <- readProcessWithExitCode "cvc5" [queryFile, "-q", "--tlimit=5000"] [] --run CVC5 and get its stdout
-    -- append the response to the query file as a comment
+    -- append the response to the query file as a comment:
     withFile queryFile AppendMode $ \handle -> do
         case ec of
             ExitFailure _ -> do

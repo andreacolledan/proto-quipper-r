@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module Lang.Unified.Parse (
   parseProgram
 ) where
@@ -43,7 +44,8 @@ unifiedTokenParser@TokenParser
     brackets = m_brackets,
     reservedOp = m_reservedOp,
     operator = m_operator,
-    whiteSpace = m_whiteSpace
+    whiteSpace = m_whiteSpace,
+    symbol = m_symbol
   } = makeTokenParser unifiedLang
 
 -- parse "()" as EUnit
@@ -91,14 +93,40 @@ constant = try $ do
 -- parse "\x :: t . e" as the (EAbs x t e)
 lambda :: Parser Expr
 lambda = do
-  m_reservedOp "\\"
-  name <- m_identifier
+  name <- try $ do
+    m_reservedOp "\\"
+    m_identifier
   m_reservedOp "::"
   typ <- parseType
   m_reservedOp "."
   e <- parseExpr
   return $ EAbs name typ e
   <?> "abstraction"
+
+lambdaDest :: Parser Expr
+lambdaDest = do
+  try $ do
+    m_reservedOp "\\"
+    m_symbol "("
+  elems <- m_commaSep1 m_identifier
+  m_symbol ")"
+  m_reservedOp "::"
+  typ <- parseType
+  m_reservedOp "."
+  e <- parseExpr
+  let tmpName = "_tmp"
+  case makeDest elems (EVar tmpName) e of
+    Just e -> return $ EAbs tmpName typ e
+    Nothing -> fail "Destructuring lambda must bind at least two variables"
+
+makeDest :: [String] -> Expr -> Expr -> Maybe Expr
+makeDest [x,y] e1 e2 = Just $ EDest x y e1 e2
+makeDest (x:y:rest) e1 e2 = let
+    (last:midelems) = reverse rest -- this is always non-empty
+    tmpName = "_tmp"
+    in Just $ EDest tmpName last e1 (foldl (\binds elem -> EDest tmpName elem (EVar tmpName) binds) (EDest x y (EVar tmpName) e2) midelems)
+makeDest _ _ _ = Nothing
+
 
 -- parse "(e1, e2, ..., en)" as (EPair (EPair ... (EPair e1 e2) ... en)
 -- Sugar: n-tuples are desugared left-associatively into nested pairs
@@ -134,20 +162,23 @@ force = do
   <?> "force"
 
 -- parse "let (x,y) = e1 in e2" as (EDest x y e1 e2)
+-- Sugar: let (x0,x1,...,xn) = e1 in e2 is desugared into let (tmp,xn) = e1 in let (tmp,xn-1) = tmp in ... let (x0,x1) = tmp in e2
 dest :: Parser Expr
 dest = do
-  (x, y) <- try $ do
+  try $ do
     m_reserved "let"
-    m_parens $ do
-      x <- m_identifier
-      _ <- m_comma
-      y <- m_identifier
-      return (x, y)
+    m_symbol "("
+  elems <- m_commaSep1 m_identifier
+  m_symbol ")"
   m_reservedOp "="
   e1 <- parseExpr
   m_reserved "in"
   e2 <- parseExpr
-  return $ EDest x y e1 e2
+  case makeDest elems e1 e2 of
+    Just e -> return e
+    Nothing -> fail "Destructuring let-in must bind at least two variables"
+  
+
   <?> "destructuring let-in"
 
 -- parse "let x = e1 in e2" as (ELet x e1 e2)
@@ -249,12 +280,14 @@ delimitedExpr = unitValue
 parseExpr :: Parser Expr
 parseExpr = let
   operatorTable = [
-    [Postfix annOp, Postfix iappOp],
     [Infix appOp AssocLeft],
-    [Infix consOp AssocRight]
+    [Infix consOp AssocRight],
+    [Postfix iappOp],
+    [Postfix annOp]
     ]
   simpleExpr = delimitedExpr
     <|> lambda
+    <|> lambdaDest
     <|> iabs
     <|> lift
     <|> dest

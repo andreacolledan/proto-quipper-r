@@ -64,10 +64,11 @@
   - [x] Implement instantiation
 
 - [x] Better error messages
+- [ ] Better handling of shadowing
+- [ ] Better unification
   
 ### Parser
 
 - [x] Parsing wire bundles
 - [x] Parsing indices
-- [ ] Parsing Circuits
 - [x] Parsing PQR
