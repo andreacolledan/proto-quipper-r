@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Lang.Unified.Infer
   ( runTypeInference,
     runTypeInferenceWith,
@@ -27,9 +28,26 @@ import Lang.Type.AST
 import Lang.Unified.AST
 import PrettyPrinter
 import Lang.Type.Semantics (simplifyType)
+import Data.List (intercalate)
 
+-- The datatype of bindings (carries the type of a variable and whether it has been used yet)
+data Binding = Binding {getType :: Type, isUsed :: Bool} deriving (Eq, Show)
+
+instance Wide Binding where
+  wireCount binding = if isUsed binding then Number 0 else wireCount (getType binding)
+
+instance Pretty Binding where
+  pretty = pretty . getType
+
+canBeUsed :: Binding -> Bool
+canBeUsed (Binding typ used) = not used || not (isLinear typ)
+
+mustBeUsed :: Binding -> Bool
+mustBeUsed (Binding typ used) = isLinear typ && not used
+
+-- The datatype of typing contexts
 -- Corresponds to Γ in the paper
-type TypingContext = Map.Map VariableId Type
+type TypingContext = Map.Map VariableId [Binding]
 
 emptyctx :: Map.Map a b
 emptyctx = Map.empty
@@ -42,18 +60,24 @@ data TypingEnvironment = TypingEnvironment
     freeVarCounter :: Int -- the counter used to initialize fresh variable names
   }
 
+instance Wide TypingEnvironment where
+  wireCount TypingEnvironment {typingContext = gamma, labelContext = q} = wireCount gamma `Plus` wireCount q
+
 emptyEnv :: TypingEnvironment
 emptyEnv = TypingEnvironment emptyctx emptyctx emptyictx 0
 
-makeEnv :: TypingContext -> LabelContext -> TypingEnvironment
-makeEnv gamma q = TypingEnvironment gamma q emptyictx 0
+makeEnvForall :: [IndexVariableId] -> [(VariableId, Type)] -> [(LabelId, WireType)] -> TypingEnvironment
+makeEnvForall theta gamma q = let gamma' = Map.fromList [(id, [Binding typ False]) | (id, typ) <- gamma]
+  in TypingEnvironment gamma' (Map.fromList q) (Set.fromList theta) 0
 
-makeEnvForall :: IndexContext -> TypingContext -> LabelContext -> TypingEnvironment
-makeEnvForall theta gamma q = TypingEnvironment gamma q theta 0
+makeEnv :: [(VariableId, Type)] -> [(LabelId, WireType)] -> TypingEnvironment
+makeEnv = makeEnvForall []
 
 -- check if a typing environment contains any linear variable.
 envIsLinear :: TypingEnvironment -> Bool
-envIsLinear TypingEnvironment {typingContext = gamma, labelContext = q} = (any isLinear . Map.elems) gamma || Map.size q > 0
+envIsLinear TypingEnvironment {typingContext = gamma, labelContext = q} =
+  let remainingVars = [id | (id,bs) <- Map.toList gamma, any mustBeUsed bs] --remaining linear variables
+  in not (null remainingVars) || not (Map.null q)
 
 --- TYPING ERRORS ---------------------------------------------------------------
 
@@ -79,6 +103,7 @@ data TypingError
   | IndexVariableCapture Expr IndexVariableId Type
   | UnboundIndexVariable Type IndexVariableId
   | ShadowedIndexVariable IndexVariableId
+  | OverusedLinearVariable VariableId
   deriving (Eq)
 
 instance Show TypingError where
@@ -95,7 +120,7 @@ instance Show TypingError where
     "Expected term " ++ pretty m ++ " to have width annotation " ++ pretty i ++ ", got " ++ pretty j ++ " instead"
   show (UnexpectedTypeConstructor exp typ1 typ2) =
     "Expected expression " ++ pretty exp ++ " to have " ++ printConstructor (simplifyType typ1) ++ ", got type " ++ pretty (simplifyType typ2) ++ " instead"
-  show (UnusedLinearResources gamma q) = "Unused linear resources in typing contexts: " ++ pretty gamma ++ " ; " ++ pretty q
+  show (UnusedLinearResources gamma q) = "Unused linear resources in typing contexts: " ++ intercalate ", " (map pretty (join $ Map.elems gamma)) ++ " ; " ++ pretty q
   show (UnexpectedBoxingType m btype1 btype2) =
     "Expected input type of boxed TCircuit " ++ pretty m ++ " to be " ++ pretty btype1 ++ ", got " ++ pretty btype2 ++ " instead"
   show (UnboxableType v typ) = "Cannot box value " ++ pretty v ++ " of type " ++ pretty (simplifyType typ)
@@ -107,6 +132,7 @@ instance Show TypingError where
   show (IndexVariableCapture v id typ) = "Index variable " ++ id ++ " cannot occur in type " ++ pretty (simplifyType typ) ++ " of step function " ++ pretty v
   show (UnboundIndexVariable t id) = "Unbound index variable " ++ id ++ " in type annotation " ++ pretty (simplifyType t)
   show (ShadowedIndexVariable id) = "Shadowed index variable " ++ id
+  show (OverusedLinearVariable id) = "Linear variable " ++ id ++ " is used more than once"
 
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
@@ -128,9 +154,15 @@ printConstructor (TIForall {}) = "forall type"
 typingContextLookup :: VariableId -> StateT TypingEnvironment (Either TypingError) Type
 typingContextLookup id = do
   env@TypingEnvironment {typingContext = gamma} <- get
-  typ <- maybe (throwError $ UnboundVariable id) return (Map.lookup id gamma)
-  when (isLinear typ) $ put env {typingContext = Map.delete id gamma}
-  return typ
+  bindings <- maybe (throwError $ UnboundVariable id) return (Map.lookup id gamma)
+  case bindings of
+    (b:bs) -> if canBeUsed b
+      then do
+        put env {typingContext = Map.insert id (Binding (getType b) True : bs) gamma}
+        return $ getType b
+      else throwError $ OverusedLinearVariable id
+    [] -> error "Internal error: empty binding list"
+      
 
 -- labelContextLookup l looks up label l in the label context and removes it
 -- throws Unbound UnboundLabel if the label is absent
@@ -159,7 +191,7 @@ freshIndexVariableName = do
 substituteInEnvironment :: TypeSubstitution -> StateT TypingEnvironment (Either TypingError) ()
 substituteInEnvironment sub = do
   env@TypingEnvironment {typingContext = gamma} <- get
-  let gamma' = Map.map (tsub sub) gamma
+  let gamma' = Map.map (map (\(Binding t u) -> Binding (tsub sub t) u)) gamma
   put env {typingContext = gamma'}
 
 --TODO: factor these two together
@@ -196,17 +228,18 @@ withBoundVariable x typ der = do
     bindVariable :: VariableId -> Type -> StateT TypingEnvironment (Either TypingError) ()
     bindVariable id typ = do
       env@TypingEnvironment {typingContext = gamma} <- get
-      when (Map.member id gamma) $ throwError $ ShadowedLinearVariable id
-      let gamma' = Map.insert id typ gamma
+      bs <- maybe (return []) return (Map.lookup id gamma)
+      let gamma' = Map.insert id (Binding typ False : bs) gamma
       put env {typingContext = gamma'}
     unbindVariable :: VariableId -> StateT TypingEnvironment (Either TypingError) ()
     unbindVariable id = do
       env@TypingEnvironment {typingContext = gamma} <- get
       case Map.lookup id gamma of
-        Nothing -> return ()
-        Just t -> do
-          when (isLinear t) (throwError $ UnusedLinearVariable id)
-          put env {typingContext = Map.delete id gamma}
+        Nothing -> error "Internal error: tried to unbind non-existing variable"
+        Just [] -> error "Internal error: tried to unbind variable with empty binding list"
+        Just (b:bs) -> do
+          when (mustBeUsed b) (throwError $ UnusedLinearVariable id)
+          put env {typingContext = if null bs then Map.delete id gamma else Map.insert id bs gamma}
 
 -- withWireCount der describes derivation der
 -- in which the result of the computation is paired with an index describing
@@ -219,10 +252,16 @@ withWireCount der = do
   outcome <- der
   TypingEnvironment {typingContext = gamma', labelContext = q'} <- get
   -- count how many linear resources have disappeared from the contexts
-  let gammaDiff = Map.difference gamma gamma'
-  let qDiff = Map.difference q q'
-  let resourceCount = wireCount gammaDiff `Plus` wireCount qDiff
+  let gammaDiff = diffcount gamma gamma'
+  let qDiff = wireCount $ Map.difference q q'
+  let resourceCount = gammaDiff `Plus` qDiff
   return (outcome, simplifyIndex resourceCount)
+  where
+    diffcount :: TypingContext -> TypingContext -> Index
+    diffcount gamma1 gamma2 = wireCount $ Map.elems $ Map.differenceWith (\bs1 bs2 -> case (bs1,bs2) of
+              -- it was an available linear resource in gamma1 and it is a used linear resource in gamma2:
+              (b1:_,b2:_) -> if canBeUsed b1 && not (canBeUsed b2) then Just [b1] else Nothing
+              (_,_) -> error "Internal error: empty binding list") gamma1 gamma2
 
 -- withNonLinearContext der describes a derivation like der which fails
 -- if der consumes any linear resource
@@ -233,10 +272,17 @@ withNonLinearContext der = do
   TypingEnvironment {typingContext = gamma, labelContext = q} <- get
   outcome <- der
   TypingEnvironment {typingContext = gamma', labelContext = q'} <- get
-  let gammaDiff = Map.difference gamma gamma'
-  let qDiff = Map.difference q q'
-  when ((any isLinear . Map.elems) gammaDiff || Map.size qDiff > 0) $ throwError LinearResourcesInLiftedExpression
+  let gammaconsumed = linearconsumed gamma gamma'
+  let qconsumed =  Map.difference q q'
+  unless (Map.null gammaconsumed && Map.null qconsumed) $ throwError LinearResourcesInLiftedExpression
   return outcome
+  where
+    linearconsumed :: TypingContext -> TypingContext -> TypingContext
+    linearconsumed = Map.differenceWith (\bs1 bs2 -> case (bs1,bs2) of
+      -- it was an available linear resource in gamma1 and it is a used linear resource in gamma2:
+      (b1:_,b2:_) -> if mustBeUsed b1 && not (canBeUsed b2) then Just [b1] else Nothing
+      (_,_) -> error "Internal error: empty binding list")
+
 
 -- tryUnify t1 t2 error runs mgtu t1 t2 in a type inference (stateful) setting
 -- If gmtu returns Nothing, it throws error

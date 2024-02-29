@@ -116,7 +116,7 @@ querySMTWithContext c@(Constraint rel i j) = unsafePerformIO $ do
             ExitFailure _ -> do
                 -- the solver threw an error
                 hPutStrLn handle $ "; Error thrown: " ++ show out
-                error $ "CVC5 error: " ++ show err
+                error $ "CVC5 error: " ++ show out ++ " while solving " ++ pretty c
             ExitSuccess -> if "unsat" `isPrefixOf` out then do
                     -- cannot find a counterexample ==> the constraint is valid
                     hPutStrLn handle "; founds unsat (valid)"
@@ -128,7 +128,7 @@ querySMTWithContext c@(Constraint rel i j) = unsafePerformIO $ do
                 else do
                     -- any other response is considered an error
                     hPutStrLn handle $ "; got response: " ++ out
-                    error $ "CVC5 unknown response: " ++ out
+                    error $ "CVC5 unknown response: " ++ out ++ " while solving " ++ pretty c
     where
         -- query files are stored in the queries/ subdirectory
         queryFile :: FilePath

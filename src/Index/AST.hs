@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 module Index.AST(
     Index(..),
     IndexVariableId,
@@ -71,7 +72,14 @@ instance HasIndex Index where
     isub i id (Max j k) = Max (isub i id j) (isub i id k)
     isub i id (Mult j k) = Mult (isub i id j) (isub i id k)
     isub i id (Minus j k) = Minus (isub i id j) (isub i id k)
-    isub i id (Maximum id' j k) = let j' = isub i id j in if id == id' then Maximum id' j' k else Maximum id' j' (isub i id k)
+    isub i id (Maximum id' j k) = let id'' = fresh id' (ifv i `Set.union` ifv k) in
+      Maximum id'' (isub i id j) (isub i id . isub (IndexVariable id'') id' $ k)
+      --let j' = isub i id j in if id == id' then Maximum id' j' k else Maximum id' j' (isub i id k)
+
+-- fresh id ids checks if id occurs in set ids.
+-- If it does not, id is returned, otherwise, a fresh variable name not in ids is returned.
+fresh :: IndexVariableId -> Set IndexVariableId -> IndexVariableId
+fresh id ids = head $ filter (`Set.notMember` ids) $ id : [id ++ show n | n <- [0..]]
 
 -- Natural lifting of well-formedness to traversable data structures
 instance (Traversable t, HasIndex a) => HasIndex (t a) where
