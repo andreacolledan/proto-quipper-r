@@ -18,6 +18,7 @@ simplify (Right (t, i)) = Right (simplifyType t, simplifyIndex i)
 spec :: Spec
 spec = do
   describe "type inference on values" $ do
+  -- Tests for the type inference of terms that do not produce any side-effect
     context "when typing the unit value" $ do
       it "produces the unit type if the context is empty" $ do
         -- ∅;∅;∅ ⊢ () ==> () ; 0
@@ -68,32 +69,29 @@ spec = do
         let gamma = [("x", TWire Qubit), ("y", TWire Qubit)]
         runTypeInferenceWith (makeEnv gamma []) (EVar "y") `shouldSatisfy` isLeft
     context "when typing pairs" $ do
-      context "when the subexpressions are values" $ do
-        it "produces the correct tensor type and the sum of the wirecounts of the elements" $ do
-          -- ∅;∅;∅ ⊢ ((),()) ==> ((),()) ; 0
-          let expr = EPair EUnit EUnit
-          let expected = (TPair TUnit TUnit, Number 0)
-          simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
-          -- ∅;x:Qubit,y:Bit;∅ ⊢ (x,y) ==> (Qubit,Bit) ; 2
-          let gamma = [("x", TWire Qubit), ("y", TWire Bit)]
-          let expr = EPair (EVar "x") (EVar "y")
-          let expected = (TPair (TWire Qubit) (TWire Bit), Number 2)
-          simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
-          -- ∅;x:Qubit,y:Bit,z:Qubit;∅ ⊢ (x,(y,z)) ==> (Qubit,(Bit,Qubit)) ; 3
-          let gamma = [("x", TWire Qubit), ("y", TWire Bit), ("z", TWire Qubit)]
-          let expr = EPair (EVar "x") (EPair (EVar "y") (EVar "z"))
-          let expected = (TPair (TWire Qubit) (TPair (TWire Bit) (TWire Qubit)), Number 3)
-          simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+      it "produces the correct tensor type and the sum of the wirecounts of the elements" $ do
+        -- ∅;∅;∅ ⊢ ((),()) ==> ((),()) ; 0
+        let expr = EPair EUnit EUnit
+        let expected = (TPair TUnit TUnit, Number 0)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
+        -- ∅;x:Qubit,y:Bit;∅ ⊢ (x,y) ==> (Qubit,Bit) ; 2
+        let gamma = [("x", TWire Qubit), ("y", TWire Bit)]
+        let expr = EPair (EVar "x") (EVar "y")
+        let expected = (TPair (TWire Qubit) (TWire Bit), Number 2)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+        -- ∅;x:Qubit,y:Bit,z:Qubit;∅ ⊢ (x,(y,z)) ==> (Qubit,(Bit,Qubit)) ; 3
+        let gamma = [("x", TWire Qubit), ("y", TWire Bit), ("z", TWire Qubit)]
+        let expr = EPair (EVar "x") (EPair (EVar "y") (EVar "z"))
+        let expected = (TPair (TWire Qubit) (TPair (TWire Bit) (TWire Qubit)), Number 3)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
     context "when typing the empty list" $ do
       it "produces an empty list type and wirecount zero if the context is empty" $ do
-        -- ∅;∅;∅ ⊢ [] ==> List[0] a0 ; 0
-        -- Note: type variables only appear internally for the empty list,
-        -- they are not visible to the programmer
-        runTypeInferenceWith emptyEnv ENil `shouldBe` Right (TList (Number 0) (TVar "a0"), Number 0)
+        -- ∅;∅;∅ ⊢ [] ==> List[0] () ; 0
+        runTypeInferenceWith emptyEnv ENil `shouldBe` Right (TList (Number 0) TUnit, Number 0)
       it "produces an empty list type and wirecount zero if the context is non-linear" $ do
         -- ∅;x:();∅ ⊢ [] ==> List[0] a0 ; 0
         let gamma = [("x", TUnit)]
-        runTypeInferenceWith (makeEnv gamma []) ENil `shouldBe` Right (TList (Number 0) (TVar "a0"), Number 0)
+        runTypeInferenceWith (makeEnv gamma []) ENil `shouldBe` Right (TList (Number 0) TUnit, Number 0)
       it "fails when there are linear resources in the environment" $ do
         -- ∅;x:Qubit;∅ ⊢ [] =/=> 
         let gamma = [("x", TWire Qubit)]
@@ -219,16 +217,9 @@ spec = do
         -- ∅;∅;∅ ⊢ @i . (@i . ()) @i =/=>
         let expr = EIAbs "i" (EIApp (EIAbs "i" EUnit) (IndexVariable "i"))
         runTypeInferenceWith emptyEnv expr `shouldSatisfy` isLeft
-    context "when typing index application" $ do
-      it "produces the instantiated type of body expression and its wirecount" $ do
-        -- ∅;∅;∅ ⊢ (@i . \x :: List[i] Qubit . x) @100 ==> List[100] Qubit -o[100,0] List[100] Qubit ; 0
-        let expr = EIApp (EIAbs "i" (EAbs "x" (TList (IndexVariable "i") (TWire Qubit)) (EVar "x"))) (Number 100)
-        let expected = (TArrow (TList (Number 100) (TWire Qubit)) (TList (Number 100) (TWire Qubit)) (Number 100) (Number 0), Number 0)
-        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
-    context "when typing fold" $ do
-      it "works :)" $ do
-        pending -- TODO
   describe "type inference on effectful expressions" $ do
+  -- Tests for the type inference of terms that produce side-effects
+  -- Either by nature or because some sub-terms are effectful
     context "when typing pairs" $ do
       it "produces the correct tensor type and upper bound when the first element computes" $ do
         -- ∅;f:Qubit ->[2,0] Bit,x:Qubit,y:Bit;∅ ⊢ (f x, y) ==> (Bit,Bit) ; 3
@@ -248,10 +239,190 @@ spec = do
         let expr = EPair (EVar "x") (EApp (EVar "g") (EVar "y"))
         let expected = (TPair (TWire Qubit) (TWire Bit), Number 3)
         simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
-  describe "type checking (annotated terms)" $ do
-    it "should work" $ do
-      pending -- TODO
-  describe "subsumption" $ do
+    context "when typing cons" $ do
+      it "produces the correct list type and upper bound when the head computes" $ do
+        -- ∅;f:Qubit ->[2,0] Bit,x:Qubit,y:List[3] Bit;∅ ⊢ f x:y ==> List[4] Bit ; 5
+        -- while f x builds something of width 2, y of width 3 flows alongside: width is 5
+        let gamma = [
+              ("f", TArrow (TWire Qubit) (TWire Bit) (Number 2) (Number 0)),
+              ("x", TWire Qubit), ("y", TList (Number 3) (TWire Bit))]
+        let expr = ECons (EApp (EVar "f") (EVar "x")) (EVar "y")
+        let expected = (TList (Number 4) (TWire Bit), Number 5)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+      it "produces the correct list type and upper bound when the tail computes" $ do
+        -- ∅;x:Qubit,y:Qubit,g:Qubit ->[7,0] List[2] Qubit ⊢ x:g y ==> List[3] Qubit ; 8
+        -- while g y builds something of width 7, x of width 1 flows alongside: width is 8
+        let gamma = [
+              ("x", TWire Qubit), ("y", TWire Qubit),
+              ("g", TArrow (TWire Qubit) (TList (Number 2) (TWire Qubit)) (Number 7) (Number 0))]
+        let expr = ECons (EVar "x") (EApp (EVar "g") (EVar "y"))
+        let expected = (TList (Number 3) (TWire Qubit), Number 8)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+    context "when typing application" $ do
+      it "produces the correct type and upper bound when both function and argument are values" $ do
+        -- ∅;∅;l:Qubit ⊢ (\x::Qubit.x) l ==> Qubit ; 1
+        let q = [("l", Qubit)]
+        let expr = EApp (EAbs "x" (TWire Qubit) (EVar "x")) (ELabel "l")
+        simplify (runTypeInferenceWith (makeEnv [] q) expr) `shouldBe` Right (TWire Qubit, Number 1)
+      it "produces the correct type and wirecount when the applied term computes" $ do
+        -- ∅;f:Qubit ->[2,0] Qubit ->[3,1] Bit, x:Qubit, y:Qubit;∅ ⊢ (f x) y ==> Bit ; 3
+        -- while f x builds something of width 2, y of width 1 flows alongside: width is 3
+        let gamma = [
+              ("f", TArrow (TWire Qubit) (TArrow (TWire Qubit) (TWire Bit) (Number 3) (Number 1)) (Number 2) (Number 0)),
+              ("x", TWire Qubit), ("y", TWire Qubit)]
+        let expr = EApp (EApp (EVar "f") (EVar "x")) (EVar "y")
+        let expected = (TWire Bit, Number 3)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+      it "produces the correct type and wirecount when the argument computes" $ do
+        -- ∅;f:Qubit ->[2,0] Bit, g : Qubit ->[3,1] Qubit, x:Qubit;∅ ⊢ f (g x) => Bit ; 3
+        -- while g x builds something of width 3, f of width 0 flows alongside: width is 3
+        let gamma = [
+              ("f", TArrow (TWire Qubit) (TWire Bit) (Number 2) (Number 0)),
+              ("g", TArrow (TWire Qubit) (TWire Qubit) (Number 3) (Number 1)),
+              ("x", TWire Qubit)]
+        let expr = EApp (EVar "f") (EApp (EVar "g") (EVar "x"))
+        let expected = (TWire Bit, Number 3)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+      it "produces the correct type and wirecount when both function and argument compute" $ do
+        -- ∅;f:!(Qubit ->[2,0] Bit), g : Qubit ->[3,1] Qubit, x:Qubit;∅ ⊢ (force f) (g x) => Bit ; 3
+        -- while g x builds something of width 3, f of width 0 flows alongside: width is 3
+        let gamma = [
+              ("f", TBang (TArrow (TWire Qubit) (TWire Bit) (Number 2) (Number 0))),
+              ("g", TArrow (TWire Qubit) (TWire Qubit) (Number 3) (Number 1)),
+              ("x", TWire Qubit)]
+        let expr = EApp (EForce (EVar "f")) (EApp (EVar "g") (EVar "x"))
+        let expected = (TWire Bit, Number 3)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+      it "succeeds if the argument is of a subtype of the formal paramete" $ do
+        -- ∅;c:Circ[1](Qubit,Qubit);∅ ⊢ (\x::Circ[2](Qubit,Qubit).x) c ==> Circ[2](Qubit,Qubit) ; 0
+        let gamma = [("c", TCirc (Number 1) (BTWire Qubit) (BTWire Qubit))]
+        let expr = EApp (EAbs "x" (TCirc (Number 2) (BTWire Qubit) (BTWire Qubit)) (EVar "x")) (EVar "c")
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right (TCirc (Number 2) (BTWire Qubit) (BTWire Qubit), Number 0)
+      it "fails if the function is not a function type" $ do
+        -- ∅;∅;l:Qubit ⊢ l (\x::Qubit.x) =/=>
+        let q = [("l", Qubit)]
+        let expr = EApp (ELabel "l") (EAbs "x" (TWire Qubit) (EVar "x"))
+        runTypeInferenceWith (makeEnv [] q) expr `shouldSatisfy` isLeft
+      it "fails if the argument is not of the expected type" $ do
+        -- ∅;∅;l:Qubit ⊢ (\x::Bit.x) l =/=>
+        let q = [("l", Qubit)]
+        let expr = EApp (EAbs "x" (TWire Bit) (EVar "x")) (ELabel "l")
+        runTypeInferenceWith (makeEnv [] q) expr `shouldSatisfy` isLeft
+    context "when typing apply" $ do
+      it "produces the correct type and wirecount when both function and argument are values" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the applied circuit term computes" $ do
+        pending -- TODO 
+      it "produces the correct type and wirecount when the circuit application argument computes" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when both circuit term and argument compute" $ do
+        pending -- TODO
+      it "fails if the applied term is not a circuit term" $ do
+        pending -- TODO
+      it "fails if the argument is not of the expected bundle type" $ do
+        pending -- TODO
+    context "when typing box" $ do
+      it "produces the correct type and wirecount when the argument is a value" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the argument computes" $ do
+        pending -- TODO
+      it "fails if the argument is not a duplicable function" $ do
+        pending -- TODO
+      it "fails if the argument is not a circuit building function" $ do
+        pending -- TODO
+    context "when typing index application" $ do
+      it "produces the instantiated type of body expression and its wirecount" $ do
+        -- ∅;∅;∅ ⊢ (@i . \x :: List[i] Qubit . x) @100 ==> List[100] Qubit -o[100,0] List[100] Qubit ; 0
+        let expr = EIApp (EIAbs "i" (EAbs "x" (TList (IndexVariable "i") (TWire Qubit)) (EVar "x"))) (Number 100)
+        let expected = (TArrow (TList (Number 100) (TWire Qubit)) (TList (Number 100) (TWire Qubit)) (Number 100) (Number 0), Number 0)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
+    context "when typing let-in" $ do
+      it "produces the right type and wirecount when both the bound expression and the body are values" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when the bound expression computes" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when the body computes" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when both the bound expression and the body compute" $ do
+        pending -- TODO
+    context "when typing the destructuring let-in" $ do
+      it "produces the right type and wirecount when both the bound expression and the body are values" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when the bound expression computes" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when the body computes" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when both the bound expression and the body compute" $ do
+        pending -- TODO
+    context "when typing force" $ do
+      it "produces the right type and wirecount when the argument is a value" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when the argument computes" $ do
+        pending -- TODO
+    context "when typing fold" $ do
+      it "produces the right type and wirecount when all the arguments are values" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when the step function computes" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when the starting accumulator computes" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when the argument list computes" $ do
+        pending -- TODO
+      it "produces the right type and wirecount when all the arguments compute" $ do
+        pending -- TODO
+      -- We do not test other combinations of computing arguments so far
+  describe "domination tests" $ do
+  -- Testing by cases on which evaluation step consumes more resources than the others
+  -- E.g. for application M N, three tests in which: M dominates the cost, N dominates, the result of the application dominates
+    context "when typing pairs" $ do
+      it "produces the correct type and wirecount when the first element dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the second element dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the result dominates" $ do
+        pending -- TODO
+    context "when typing cons" $ do
+      it "produces the correct type and wirecount when the head dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the tail dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the result dominates" $ do
+        pending -- TODO
+    context "when typing application" $ do
+      it "produces the correct type and wirecount when the function dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the argument dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the result dominates" $ do
+        pending -- TODO
+    context "when typing apply" $ do
+      it "produces the correct type and wirecount when the circuit term dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the argument dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the result dominates" $ do
+        pending -- TODO
+    context "when typing fold" $ do
+      it "produces the correct type and wirecount when the step function dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the starting accumulator dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the argument list dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the result dominates" $ do
+        pending -- TODO
+    context "when typing let-in" $ do
+      it "produces the correct type and wirecount when the bound expression dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the body dominates" $ do
+        pending -- TODO
+    context "when typing the destructuring let-in" $ do
+      it "produces the correct type and wirecount when the bound expression dominates" $ do
+        pending -- TODO
+      it "produces the correct type and wirecount when the body dominates" $ do
+        pending -- TODO
+  describe "Checking and subsumption" $ do
+  -- Testing the subtyping relation and the annotation construct
     it "should work" $ do
       pending -- TODO
 

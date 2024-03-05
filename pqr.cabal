@@ -1,4 +1,4 @@
-cabal-version: 2.2
+cabal-version: 1.12
 
 -- This file has been generated from package.yaml by hpack version 0.36.0.
 --
@@ -12,7 +12,7 @@ bug-reports:    https://github.com/andcol/proto-quipper-r/issues
 author:         Andrea Colledan
 maintainer:     andrea.colledan@unibo.it
 copyright:      2024 Andrea Colledan
-license:        BSD-3-Clause
+license:        MIT
 license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
@@ -45,8 +45,6 @@ library
       Solving.CVC5
   other-modules:
       Paths_pqr
-  autogen-modules:
-      Paths_pqr
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing
@@ -66,8 +64,6 @@ library
 executable pqr
   main-is: Main.hs
   other-modules:
-      Paths_pqr
-  autogen-modules:
       Paths_pqr
   hs-source-dirs:
       app
@@ -98,10 +94,9 @@ test-suite pqr-test
       Lang.Paper.ASTSpec
       Lang.Paper.InferSpec
       Lang.Paper.ParseSpec
+      Lang.Type.SemanticsSpec
       Lang.Unified.InferSpec
       Lang.Unified.ParseSpec
-      Paths_pqr
-  autogen-modules:
       Paths_pqr
   hs-source-dirs:
       test

@@ -177,9 +177,22 @@ dest = do
   case makeDest elems e1 e2 of
     Just e -> return e
     Nothing -> fail "Destructuring let-in must bind at least two variables"
-  
-
   <?> "destructuring let-in"
+
+-- parse "let x:y = e1 in e2" as (ELetCons x y e1 e2)
+letcons :: Parser Expr
+letcons = do
+  x <- try $ do
+    m_reserved "let"
+    x <- m_identifier
+    m_reservedOp ":"
+    return x
+  y <- m_identifier
+  m_reservedOp "="
+  e1 <- parseExpr
+  m_reserved "in"
+  e2 <- parseExpr
+  return $ ELetCons x y e1 e2
 
 -- parse "let x = e1 in e2" as (ELet x e1 e2)
 letIn :: Parser Expr
@@ -291,6 +304,7 @@ parseExpr = let
     <|> iabs
     <|> lift
     <|> dest
+    <|> letcons
     <|> letIn
     <|> box
     <|> force

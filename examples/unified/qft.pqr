@@ -10,7 +10,7 @@ in
 let rotate = @n. lift @m.\arg :: (Qubit, List[m] Qubit, Qubit).
     let (qcs, c) = arg in
     let (q, cs) = qcs in
-    let rotation = (force MakeCRGate) @(n+1-m) in 
+    let rotation = MakeCRGate @(n+1-m) in 
     let qc = apply(rotation, (q,c)) in
     let (q, c) = qc in
     (q, c:cs)

@@ -32,7 +32,7 @@ data WireTypingError
 
 instance Show WireTypingError where
   show (UnboundLabel id) = "Unbound label " ++ show id
-  show (BundleTypeMismatch b btype1 btype2) = "Expected bundle " ++ pretty b ++ " to have type " ++ pretty btype1 ++ ", got" ++ pretty btype2 ++ " instead"
+  show (BundleTypeMismatch b btype1 btype2) = "Expected bundle " ++ pretty b ++ " to have type " ++ pretty btype1 ++ ", got " ++ pretty btype2 ++ " instead"
   show (ContextSynthesisMismatch b btype) = "Cannot match structure of bundle " ++ pretty b ++ " and bundle type " ++ pretty btype ++ " to produce a label context"
   show (UnusedLabels q) = "Unused labels in label context: " ++ pretty q
   show (UnexpectedBundleTypeContstructor b btype1 btype2) = "Expected bundle " ++ pretty b ++ " to have type " ++ printConstructor btype1 ++ ", got type " ++ pretty btype2 ++ " instead"
@@ -77,25 +77,24 @@ labelContextLookup id = do
 -- Q ⊢ l => T (Fig. 10)
 -- inferBundleType b describes the type inference computation on b.
 -- If succesful, it returns the type of b together with the substitution accumulated during inference
-inferBundleType :: Bundle -> StateT InferenceEnv (Either WireTypingError) (BundleType, BundleTypeSubstitution)
-inferBundleType UnitValue = return (BTUnit, Map.empty)
+inferBundleType :: Bundle -> StateT InferenceEnv (Either WireTypingError) BundleType
+inferBundleType UnitValue = return BTUnit
 inferBundleType (Label id) = do
   btype <- labelContextLookup id
-  return (BTWire btype, Map.empty)
+  return (BTWire btype)
 inferBundleType (Pair b1 b2) = do
-  (btype1, sub1) <- inferBundleType b1
-  (btype2, sub2) <- inferBundleType b2
-  return (BTPair btype1 btype2, compose sub1 sub2)
-inferBundleType Nil = do
-  a <- freshBTVarName
-  return (BTList (Number 0) (BTVar a), Map.empty)
+  btype1 <- inferBundleType b1
+  btype2 <- inferBundleType b2
+  return (BTPair btype1 btype2)
+inferBundleType Nil =
+  return (BTList (Number 0) BTUnit)
 inferBundleType b@(Cons b1 b2) = do
-  (btype1, sub1) <- inferBundleType b1
-  (btype2, sub2) <- inferBundleType b2
+  btype1 <- inferBundleType b1
+  btype2 <- inferBundleType b2
   case btype2 of
     BTList i btype1' -> do
-      sub3 <- tryUnify (btsub sub1 btype1') (btsub sub2 btype1) $ BundleTypeMismatch b (BTList i btype1) btype2
-      return (BTList (Plus i (Number 1)) (btsub sub3 btype1), sub3 `compose` sub2 `compose` sub1)
+      unless (isBundleSubtype (BTList i btype1') (BTList i btype1)) $ throwError $ BundleTypeMismatch b (BTList i btype1) (BTList i btype1')
+      return (BTList (Plus i (Number 1)) btype1)
     _ -> throwError $ UnexpectedBundleTypeContstructor (Cons b1 b2) btype2 (BTList (Number 0) BTUnit)
 
 -- Q <== l : T
@@ -118,7 +117,7 @@ synthesizeLabelContext b btype = throwError $ ContextSynthesisMismatch b btype
 -- Used in boxed circuit inference
 runBundleTypeInferenceWithRemaining :: LabelContext -> Bundle -> Either WireTypingError (BundleType, LabelContext)
 runBundleTypeInferenceWithRemaining context bundle = do
-  ((t, _), InferenceEnv {labelContext = remaining}) <- runStateT (inferBundleType bundle) (InferenceEnv context 0)
+  (t, InferenceEnv {labelContext = remaining}) <- runStateT (inferBundleType bundle) (InferenceEnv context 0)
   return (t, remaining)
 
 -- run the top-level type inference, if successful return the type
@@ -134,12 +133,10 @@ runBundleTypeInference context bundle = case runBundleTypeInferenceWithRemaining
 -- Used in circuit signature inference
 runBundleTypeCheckingWithRemaining :: LabelContext -> Bundle -> BundleType -> Either WireTypingError LabelContext
 runBundleTypeCheckingWithRemaining context bundle expected = do
-  ((t, _), InferenceEnv {labelContext = remaining}) <- runStateT (inferBundleType bundle) (InferenceEnv context 0)
-  case mgbtu t expected of
-    Just sub -> do
-      unless (isBundleSubtype (btsub sub t) expected) $ throwError $ BundleTypeMismatch bundle expected t
-      return remaining
-    Nothing -> throwError $ BundleTypeMismatch bundle expected t
+  (t, InferenceEnv {labelContext = remaining}) <- runStateT (inferBundleType bundle) (InferenceEnv context 0)
+  if isBundleSubtype t expected
+    then return remaining
+    else throwError $ BundleTypeMismatch bundle expected t
 
 -- run the top-level type checking
 -- This fails if there are unused labels in the context

@@ -41,11 +41,11 @@ instance Pretty WireType where
 
 -- Wire Bundle Syntax (Fig. 9)
 data Bundle
-  = UnitValue           -- ()
-  | Label LabelId       -- l,k,...
-  | Pair Bundle Bundle  -- (b1, b2)
-  | Nil                 -- []
-  | Cons Bundle Bundle  -- b1:b2
+  = UnitValue                   -- Unit value       : ()
+  | Label LabelId               -- Label            : l, k, t, ...
+  | Pair Bundle Bundle          -- Pair             : (b1, b2)
+  | Nil                         -- Empty list       : []
+  | Cons Bundle Bundle          -- Cons             : b1:b2
   deriving (Eq, Show)
 
 instance Pretty Bundle where
@@ -71,11 +71,11 @@ data BundleType
   deriving (Eq, Show)
 
 instance Pretty BundleType where
-  pretty BTUnit = "Unit"
+  pretty BTUnit = "()"
   pretty (BTWire Bit) = "Bit"
   pretty (BTWire Qubit) = "Qubit"
-  pretty (BTPair b1 b2) = "(" ++ pretty b1 ++ " ⊗ " ++ pretty b2 ++ ")"
-  pretty (BTList i b) = "BTList[" ++ pretty i ++ "]" ++ pretty b
+  pretty (BTPair b1 b2) = "(" ++ pretty b1 ++ ", " ++ pretty b2 ++ ")"
+  pretty (BTList i b) = "List[" ++ pretty i ++ "] " ++ pretty b
   pretty (BTVar id) = id
 
 -- Bundle types are index-bearing syntactical objects
@@ -172,6 +172,6 @@ instance (Traversable t, Wide a) => Wide (t a) where
 isBundleSubtype :: BundleType -> BundleType -> Bool
 isBundleSubtype BTUnit BTUnit = True
 isBundleSubtype (BTWire wtype1) (BTWire wtype2) = wtype1 == wtype2
-isBundleSubtype (BTPair b1 b2) (BTPair b1' b2') = isBundleSubtype b1' b1 && isBundleSubtype b2' b2
-isBundleSubtype (BTList i b) (BTList i' b') = checkEq i i' && isBundleSubtype b' b
+isBundleSubtype (BTPair b1 b2) (BTPair b1' b2') = isBundleSubtype b1 b1' && isBundleSubtype b2 b2'
+isBundleSubtype (BTList i b) (BTList i' b') = checkEq i i' && (checkEq i (Number 0) || isBundleSubtype b' b) --TODO remove zero check
 isBundleSubtype _ _ = False

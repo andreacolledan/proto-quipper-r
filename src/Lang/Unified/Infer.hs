@@ -27,7 +27,7 @@ import Index.Semantics
 import Lang.Type.AST
 import Lang.Unified.AST
 import PrettyPrinter
-import Lang.Type.Semantics (simplifyType)
+import Lang.Type.Semantics (simplifyType, checkSubtype)
 import Data.List (intercalate)
 
 -- The datatype of bindings (carries the type of a variable and whether it has been used yet)
@@ -104,6 +104,7 @@ data TypingError
   | UnboundIndexVariable Type IndexVariableId
   | ShadowedIndexVariable IndexVariableId
   | OverusedLinearVariable VariableId
+  | UnexpectedEmptyList Expr Type
   deriving (Eq)
 
 instance Show TypingError where
@@ -133,6 +134,7 @@ instance Show TypingError where
   show (UnboundIndexVariable t id) = "Unbound index variable " ++ id ++ " in type annotation " ++ pretty (simplifyType t)
   show (ShadowedIndexVariable id) = "Shadowed index variable " ++ id
   show (OverusedLinearVariable id) = "Linear variable " ++ id ++ " is used more than once"
+  show (UnexpectedEmptyList e t) = "Cannot conclude that expression " ++ pretty e ++ " of type " ++ pretty (simplifyType t) ++ " is a non-empty list"
 
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
@@ -323,7 +325,6 @@ embedBundleType (BTVar id) = TVar id
 
 data InferenceResult = InferenceResult
   { inferredType :: Type,
-    sub :: TypeSubstitution,
     index :: Index
   }
 
@@ -345,73 +346,67 @@ data InferenceResult = InferenceResult
 -- >> k,k1,k2, etc. when they are synthesized as part of the rule
 -- >> g,g1,g2, etc. when they are used as terms (e.g. in index application)
 inferType :: Expr -> StateT TypingEnvironment (Either TypingError) InferenceResult
-inferType EUnit = return $ InferenceResult TUnit Map.empty (Number 0)
+-- UNIT
+inferType EUnit = return $ InferenceResult TUnit (Number 0)
+-- LABEL
 inferType (ELabel id) = do
   btype <- labelContextLookup id
-  return $ InferenceResult (TWire btype) Map.empty (Number 1)
+  return $ InferenceResult (TWire btype) (Number 1)
+-- VARIABLE
 inferType (EVar id) = do
   typ <- typingContextLookup id
-  return $ InferenceResult typ Map.empty (wireCount typ)
+  return $ InferenceResult typ (wireCount typ)
+-- PAIR
 inferType (EPair e1 e2) = do
-  InferenceResult typ1 sub1 i1 <- inferType e1
-  substituteInEnvironment sub1
-  (InferenceResult typ2 sub2 i2, wc) <- withWireCount $ inferType e2
-  let typ1' = tsub sub2 typ1
-  -- max(i1 + wires in e2, i2 + #(typ1'), #(typ1') + #(typ2)):
-  let k = Max (Plus i1 wc) (Max (Plus i2 (wireCount typ1')) (Plus (wireCount typ1') (wireCount typ2)))
-  return $ InferenceResult (TPair typ1' typ2) (compose sub1 sub2) k
-inferType ENil = do
-  id <- freshTypeVariableName
-  return $ InferenceResult (TList (Number 0) (TVar id)) Map.empty (Number 0)
+  InferenceResult typ1 i1 <- inferType e1
+  (InferenceResult typ2 i2, wc) <- withWireCount $ inferType e2
+  -- max(i1 + wires in e2, i2 + #(typ1), #(typ1) + #(typ2)):
+  let k = Max (Plus i1 wc) (Max (Plus i2 (wireCount typ1)) (Plus (wireCount typ1) (wireCount typ2)))
+  return $ InferenceResult (TPair typ1 typ2) k
+-- NIL
+inferType ENil = return $ InferenceResult (TList (Number 0) TUnit) (Number 0)
+-- ABSTRACTION
 inferType (EAbs x annotyp e) = do
   checkTypeWellFormedness annotyp
-  (InferenceResult typ sub i, wc) <- withWireCount $ withBoundVariable x annotyp $ inferType e
-  let annotyp' = tsub sub annotyp
-  return $ InferenceResult (TArrow annotyp' typ i wc) sub wc
+  (InferenceResult typ i, wc) <- withWireCount $ withBoundVariable x annotyp $ inferType e
+  return $ InferenceResult (TArrow annotyp typ i wc) wc
+-- LIFT
 inferType (ELift e) = do
-  InferenceResult typ sub i <- withNonLinearContext $ inferType e
+  InferenceResult typ i <- withNonLinearContext $ inferType e
   unless (checkEq i (Number 0)) $ throwError $ UnexpectedWidthAnnotation e (Number 0) i
-  return $ InferenceResult (TBang typ) sub (Number 0)
+  return $ InferenceResult (TBang typ) (Number 0)
+-- CONS
 inferType (ECons e1 e2) = do
-  InferenceResult typ1 sub1 i1 <- inferType e1
-  substituteInEnvironment sub1
-  (InferenceResult typ2 sub2 i2, wc) <- withWireCount $ inferType e2
-  let typ1' = tsub sub2 typ1
+  InferenceResult typ1 i1 <- inferType e1
+  (InferenceResult typ2 i2, wc) <- withWireCount $ inferType e2
   case typ2 of
-    TList j typ3 -> do
-      sub3 <- tryUnify typ1' typ3 $ UnexpectedType e2 (TList j typ1') typ2
-      let typ1'' = tsub sub3 typ1'
-      -- max (i1 + wires in e2, i2 + #(typ1''), (j+1) * #(typ1'')):
-      let k = Max (Plus i1 wc) (Max (Plus i2 (wireCount typ1'')) (Mult (Plus j (Number 1)) (wireCount typ1'')))
-      return $ InferenceResult (TList (Plus j (Number 1)) typ1'') (sub1 `compose` sub2 `compose` sub3) k
+    TList j typ1' -> do
+      unless (checkSubtype (TList j typ1') (TList j typ1)) $ throwError $ UnexpectedType e2 (TList j typ1) typ2
+      -- max (i1 + wires in e2, i2 + #(typ1), (j+1) * #(typ1)):
+      let k = Max (Plus i1 wc) (Max (Plus i2 (wireCount typ1)) (Mult (Plus j (Number 1)) (wireCount typ1)))
+      return $ InferenceResult (TList (Plus j (Number 1)) typ1) k
     _ -> throwError $ UnexpectedTypeConstructor e2 (TList (Number 0) TUnit) typ2
+-- FOLD
 inferType (EFold e1 e2 e3) = do --naming conventions are not satisfied here because the rule is HARD to parse
-  InferenceResult steptyp sub1 i1 <- inferType e1
-  substituteInEnvironment sub1
+  InferenceResult steptyp i1 <- inferType e1
   case steptyp of
     TBang (TIForall id (TArrow (TPair acctyp elemtyp) acctyp' stepwidth o1) o2 o3) | checkEq o1 (Number 0) && checkEq o2 (Number 0) && checkEq o3 (Number 0) -> do
-      subacc' <- tryUnify acctyp' (isub (Plus (IndexVariable id) (Number 1)) id acctyp) $ UnfoldableStepfunction e1 steptyp
-      substituteInEnvironment subacc'
-      -- TODO propagate subacc' to existing types
-      (InferenceResult acctyp'' sub2 i2, wc1) <-withWireCount $ inferType e2
-      subacc'' <- tryUnify acctyp'' (isub (Number 0) id acctyp) $ UnfoldableAccumulator e2 acctyp''
-      substituteInEnvironment subacc''
-      -- TODO propagate subacc'' to existing types
-      (InferenceResult argtyp sub3 i3, wc2) <- withWireCount $ inferType e3
-      substituteInEnvironment sub3
+      unless (checkSubtype acctyp' (isub (Plus (IndexVariable id) (Number 1)) id acctyp)) $  throwError $ UnfoldableStepfunction e1 steptyp
+      (InferenceResult acctyp'' i2, wc1) <-withWireCount $ inferType e2
+      unless (checkSubtype acctyp'' (isub (Number 0) id acctyp)) $ throwError $ UnfoldableAccumulator e2 acctyp''
+      (InferenceResult argtyp i3, wc2) <- withWireCount $ inferType e3
       case argtyp of
         TList arglen elemtyp' -> do
-          subelem' <- tryUnify elemtyp' elemtyp $ UnfoldableArg e3 argtyp
-          -- TODO propagate subelem' to existing types
+          unless (checkSubtype elemtyp' elemtyp) $ throwError $ UnfoldableArg e3 argtyp
           -- width upper bound of ONLY fold execution: max(#(acctyp{0/i},maximum[i<arglen] stepwidth + (arglen-(i+1))*#(elemtyp)))
           let k1 = Max (wireCount (isub (Number 0) id acctyp)) (Maximum id arglen (Plus stepwidth (Mult (Minus arglen (Plus (IndexVariable id) (Number 1))) (wireCount elemtyp))))
           -- the total upper bound takes into consideration the evaluation of e1, e2, e3 and the fold execution
           -- max(i1 + wires in e2 and e3, i2 + wires in e3, i3 + wires in the result of e2, k1):
           let k2 = Max (Plus i1 (Plus wc1 wc2)) (Max (Plus i2 wc2) (Max (Plus i3 (wireCount (isub (Number 0) id acctyp))) k1))
-          let sub = sub1 `compose` subacc' `compose` sub2 `compose` subacc'' `compose` sub3 `compose` subelem'
-          return $ InferenceResult (isub arglen id acctyp) sub k2
+          return $ InferenceResult (isub arglen id acctyp) k2
         _ -> throwError $ UnfoldableArg e3 argtyp
     _ -> throwError $ UnfoldableStepfunction e1 steptyp
+-- BOXED CIRCUIT
 inferType (ECirc b1 c b2) = do
   (inbt, inrem, outbt, outrem) <- lift $ mapLeft WireTypingError $ do
     (inlabels, outlabels) <- inferCircuitSignature c
@@ -420,89 +415,90 @@ inferType (ECirc b1 c b2) = do
     return (inbt, inrem, outbt, outrem)
   unless (null inrem) $ throwError $ MismatchedInputInterface c inrem b1
   unless (null outrem) $ throwError $ MismatchedOutputInterface c outrem b2
-  return $ InferenceResult (TCirc (Number (width c)) inbt outbt) Map.empty (Number 0)
+  return $ InferenceResult (TCirc (Number (width c)) inbt outbt) (Number 0)
+-- APPLICATION
 inferType (EApp e1 e2) = do
   -- function application
-  InferenceResult typ1 sub1 i1 <- inferType e1
-  substituteInEnvironment sub1
-  (InferenceResult typ2 sub2 i2, wc) <- withWireCount $ inferType e2
-  let typ1' = tsub sub2 typ1
-  case typ1' of
+  InferenceResult typ1 i1 <- inferType e1
+  (InferenceResult typ2 i2, wc) <- withWireCount $ inferType e2
+  case typ1 of
     TArrow annotyp typ3 j1 j2 -> do
-      sub3 <- tryUnify typ2 annotyp $ UnexpectedType e2 annotyp typ2
-      -- max(i1 + wires in e2, i2 + j2, i1):
+      unless (checkSubtype typ2 annotyp) $ throwError $ UnexpectedType e2 annotyp typ2
+      -- max(i1 + wires in e2, i2 + j2, j1):
       let k = Max (Plus i1 wc) (Max (Plus i2 j2) j1)
-      let typ3' = tsub sub3 typ3
-      return $ InferenceResult typ3' (sub1 `compose` sub2 `compose` sub3) k
-    _ -> throwError $ UnexpectedTypeConstructor e1 (TArrow TUnit TUnit (Number 0) (Number 0)) typ1'
+      return $ InferenceResult typ3 k
+    _ -> throwError $ UnexpectedTypeConstructor e1 (TArrow TUnit TUnit (Number 0) (Number 0)) typ1
+-- APPLY (Circuit application)
 inferType (EApply e1 e2) = do
-  -- TCircuit application
-  InferenceResult typ1 sub1 i1 <- inferType e1
-  substituteInEnvironment sub1
-  (InferenceResult typ2 sub2 i2, wc) <- withWireCount $ inferType e2
-  let typ1' = tsub sub2 typ1
-  case typ1' of
+  InferenceResult typ1 i1 <- inferType e1
+  (InferenceResult typ2 i2, wc) <- withWireCount $ inferType e2
+  case typ1 of
     TCirc j inbt outbt -> do
       let intyp = embedBundleType inbt
       let outtyp = embedBundleType outbt
-      sub3 <- tryUnify typ2 intyp $ UnexpectedType e2 (embedBundleType inbt) typ2
-      let outtyp' = tsub sub3 outtyp
+      unless (checkSubtype typ2 intyp) $ throwError $ UnexpectedType e2 (embedBundleType inbt) typ2
       -- max(i1 + wires in e2, i2, j):
       let k = Max (Plus i1 wc) (Max i2 j)
-      return $ InferenceResult outtyp' (sub1 `compose` sub2 `compose` sub3) k
-    _ -> throwError $ UnexpectedTypeConstructor e1 (TCirc (Number 0) BTUnit BTUnit) typ1'
+      return $ InferenceResult outtyp k
+    _ -> throwError $ UnexpectedTypeConstructor e1 (TCirc (Number 0) BTUnit BTUnit) typ1
+-- BOX
 inferType (EBox bt e) = do
-  InferenceResult typ1 sub1 i <- inferType e
+  InferenceResult typ1 i <- inferType e
   let annotyp = embedBundleType bt
   case typ1 of
     TBang (TArrow typ2 typ3 j1 _) -> do
       sub2 <- tryUnify annotyp typ2 $ UnboxableType e typ1
       let typ3' = tsub sub2 typ3
       case toBundleType typ3' of
-        Just outbt -> return $ InferenceResult (TCirc j1 bt outbt) (sub1 `compose` sub2) i
+        Just outbt -> return $ InferenceResult (TCirc j1 bt outbt) i
         _ -> throwError $ UnboxableType e typ1
     _ -> throwError $ UnboxableType e typ1
+-- LET-IN
 inferType (ELet x e1 e2) = do
-  InferenceResult typ1 sub1 i1 <- inferType e1
-  substituteInEnvironment sub1
-  (InferenceResult typ2 sub2 i2, wc) <- withWireCount $ withBoundVariable x typ1 $ inferType e2
+  InferenceResult typ1 i1 <- inferType e1
+  (InferenceResult typ2 i2, wc) <- withWireCount $ withBoundVariable x typ1 $ inferType e2
   -- max(i1 + wires in e2, i2):
   let k = Max (Plus i1 wc) i2
-  return $ InferenceResult typ2 (sub1 `compose` sub2) k
+  return $ InferenceResult typ2 k
+-- DESTRUCTURING LET-IN
 inferType (EDest x y e1 e2) = do
-  InferenceResult typ1 sub1 i1 <- inferType e1
-  substituteInEnvironment sub1
+  InferenceResult typ1 i1 <- inferType e1
   typ2 <- TVar <$> freshTypeVariableName
   typ3 <- TVar <$> freshTypeVariableName
   sub2 <- tryUnify typ1 (TPair typ2 typ3) $ UnexpectedType e1 (TPair typ2 typ3) typ1
   let typ2' = tsub sub2 typ2
   let typ3' = tsub sub2 typ3
-  (InferenceResult typ5 sub3 i2, wc) <- withWireCount $ withBoundVariable x typ2' $ withBoundVariable y typ3' $ inferType e2
+  (InferenceResult typ5 i2, wc) <- withWireCount $ withBoundVariable x typ2' $ withBoundVariable y typ3' $ inferType e2
   let k = Max (Plus i1 wc) i2
-  return $ InferenceResult typ5 (sub1 `compose` sub2 `compose` sub3) k
+  return $ InferenceResult typ5 k
+-- ANNOTATION
 inferType (EAnno e annotyp) = do
   checkTypeWellFormedness annotyp
-  InferenceResult typ sub1 i <- inferType e
+  InferenceResult typ i <- inferType e
   sub2 <- tryUnify typ annotyp $ UnexpectedType e annotyp typ
   -- annotation type should change to the inferred type
   -- since we do not have type variables in the surface syntax, this should never happen, byt still:
   assert (tsub sub2 annotyp == annotyp) $ return ()
-  return $ InferenceResult annotyp (sub1 `compose` sub2) i
+  return $ InferenceResult annotyp i
+-- FORCE
 inferType (EForce e) = do
-  InferenceResult typ sub i <- inferType e
+  InferenceResult typ i <- inferType e
   case typ of
-    TBang typ' -> return $ InferenceResult typ' sub i
+    TBang typ' -> return $ InferenceResult typ' i
     _ -> throwError $ UnexpectedTypeConstructor e (TBang TUnit) typ
+-- INDEX ABSTRACTION
 inferType (EIAbs id e) = do
-  (InferenceResult typ sub i, wc) <- withWireCount $ withBoundIndexVariable id $ inferType e
-  return $ InferenceResult (TIForall id typ i wc) sub i
+  (InferenceResult typ i, wc) <- withWireCount $ withBoundIndexVariable id $ inferType e
+  return $ InferenceResult (TIForall id typ i wc) i
+-- INDEX APPLICATION
 inferType (EIApp e g) = do
-  InferenceResult typ1 sub i <- inferType e
+  InferenceResult typ1 i <- inferType e
   case typ1 of
     TIForall id typ2 j1 _ -> do
       checkIndexWellFormedness j1
-      return $ InferenceResult (isub g id typ2) sub (Max i (isub g id j1))
+      return $ InferenceResult (isub g id typ2) (Max i (isub g id j1))
     _ -> throwError $ UnexpectedTypeConstructor e (TIForall "i" TUnit (Number 0) (Number 0)) typ1
+-- CONSTANTS
 inferType (EConst c) =
   let typ = case c of
         QInit0 -> TCirc (Number 1) BTUnit (BTWire Qubit)
@@ -515,8 +511,18 @@ inferType (EConst c) =
         PauliZ -> TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
         CNot -> TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit))
         Toffoli -> TCirc (Number 3) (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit)) (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit))
-        MakeCRGate -> TBang (TIForall "i" (TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit))) (Number 0) (Number 0))
-   in return $ InferenceResult typ Map.empty (Number 0)
+        MakeCRGate -> TIForall "i" (TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit))) (Number 0) (Number 0)
+   in return $ InferenceResult typ (Number 0)
+-- LET-CONS
+inferType (ELetCons x y e1 e2) = do
+  InferenceResult typ1 i1 <- inferType e1
+  case typ1 of
+    TList j typ2 -> do
+      unless (checkLeq (Number 1) j) $ throwError $ UnexpectedEmptyList e1 typ1
+      (InferenceResult typ3 i2, wc) <- withWireCount $ withBoundVariable x typ2 $ withBoundVariable y (TList (Minus j (Number 1)) typ2) $ inferType e2
+      let k = Max (i1 `Plus` wc) i2
+      return $ InferenceResult typ3 k
+    _ -> throwError $ UnexpectedTypeConstructor e1 (TList (Number 0) TUnit) typ1
 
 
 --- EXPORTED WRAPPER FUNCTIONS ---------------------------------------------------------------
@@ -525,7 +531,7 @@ runTypeInferenceWith :: TypingEnvironment -> Expr -> Either TypingError (Type, I
 runTypeInferenceWith env e = do
   case runStateT (inferType e) env of
     Left err -> Left err
-    Right (InferenceResult typ _ i, remaining) -> do
+    Right (InferenceResult typ i, remaining) -> do
       when (envIsLinear remaining) $ throwError $ UnusedLinearResources (typingContext env) (labelContext env)
       return (typ, i)
 

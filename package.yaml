@@ -1,7 +1,7 @@
 name:                pqr
 version:             0.1.0.0
 github:              "andcol/proto-quipper-r"
-license:             BSD-3-Clause
+license:             MIT
 author:              "Andrea Colledan"
 maintainer:          "andrea.colledan@unibo.it"
 copyright:           "2024 Andrea Colledan"

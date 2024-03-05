@@ -47,26 +47,27 @@ instance Pretty Constant where
 
 -- The datatype of PQR expressions
 data Expr =
-  EUnit
-  | ELabel LabelId
-  | EVar VariableId
-  | EPair Expr Expr
-  | EAbs VariableId Type Expr
-  | ELift Expr
-  | ENil
-  | ECons Expr Expr
-  | EFold Expr Expr Expr
-  | ECirc Bundle Circuit Bundle
-  | EApp Expr Expr
-  | EApply Expr Expr
-  | EBox BundleType Expr
-  | EForce Expr
-  | ELet VariableId Expr Expr
-  | EDest VariableId VariableId Expr Expr
-  | EAnno Expr Type
-  | EIAbs IndexVariableId Expr
-  | EIApp Expr Index
-  | EConst Constant
+  EUnit                                       -- Unit value               : ()
+  | ELabel LabelId                            -- Label (internal)         :
+  | EVar VariableId                           -- Variable                 : x, y, z, ...          
+  | EPair Expr Expr                           -- Pair                     : (e1, e2)
+  | EAbs VariableId Type Expr                 -- Abstraction              : \x :: t . e
+  | ELift Expr                                -- Lift                     : lift e
+  | ENil                                     -- Nil                      : []
+  | ECons Expr Expr                           -- Cons                     : e : es
+  | EFold Expr Expr Expr                      -- Fold                     : fold (e1, e2, e3)
+  | ECirc Bundle Circuit Bundle               -- Boxed Circuit (internal) :  
+  | EApp Expr Expr                            -- Application              : e1 e2
+  | EApply Expr Expr                          -- Apply                    : apply(e1, e2)
+  | EBox BundleType Expr                      -- Box                      : box :: bt e
+  | EForce Expr                               -- Force                    : force e
+  | ELet VariableId Expr Expr                 -- Let                      : let x = e1 in e2
+  | EDest VariableId VariableId Expr Expr     -- Dest                     : let (x, y) = e1 in e2
+  | EAnno Expr Type                           -- Annotation               : e :: t
+  | EIAbs IndexVariableId Expr                -- Index Abstraction        : @i . e
+  | EIApp Expr Index                          -- Index Application        : e @ i
+  | EConst Constant                           -- Constant                 :
+  | ELetCons VariableId VariableId Expr Expr  -- Let Cons                 : let (x : y) = e1 in e2
   deriving (Eq, Show)
 
 instance Pretty Expr where
@@ -90,4 +91,5 @@ instance Pretty Expr where
   pretty (EIAbs id e) = "(forall " ++ id ++ " . " ++ pretty e ++ ")"
   pretty (EIApp e i) = "(" ++ pretty e ++ " @ " ++ pretty i ++ ")"
   pretty (EConst c) = pretty c
+  pretty (ELetCons x y e1 e2) = "(let (" ++ x ++ ":" ++ y ++ ") = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
 

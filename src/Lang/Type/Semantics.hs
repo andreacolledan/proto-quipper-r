@@ -2,6 +2,7 @@ module Lang.Type.Semantics where
 
 import Bundle.AST
 import Lang.Type.AST
+import Index.AST
 import Index.Semantics
 
 -- Type semantics in the form of a reduction function
@@ -35,9 +36,7 @@ checkSubtype (TCirc i btype1 btype2) (TCirc i' btype1' btype2') =
     && checkSubtype (fromBundleType btype2) (fromBundleType btype2')
     && checkSubtype (fromBundleType btype2') (fromBundleType btype2)
     && checkLeq i i'
-checkSubtype (TList i t) (TList i' t') =
-  checkSubtype t t'
-    && checkEq i i'
+checkSubtype (TList i t) (TList i' t') = checkEq i i' && (checkEq i (Number 0) || checkSubtype t t') --TODO remove zero check
 checkSubtype _ _ = False
 
 -- Θ ⊢ t1 <:> t2 (Figure 15)
@@ -58,9 +57,7 @@ checkTypeEq (TCirc i btype1 btype2) (TCirc i' btype1' btype2') =
   checkTypeEq (fromBundleType btype1) (fromBundleType btype1')
     && checkTypeEq (fromBundleType btype2) (fromBundleType btype2')
     && checkEq i i'
-checkTypeEq (TList i t) (TList i' t') =
-  checkTypeEq t t'
-    && checkEq i i'
+checkTypeEq (TList i t) (TList i' t') = checkTypeEq t t' && checkEq i i'
 checkTypeEq _ _ = False
 
 -- Coerce a bundle type to a PQR type

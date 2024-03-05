@@ -97,7 +97,8 @@ isLinear (TPair typ1 typ2) = isLinear typ1 && isLinear typ2
 isLinear (TCirc {}) = False
 isLinear (TArrow {}) = True
 isLinear (TBang _) = False
-isLinear (TList _ typ) = isLinear typ
+isLinear (TList i typ)  | checkEq i (Number 0) = False  --TODO I really don't like this
+                        | otherwise = isLinear typ
 isLinear (TVar _) = True
 isLinear (TIForall _ typ _ i) = isLinear typ && checkEq i (Number 0) --TODO I really don't like this
 
@@ -169,7 +170,7 @@ mgtu (TPair t1 t2) (TPair t1' t2') = do
   sub1 <- mgtu t1 t1'
   sub2 <- mgtu (tsub sub1 t2) (tsub sub1 t2')
   return $ compose sub2 sub1
-mgtu (TCirc i inBtype outBtype) (TCirc i' inBtype' outBtype') | checkEq i i' && inBtype == inBtype' && outBtype == outBtype' = return Map.empty
+mgtu (TCirc i inBtype outBtype) (TCirc i' inBtype' outBtype') | checkLeq i i' && inBtype == inBtype' && outBtype == outBtype' = return Map.empty
 mgtu (TArrow typ1 typ2 i j) (TArrow typ1' typ2' i' j') | checkLeq i i' && checkEq j j' = do
   sub1 <- mgtu typ1 typ1'
   sub2 <- mgtu (tsub sub1 typ2) (tsub sub1 typ2')

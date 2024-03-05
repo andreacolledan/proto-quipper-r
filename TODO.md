@@ -63,8 +63,13 @@
 - [x] Instantiation (e.g. `⊢ f : List i Qubit -o [i,0] List i Qubit` entails `⊢ f : List 3 Qubit -o [3,0] List 3 Qubit`)
   - [x] Implement instantiation
 
+- [ ] Unified syntax
+  - [x] AST
+  - [x] Type inference
+  - [ ] Testing
+
 - [x] Better error messages
-- [ ] Better handling of shadowing
+- [x] Better handling of shadowing
 - [ ] Better unification
   
 ### Parser
@@ -72,3 +77,9 @@
 - [x] Parsing wire bundles
 - [x] Parsing indices
 - [x] Parsing PQR
+
+### Examples
+
+- [x] List functions
+- [x] QFT
+- [ ] Arithmetic
