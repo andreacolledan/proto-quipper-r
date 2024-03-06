@@ -10,6 +10,7 @@ import qualified Lang.Unified.Parse as U
 import PrettyPrinter
 import System.Console.ArgParser
 import Text.Parsec
+import System.IO (hPrint, stderr)
 
 data CommandLineArguments = CommandLineArguments
   { filepath :: String,
@@ -56,7 +57,7 @@ main = withParseResult commandLineParser $ \args -> do
             putStrLn "Inferring type..."
           let outcome = runTypeInference ast
           case outcome of
-            Left err -> putStrLn $ "Inference failed: " ++ show err
+            Left err -> hPrint stderr err
             Right (t, i) -> do
-              putStrLn $ "Inferred type: " ++ pretty (simplifyType t)
-              putStrLn $ "Inferred bound: " ++ pretty (simplifyIndex i)
+              putStrLn $ "* Inferred type: " ++ pretty (simplifyType t)
+              putStrLn $ "* Inferred bound: " ++ pretty (simplifyIndex i)

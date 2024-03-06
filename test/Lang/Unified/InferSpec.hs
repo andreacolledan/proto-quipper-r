@@ -172,7 +172,12 @@ spec = do
         let expected = (TBang TUnit, Number 0)
         simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
         -- ∅;∅;∅ ⊢ !(\x :: Qubit . x) ==> !(Qubit ->[1,0] Qubit) ; 0
-      it "fails if the lifted expression consumes linear resources" $ do
+      it "succeeds if the lifted expression consumes linear resources from within its scope" $ do
+        -- ∅;∅;∅ ⊢ lift (\x::Qubit . x) ==> !(Qubit ->[1,0] Qubit) ; 0
+        let expr = ELift (EAbs "x" (TWire Qubit) (EVar "x"))
+        let expected = (TBang (TArrow (TWire Qubit) (TWire Qubit) (Number 1) (Number 0)), Number 0)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
+      it "fails if the lifted expression consumes linear resources from outside its scope" $ do
         -- ∅;x:Qubit;∅ ⊢ lift x =/=> 
         let gamma = [("x", TWire Qubit)]
         let expr = ELift (EVar "x")
