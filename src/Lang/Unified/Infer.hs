@@ -26,6 +26,7 @@ import Lang.Type.AST
 import Lang.Unified.AST
 import PrettyPrinter
 import Lang.Type.Semantics (simplifyType, checkSubtype)
+import Lang.Unified.Constant
 
 -- The datatype of bindings (carries the type of a variable and whether it has been used yet)
 data Binding = Binding {getType :: Type, isUsed :: Bool} deriving (Eq, Show)
@@ -495,20 +496,7 @@ inferType e@(EIApp e1 g) = whileExamining e $ do
       return $ InferenceResult (isub g id typ2) (Max i (isub g id j1))
     _ -> throwLocalError $ UnexpectedTypeConstructor e1 (TIForall "i" TUnit (Number 0) (Number 0)) typ1
 -- CONSTANTS
-inferType e@(EConst c) = whileExamining e $ do
-  let typ = case c of
-        QInit0 -> TCirc (Number 1) BTUnit (BTWire Qubit)
-        QInit1 -> TCirc (Number 1) BTUnit (BTWire Qubit)
-        QDiscard -> TCirc (Number 1) (BTWire Qubit) BTUnit
-        Meas -> TCirc (Number 1) (BTWire Qubit) (BTWire Bit)
-        Hadamard -> TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
-        PauliX -> TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
-        PauliY -> TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
-        PauliZ -> TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
-        CNot -> TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit))
-        Toffoli -> TCirc (Number 3) (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit)) (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit))
-        MakeCRGate -> TIForall "i" (TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit))) (Number 0) (Number 0)
-   in return $ InferenceResult typ (Number 0)
+inferType e@(EConst c) = whileExamining e $ return $ InferenceResult (typeOf c) (Number 0)
 -- LET-CONS
 inferType e@(ELetCons x y e1 e2) = whileExamining e $ do
   InferenceResult typ1 i1 <- inferType e1

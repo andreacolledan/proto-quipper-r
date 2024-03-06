@@ -14,7 +14,7 @@ let rev = lift @i.\list::List[i] (Qubit,Qubit).
 in
 
 let pair = lift @i . \a::List[i+1] Qubit.\b::List[i+1] Qubit.
-  let pairStep = (lift @j. \(reslist, sndlist, elem) :: (List[j] (Qubit,Qubit), List[i+1-j] Qubit, Qubit) .
+  let pairStep = (lift @j. \(reslist, sndlist, elem) :: (List[j] (Qubit,Qubit), List[i-j+1] Qubit, Qubit) .
     let head:tail = sndlist in ((elem, head) : reslist, tail))
     :: !(j ->[0,0] ((List[j] (Qubit, Qubit), List[(i - j)] Qubit), Qubit) -o[(((j * 2) + (i - j)) + 1), 0] (List[(j + 1)] (Qubit, Qubit), List[i - (j + 1)] Qubit)) in
   let (reslist,_) = fold(pairStep, ([], b), a)

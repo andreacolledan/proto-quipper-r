@@ -39,6 +39,7 @@ library
       Lang.Type.Parse
       Lang.Type.Semantics
       Lang.Unified.AST
+      Lang.Unified.Constant
       Lang.Unified.Infer
       Lang.Unified.Parse
       PrettyPrinter

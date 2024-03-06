@@ -17,6 +17,7 @@ import Text.Parsec.String
 import Text.Parsec.Token
 import Data.Char
 import Debug.Trace (traceId, traceM)
+import Lang.Unified.Constant
 
 
 unifiedLang :: LanguageDef st

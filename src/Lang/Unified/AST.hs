@@ -1,6 +1,5 @@
 module Lang.Unified.AST (
   Expr(..),
-  Constant(..),
   VariableId
 ) where
 
@@ -9,41 +8,9 @@ import Index.AST
 import Lang.Type.AST
 import Circuit ( Circuit )
 import PrettyPrinter (Pretty(..))
+import Lang.Unified.Constant
 
 type VariableId = String
-
--- Enum of constants
-data Constant
-  -- Qubit metaoperations
-  = QInit0
-  | QInit1
-  | QDiscard
-  | Meas
-  -- Single qubit gates
-  | Hadamard
-  | PauliX
-  | PauliY
-  | PauliZ
-  -- Two qubit gates
-  | CNot
-  -- Three qubit gates
-  | Toffoli
-  -- Functions
-  | MakeCRGate
-  deriving (Eq, Show)
-
-instance Pretty Constant where
-  pretty QInit0 = "QInit0"
-  pretty QInit1 = "QInit1"
-  pretty QDiscard = "QDiscard"
-  pretty Meas = "Meas"
-  pretty Hadamard = "Hadamard"
-  pretty PauliX = "PauliX"
-  pretty PauliY = "PauliY"
-  pretty PauliZ = "PauliZ"
-  pretty CNot = "CNot"
-  pretty Toffoli = "Toffoli"
-  pretty MakeCRGate = "MakeCRGate"
 
 -- The datatype of PQR expressions
 data Expr =

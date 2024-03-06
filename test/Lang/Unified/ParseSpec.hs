@@ -7,6 +7,7 @@ import Lang.Unified.AST
 import Lang.Unified.Parse
 import Test.Hspec
 import Text.Parsec
+import Lang.Unified.Constant
 
 spec :: Spec
 spec = do

@@ -32,7 +32,7 @@ embedIndex (Number n) = show n
 embedIndex (Plus i j) = "(+ " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 embedIndex (Max i j) = "(max " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 embedIndex (Mult i j) = "(* " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
-embedIndex (Minus i j) = "(- " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
+embedIndex (Minus i j) = "(minus " ++ embedIndex i ++ " " ++ embedIndex j ++ ")"
 embedIndex (Maximum {}) = error "Internal: maximum expression should have been desugared"
 
 -- Converts an index relation to the corresponding SMTLIB symbol
@@ -100,6 +100,7 @@ querySMTWithContext c@(Constraint rel i j) = unsafePerformIO $ do
         hPutStrLn handle "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
         hPutStrLn handle "(set-option :fmf-fun true)" --enable recursive functions TODO: this might no longer be necessary, check
         hPutStrLn handle "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
+        hPutStrLn handle "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
         let (constraints, Constraint _ i' j') = desugar c
         forM_ (ifv i `Set.union` ifv j) $ \id -> do
             -- for each free index variable in c, initialize an unknown natural variable:

@@ -35,7 +35,7 @@ simplifyIndex (Mult i j) = case (simplifyIndex i, simplifyIndex j) of
   (Number 1, j') -> j' -- one is left identity
   (i', j') -> Mult i' j' -- do not reduce further
 simplifyIndex (Minus i j) = case (simplifyIndex i, simplifyIndex j) of
-  (Number n, Number m) -> Number (n - m)
+  (Number n, Number m) -> Number (max 0 (n - m))
   (i', j') | i' == j' -> Number 0 -- a - a = 0
   (i', Number 0) -> i' -- zero is right identity
   (Number 0, _) -> Number 0 -- zero is left absorbing
@@ -45,53 +45,11 @@ simplifyIndex (Maximum id i j) = case simplifyIndex i of
   Number 0 -> Number 0
   -- if the upper bound is known, unroll the maximum into a sequence of binary maxima
   Number n ->
-    let unrolling = foldr1 Max [isub (Number step) id j | step <- [0 .. n - 1]]
+    let unrolling = foldr1 Max [isub (Number step) id (simplifyIndex j) | step <- [0 .. n - 1]]
      in simplifyIndex unrolling
-  -- if the upper bound is unknown, simplify the body of the maximum and...
-  i' ->
-    let j' = simplifyIndex j
-     in -- if the body of does not mention id, then just return the body
-        if id `notElem` ifv j'
-          then j'
-          else -- if the body does not increase in i, then return the body at id=0
-
-            if j' `nonIncreasingIn` id
-              then simplifyIndex $ isub (Number 0) id j'
-              else -- if the body of the maximum does not decrease in i, then return the body at id=i-1
-
-                if j' `nonDecreasingIn` id
-                  then simplifyIndex $ isub (Minus i' (Number 1)) id j'
-                  else -- otherwise return the simplified term and pray that an SMT solver will figure it out (it won't)
-                    Maximum id i' j'
-    where
-      -- If i `nonDecreasingIn` id returns True, then j >= id implies i{j/id} >= i
-      -- Note, this is an approximation, the converse does not hold
-      nonDecreasingIn :: Index -> IndexVariableId -> Bool
-      nonDecreasingIn (IndexVariable _) _ = True
-      nonDecreasingIn (Number _) _ = True
-      nonDecreasingIn (Plus i j) id = i `nonDecreasingIn` id && j `nonDecreasingIn` id
-      nonDecreasingIn (Max i j) id = i `nonDecreasingIn` id && j `nonDecreasingIn` id
-      nonDecreasingIn (Mult i j) id = i `nonDecreasingIn` id && j `nonDecreasingIn` id
-      nonDecreasingIn (Minus i j) id = i `nonDecreasingIn` id && j `nonIncreasingIn` id
-      nonDecreasingIn (Maximum id' i j) id
-        | id /= id' =
-            i `nonDecreasingIn` id && j `nonDecreasingIn` id
-              || i `nonDecreasingIn` id && j `nonDecreasingIn` id'
-      nonDecreasingIn _ _ = False
-      -- If i `nonIncreasingIn` id returns True, then j >= id implies i{j/id} <= i (incomplete)
-      -- Note, this is an approximation, the converse does not hold
-      nonIncreasingIn :: Index -> IndexVariableId -> Bool
-      nonIncreasingIn (IndexVariable id') id = id /= id'
-      nonIncreasingIn (Number _) _ = True
-      nonIncreasingIn (Plus i j) id = i `nonIncreasingIn` id && j `nonIncreasingIn` id
-      nonIncreasingIn (Max i j) id = i `nonIncreasingIn` id && j `nonIncreasingIn` id
-      nonIncreasingIn (Mult i j) id = i `nonIncreasingIn` id && j `nonIncreasingIn` id
-      nonIncreasingIn (Minus i j) id = i `nonIncreasingIn` id && j `nonDecreasingIn` id
-      nonIncreasingIn (Maximum id' i j) id
-        | id /= id' =
-            i `nonIncreasingIn` id && j `nonIncreasingIn` id
-              || i `nonIncreasingIn` id && j `nonDecreasingIn` id'
-      nonIncreasingIn _ _ = False
+  -- if the upper bound is not known, do not reduce further
+  i' -> Maximum id i' (simplifyIndex j)
+  
 
 -- Θ ⊨ i = j (figs. 10,15)
 -- in this implementation, Θ implicitly contains all the free variables in i and j
