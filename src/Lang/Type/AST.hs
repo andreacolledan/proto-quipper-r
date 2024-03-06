@@ -67,6 +67,16 @@ instance Wide Type where
 
 -- PQR types are amenable to the notion of well-formedness with respect to an index context
 instance HasIndex Type where
+  iv :: Type -> Set IndexVariableId
+  iv TUnit = Set.empty
+  iv (TWire _) = Set.empty
+  iv (TPair t1 t2) = iv t1 `Set.union` iv t2
+  iv (TCirc i _ _) = iv i
+  iv (TArrow typ1 typ2 i j) = iv typ1 `Set.union` iv typ2 `Set.union` iv i `Set.union` iv j
+  iv (TBang typ) = iv typ
+  iv (TList i typ) = iv i `Set.union` iv typ
+  iv (TVar _) = Set.empty
+  iv (TIForall id typ i j) = Set.insert id (iv typ `Set.union` iv i `Set.union` iv j)
   ifv :: Type -> Set IndexVariableId
   ifv TUnit = Set.empty
   ifv (TWire _) = Set.empty
@@ -86,8 +96,10 @@ instance HasIndex Type where
   isub i id (TBang typ) = TBang (isub i id typ)
   isub i id (TList j typ) = TList (isub i id j) (isub i id typ)
   isub _ _ (TVar a) = TVar a
-  isub i id (TIForall id' typ j e) | id == id' = TIForall id' typ j e
-                                   | otherwise = TIForall id' (isub i id typ) (isub i id j) (isub i id e)
+  isub i id (TIForall id' typ j k) = let
+    id'' = fresh id' [IndexVariable id, i, j, k]
+    id''' = fresh id'' [typ] --must do this in two steps since typ cannot be put in the same list above
+    in TIForall id''' (isub i id . isub (IndexVariable id''') id' $ typ) (isub i id . isub (IndexVariable id''') id' $ j) (isub i id . isub (IndexVariable id''') id' $ k)
 
 -- Returns True iff the given type is linear
 isLinear :: Type -> Bool

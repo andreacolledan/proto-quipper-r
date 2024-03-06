@@ -9,6 +9,7 @@ module Index.AST(
     Constraint(..),
     IRel(..),
     emptyictx,
+    fresh
 ) where
 
 import Data.Set (Set)
@@ -50,6 +51,7 @@ emptyictx = Set.empty
 --  - be checked for well-formedness with respect to an index context
 --  - have an index variable within them replaced by an index
 class HasIndex a where
+    iv :: a -> Set IndexVariableId
     ifv :: a -> Set IndexVariableId
     isub :: Index -> IndexVariableId -> a -> a
 
@@ -57,6 +59,14 @@ wellFormed :: HasIndex a => IndexContext -> a -> Bool
 wellFormed theta x = ifv x `Set.isSubsetOf` theta
 
 instance HasIndex Index where
+    iv :: Index -> Set IndexVariableId
+    iv (IndexVariable id) = Set.singleton id
+    iv (Number _) = Set.empty
+    iv (Plus i j) = iv i `Set.union` iv j
+    iv (Max i j) = iv i `Set.union` iv j
+    iv (Mult i j) = iv i `Set.union` iv j
+    iv (Minus i j) = iv i `Set.union` iv j
+    iv (Maximum id i j) = Set.insert id (iv i `Set.union` iv j)
     ifv :: Index -> Set IndexVariableId
     ifv (IndexVariable id) = Set.singleton id
     ifv (Number _) = Set.empty
@@ -72,17 +82,20 @@ instance HasIndex Index where
     isub i id (Max j k) = Max (isub i id j) (isub i id k)
     isub i id (Mult j k) = Mult (isub i id j) (isub i id k)
     isub i id (Minus j k) = Minus (isub i id j) (isub i id k)
-    isub i id (Maximum id' j k) = let id'' = fresh id' (ifv i `Set.union` ifv k) in
+    isub i id (Maximum id' j k) = let id'' = fresh id' [IndexVariable id, i, k] in
       Maximum id'' (isub i id j) (isub i id . isub (IndexVariable id'') id' $ k)
-      --let j' = isub i id j in if id == id' then Maximum id' j' k else Maximum id' j' (isub i id k)
 
--- fresh id ids checks if id occurs in set ids.
--- If it does not, id is returned, otherwise, a fresh variable name not in ids is returned.
-fresh :: IndexVariableId -> Set IndexVariableId -> IndexVariableId
-fresh id ids = head $ filter (`Set.notMember` ids) $ id : [id ++ show n | n <- [0..]]
+-- fresh id ids checks if id occurs (free or bound) in the list of indexed terms xs
+-- If it does not, id is returned, otherwise, a fresh variable name is returned.
+fresh :: (HasIndex a) => IndexVariableId -> [a] -> IndexVariableId
+fresh id xs = 
+  let toavoid = Set.unions $ iv <$> xs in
+  head $ filter (`Set.notMember` toavoid) $ id : [id ++ show n | n <- [0..]]
 
 -- Natural lifting of well-formedness to traversable data structures
 instance (Traversable t, HasIndex a) => HasIndex (t a) where
+    iv :: t a -> Set IndexVariableId
+    iv x = let ivets = iv <$> x in foldr Set.union Set.empty ivets
     ifv :: t a -> Set IndexVariableId
     ifv x = let ifvets = ifv <$> x in foldr Set.union Set.empty ifvets
     isub :: Index -> IndexVariableId -> t a -> t a
