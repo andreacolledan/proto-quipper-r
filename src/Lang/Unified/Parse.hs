@@ -31,7 +31,7 @@ unifiedLang =
       reservedNames = ["let", "in", "forall", "Circ", "apply", "fold", "lift", "box", "force", "dest", "let", "in", "[]", "()"],
       opStart = oneOf "@:\\.=",
       opLetter = char ':',
-      reservedOpNames = ["@", "::", ":", "\\", ".", "="]
+      reservedOpNames = ["@", "::", ":", "\\", ".", "=","|","->"]
     }
 
 unifiedTokenParser :: TokenParser st
@@ -46,7 +46,8 @@ unifiedTokenParser@TokenParser
     reservedOp = m_reservedOp,
     operator = m_operator,
     whiteSpace = m_whiteSpace,
-    symbol = m_symbol
+    symbol = m_symbol,
+    braces = m_braces
   } = makeTokenParser unifiedLang
 
 -- parse "()" as EUnit
@@ -180,20 +181,23 @@ dest = do
     Nothing -> fail "Destructuring let-in must bind at least two variables"
   <?> "destructuring let-in"
 
--- parse "let x:y = e1 in e2" as (ELetCons x y e1 e2)
-letcons :: Parser Expr
-letcons = do
-  x <- try $ do
-    m_reserved "let"
+-- parse "case e of { [] -> e1 | x:xs -> e2 }" as (EListCase e e1 x xs e2)
+listCase :: Parser Expr
+listCase = do
+  m_reserved "case"
+  e <- parseExpr
+  m_reserved "of"
+  m_braces $ do
+    m_reserved "[]"
+    m_reservedOp "->"
+    e1 <- parseExpr
+    m_reservedOp "|"
     x <- m_identifier
     m_reservedOp ":"
-    return x
-  y <- m_identifier
-  m_reservedOp "="
-  e1 <- parseExpr
-  m_reserved "in"
-  e2 <- parseExpr
-  return $ ELetCons x y e1 e2
+    xs <- m_identifier
+    m_reservedOp "->"
+    e2 <- parseExpr
+    return $ EListCase e e1 x xs e2
 
 -- parse "let x = e1 in e2" as (ELet x e1 e2)
 letIn :: Parser Expr
@@ -215,6 +219,22 @@ list = do
   elems <- m_brackets $ m_commaSep parseExpr
   return $ foldr ECons ENil elems
   <?> "list literal"
+
+-- parse "let x:xs = e1 in e2" as (ELetCons x xs e1 e2)
+letCons :: Parser Expr
+letCons = do
+  x <- try $ do
+    m_reserved "let"
+    x <- m_identifier
+    m_reservedOp ":"
+    return x
+  xs <- m_identifier
+  m_reservedOp "="
+  e1 <- parseExpr
+  m_reserved "in"
+  e2 <- parseExpr
+  return $ ELetCons x xs e1 e2
+  <?> "let-cons"
 
 -- parse ":" as the infix operator Cons
 consOp :: Parser (Expr -> Expr -> Expr)
@@ -305,7 +325,8 @@ parseExpr = let
     <|> iabs
     <|> lift
     <|> dest
-    <|> letcons
+    <|> letCons
+    -- <|> listCase
     <|> letIn
     <|> box
     <|> force

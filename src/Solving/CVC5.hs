@@ -133,5 +133,5 @@ querySMTWithContext c@(Constraint rel i j) = unsafePerformIO $ do
     where
         -- query files are stored in the queries/ subdirectory
         queryFile :: FilePath
-        queryFile = let filename = show rel ++ "(" ++ toSafeString i ++ "AND" ++ toSafeString j ++ ")"
+        queryFile = let filename = take 50 $ show rel ++ "(" ++ toSafeString i ++ "AND" ++ toSafeString j ++ ")"
             in "queries" </> filename <.> "smt2"

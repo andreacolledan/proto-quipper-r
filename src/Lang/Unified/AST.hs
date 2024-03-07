@@ -34,7 +34,9 @@ data Expr =
   | EIAbs IndexVariableId Expr                -- Index Abstraction        : @i . e
   | EIApp Expr Index                          -- Index Application        : e @ i
   | EConst Constant                           -- Constant                 :
-  | ELetCons VariableId VariableId Expr Expr  -- Let Cons                 : let (x : y) = e1 in e2
+  | ELetCons VariableId VariableId Expr Expr  -- Let Cons                 : let x:xs = e1 in e2
+  | EListCase Expr
+      Expr VariableId VariableId Expr         -- List Case                : case e of [] -> e1 | x:xs -> e2
   deriving (Eq, Show)
 
 instance Pretty Expr where
@@ -58,5 +60,6 @@ instance Pretty Expr where
   pretty (EIAbs id e) = "(forall " ++ id ++ " . " ++ pretty e ++ ")"
   pretty (EIApp e i) = "(" ++ pretty e ++ " @ " ++ pretty i ++ ")"
   pretty (EConst c) = pretty c
-  pretty (ELetCons x y e1 e2) = "(let (" ++ x ++ ":" ++ y ++ ") = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
+  pretty (ELetCons x y e1 e2) = "(let " ++ x ++ ":" ++ y ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
+  pretty (EListCase e1 e2 x y e3) = "case " ++ pretty e1 ++ " of { [] -> " ++ pretty e2 ++ " | " ++ x ++ ":" ++ y ++ " -> " ++ pretty e3 ++ " }"
 

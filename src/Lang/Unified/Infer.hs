@@ -27,6 +27,7 @@ import Lang.Unified.AST
 import PrettyPrinter
 import Lang.Type.Semantics (simplifyType, checkSubtype)
 import Lang.Unified.Constant
+import Data.List.Extra (notNull)
 
 -- The datatype of bindings (carries the type of a variable and whether it has been used yet)
 data Binding = Binding {getType :: Type, isUsed :: Bool} deriving (Eq, Show)
@@ -50,6 +51,9 @@ type TypingContext = Map.Map VariableId [Binding]
 emptyctx :: Map.Map a b
 emptyctx = Map.empty
 
+removeUsed :: TypingContext -> TypingContext
+removeUsed = Map.filter notNull . Map.map (filter canBeUsed)
+
 -- The state of a typing derivation
 data TypingEnvironment = TypingEnvironment
   { typingContext :: TypingContext, -- attributes types to variable names (linear/nonlinear)
@@ -58,6 +62,10 @@ data TypingEnvironment = TypingEnvironment
     surroundings :: [Expr], -- a list of the expressions enclosing the current one
     liftedExpression :: Bool -- whether the current expression is in a nonlinear context
   }
+
+instance Eq TypingEnvironment where
+  TypingEnvironment gamma1 q1 theta1 _ _ == TypingEnvironment gamma2 q2 theta2 _ _ =
+    removeUsed gamma1 == removeUsed gamma2 && q1 == q2 && theta1 == theta2
 
 instance Wide TypingEnvironment where
   wireCount TypingEnvironment {typingContext = gamma, labelContext = q} = wireCount gamma `Plus` wireCount q
@@ -106,6 +114,7 @@ data TypingError
   -- Other
   | ShadowedIndexVariable IndexVariableId [Expr]
   | UnexpectedEmptyList Expr Type [Expr]
+  | MismatchingContextUsage [Expr]
   deriving (Eq)
 
 instance Show TypingError where
@@ -133,6 +142,7 @@ instance Show TypingError where
   show (ShadowedIndexVariable id surr) = "* Shadowed index variable '" ++ id ++ "'" ++ printSurroundings surr
   show (OverusedLinearVariable id surr) = "* Linear variable '" ++ id ++ "' is used more than once" ++ printSurroundings surr
   show (UnexpectedEmptyList e t surr) = "* Cannot conclude that expression '" ++ pretty e ++ "' of type '" ++ pretty (simplifyType t) ++ "' is a non-empty list" ++ printSurroundings surr
+  show (MismatchingContextUsage surr) = "* The linear context is not used correctly" ++ printSurroundings surr
 
 printSurroundings :: [Expr] -> String
 printSurroundings [] = ""
@@ -177,7 +187,7 @@ typingContextLookup id = do
         return $ getType b
       else throwLocalError $ OverusedLinearVariable id
     [] -> error "Internal error: empty binding list"
-      
+
 
 -- labelContextLookup l looks up label l in the label context and removes it
 -- throws Unbound UnboundLabel if the label is absent
@@ -296,8 +306,20 @@ withBoundIndexVariable id der = do
   put env {indexContext = Set.delete id theta}
   return outcome
 
-whileExamining :: Expr -> StateT TypingEnvironment (Either TypingError) a -> StateT TypingEnvironment (Either TypingError) a
-whileExamining e der = do
+withSameContext :: StateT TypingEnvironment (Either TypingError) a -> StateT TypingEnvironment (Either TypingError) a -> StateT TypingEnvironment (Either TypingError) (a,a)
+withSameContext der1 der2 = do
+  env <- get
+  outcome1 <- der1
+  fenv1 <- get
+  put env
+  outcome2 <- der2
+  fenv2 <- get
+  unless (fenv1 == fenv2) $ throwLocalError MismatchingContextUsage
+  return (outcome1, outcome2)
+
+
+withScope :: Expr -> StateT TypingEnvironment (Either TypingError) a -> StateT TypingEnvironment (Either TypingError) a
+withScope e der = do
   env@TypingEnvironment {surroundings = es} <- get
   put env {surroundings = e : es}
   outcome <- der
@@ -348,38 +370,38 @@ data InferenceResult = InferenceResult
 -- >> g,g1,g2, etc. when they are used as terms (e.g. in index application)
 inferType :: Expr -> StateT TypingEnvironment (Either TypingError) InferenceResult
 -- UNIT
-inferType EUnit = whileExamining EUnit $ do
+inferType EUnit = withScope EUnit $ do
   return $ InferenceResult TUnit (Number 0)
 -- LABEL
-inferType e@(ELabel id) = whileExamining e $ do
+inferType e@(ELabel id) = withScope e $ do
   btype <- labelContextLookup id
   return $ InferenceResult (TWire btype) (Number 1)
 -- VARIABLE
-inferType e@(EVar id) = whileExamining e $ do
+inferType e@(EVar id) = withScope e $ do
   typ <- typingContextLookup id
   return $ InferenceResult typ (wireCount typ)
 -- PAIR
-inferType e@(EPair e1 e2) = whileExamining e $ do
+inferType e@(EPair e1 e2) = withScope e $ do
   InferenceResult typ1 i1 <- inferType e1
   (InferenceResult typ2 i2, wc) <- withWireCount $ inferType e2
   -- max(i1 + wires in e2, i2 + #(typ1), #(typ1) + #(typ2)):
   let k = Max (Plus i1 wc) (Max (Plus i2 (wireCount typ1)) (Plus (wireCount typ1) (wireCount typ2)))
   return $ InferenceResult (TPair typ1 typ2) k
 -- NIL
-inferType ENil = whileExamining ENil $ do
+inferType ENil = withScope ENil $ do
   return $ InferenceResult (TList (Number 0) TUnit) (Number 0)
 -- ABSTRACTION
-inferType e@(EAbs x annotyp e1) = whileExamining e $ do
+inferType e@(EAbs x annotyp e1) = withScope e $ do
   checkTypeWellFormedness annotyp
   (InferenceResult typ i, wc) <- withWireCount $ withBoundVariable x annotyp $ inferType e1
   return $ InferenceResult (TArrow annotyp typ i wc) wc
 -- LIFT
-inferType e@(ELift e1) = whileExamining e $ do
+inferType e@(ELift e1) = withScope e $ do
   InferenceResult typ i <- withNonLinearContext $ inferType e1
   unless (checkEq i (Number 0)) $ throwLocalError $ UnexpectedWidthAnnotation e1 (Number 0) i
   return $ InferenceResult (TBang typ) (Number 0)
 -- CONS
-inferType e@(ECons e1 e2) = whileExamining e $ do
+inferType e@(ECons e1 e2) = withScope e $ do
   InferenceResult typ1 i1 <- inferType e1
   (InferenceResult typ2 i2, wc) <- withWireCount $ inferType e2
   case typ2 of
@@ -390,7 +412,7 @@ inferType e@(ECons e1 e2) = whileExamining e $ do
       return $ InferenceResult (TList (Plus j (Number 1)) typ1) k
     _ -> throwLocalError $ UnexpectedTypeConstructor e2 (TList (Number 0) TUnit) typ2
 -- FOLD
-inferType e@(EFold e1 e2 e3) = whileExamining e $ do
+inferType e@(EFold e1 e2 e3) = withScope e $ do
   --naming conventions are not satisfied here because the rule is HARD to parse
   InferenceResult steptyp i1 <- inferType e1
   case steptyp of
@@ -411,7 +433,7 @@ inferType e@(EFold e1 e2 e3) = whileExamining e $ do
         _ -> throwLocalError $ UnfoldableArg e3 argtyp
     _ -> throwLocalError $ UnfoldableStepfunction e1 steptyp
 -- BOXED CIRCUIT
-inferType e@(ECirc b1 c b2) = whileExamining e $ do
+inferType e@(ECirc b1 c b2) = withScope e $ do
   (inbt, inrem, outbt, outrem) <- lift $ mapLeft WireTypingError $ do
     (inlabels, outlabels) <- inferCircuitSignature c
     (inbt, inrem) <- runBundleTypeInferenceWithRemaining inlabels b1
@@ -421,7 +443,7 @@ inferType e@(ECirc b1 c b2) = whileExamining e $ do
   unless (null outrem) $ throwLocalError $ MismatchedOutputInterface c outrem b2
   return $ InferenceResult (TCirc (Number (width c)) inbt outbt) (Number 0)
 -- APPLICATION (FUNCTIONS)
-inferType e@(EApp e1 e2) = whileExamining e $ do
+inferType e@(EApp e1 e2) = withScope e $ do
   InferenceResult typ1 i1 <- inferType e1
   (InferenceResult typ2 i2, wc) <- withWireCount $ inferType e2
   case typ1 of
@@ -432,7 +454,7 @@ inferType e@(EApp e1 e2) = whileExamining e $ do
       return $ InferenceResult typ3 k
     _ -> throwLocalError $ UnexpectedTypeConstructor e1 (TArrow TUnit TUnit (Number 0) (Number 0)) typ1
 -- APPLY (CIRCUITS)
-inferType e@(EApply e1 e2) = whileExamining e $ do
+inferType e@(EApply e1 e2) = withScope e $ do
   InferenceResult typ1 i1 <- inferType e1
   (InferenceResult typ2 i2, wc) <- withWireCount $ inferType e2
   case typ1 of
@@ -445,7 +467,7 @@ inferType e@(EApply e1 e2) = whileExamining e $ do
       return $ InferenceResult outtyp k
     _ -> throwLocalError $ UnexpectedTypeConstructor e1 (TCirc (Number 0) BTUnit BTUnit) typ1
 -- BOX
-inferType e@(EBox bt e1) = whileExamining e $ do
+inferType e@(EBox bt e1) = withScope e $ do
   InferenceResult typ1 i <- inferType e1
   let annotyp = embedBundleType bt
   case typ1 of
@@ -456,14 +478,14 @@ inferType e@(EBox bt e1) = whileExamining e $ do
         _ -> throwLocalError $ UnboxableType e1 typ1
     _ -> throwLocalError $ UnboxableType e1 typ1
 -- LET-IN
-inferType e@(ELet x e1 e2) = whileExamining e $ do
+inferType e@(ELet x e1 e2) = withScope e $ do
   InferenceResult typ1 i1 <- inferType e1
   (InferenceResult typ2 i2, wc) <- withWireCount $ withBoundVariable x typ1 $ inferType e2
   -- max(i1 + wires in e2, i2):
   let k = Max (Plus i1 wc) i2
   return $ InferenceResult typ2 k
 -- DESTRUCTURING LET-IN
-inferType e@(EDest x y e1 e2) = whileExamining e $ do
+inferType e@(EDest x y e1 e2) = withScope e $ do
   InferenceResult typ1 i1 <- inferType e1
   case typ1 of
     TPair typ2 typ3 -> do
@@ -472,23 +494,23 @@ inferType e@(EDest x y e1 e2) = whileExamining e $ do
       return $ InferenceResult typ4 k
     _ -> throwLocalError $ UnexpectedTypeConstructor e1 (TPair TUnit TUnit) typ1
 -- ANNOTATION
-inferType e@(EAnno e1 annotyp) = whileExamining e $ do
+inferType e@(EAnno e1 annotyp) = withScope e $ do
   checkTypeWellFormedness annotyp
   InferenceResult typ i <- inferType e1
   unless (checkSubtype typ annotyp) $ throwLocalError $ UnexpectedType e1 annotyp typ
   return $ InferenceResult annotyp i
 -- FORCE
-inferType e@(EForce e1) = whileExamining e $ do
+inferType e@(EForce e1) = withScope e $ do
   InferenceResult typ i <- inferType e1
   case typ of
     TBang typ' -> return $ InferenceResult typ' i
     _ -> throwLocalError $ UnexpectedTypeConstructor e1 (TBang TUnit) typ
 -- INDEX ABSTRACTION
-inferType e@(EIAbs id e1) = whileExamining e $ do
+inferType e@(EIAbs id e1) = withScope e $ do
   (InferenceResult typ i, wc) <- withWireCount $ withBoundIndexVariable id $ inferType e1
   return $ InferenceResult (TIForall id typ i wc) i
 -- INDEX APPLICATION
-inferType e@(EIApp e1 g) = whileExamining e $ do
+inferType e@(EIApp e1 g) = withScope e $ do
   InferenceResult typ1 i <- inferType e1
   case typ1 of
     TIForall id typ2 j1 _ -> do
@@ -496,17 +518,34 @@ inferType e@(EIApp e1 g) = whileExamining e $ do
       return $ InferenceResult (isub g id typ2) (Max i (isub g id j1))
     _ -> throwLocalError $ UnexpectedTypeConstructor e1 (TIForall "i" TUnit (Number 0) (Number 0)) typ1
 -- CONSTANTS
-inferType e@(EConst c) = whileExamining e $ return $ InferenceResult (typeOf c) (Number 0)
+inferType e@(EConst c) = withScope e $ return $ InferenceResult (typeOf c) (Number 0)
 -- LET-CONS
-inferType e@(ELetCons x y e1 e2) = whileExamining e $ do
+inferType e@(ELetCons x y e1 e2) = withScope e $ do
   InferenceResult typ1 i1 <- inferType e1
   case typ1 of
     TList j typ2 -> do
       unless (checkLeq (Number 1) j) $ throwLocalError $ UnexpectedEmptyList e1 typ1
       (InferenceResult typ3 i2, wc) <- withWireCount $ withBoundVariable x typ2 $ withBoundVariable y (TList (Minus j (Number 1)) typ2) $ inferType e2
-      let k = Max (i1 `Plus` wc) i2
+      let k = Max (Plus i1 wc) i2
       return $ InferenceResult typ3 k
     _ -> throwLocalError $ UnexpectedTypeConstructor e1 (TList (Number 0) TUnit) typ1
+      
+-- LIST-CASE
+inferType e@(EListCase e1 e2 x xs e3) = withScope e $ do
+  InferenceResult typ1 i1 <- inferType e1
+  case typ1 of
+    TList j typ1' -> do
+      ((InferenceResult typ2 i2, InferenceResult typ3 i3),wc) <- withWireCount $ withSameContext
+        (inferType e2)
+        (withBoundVariable x typ1' $ withBoundVariable xs (TList j typ1') $ inferType e3)
+      typ <- if checkSubtype typ2 typ3 then return typ3 else
+            if checkSubtype typ3 typ2 then return typ2 else
+              throwLocalError $ UnexpectedType e3 typ2 typ3
+      let k = Max (Plus i1 wc) (Max i2 i3)
+      return $ InferenceResult typ k
+    _ -> throwLocalError $ UnexpectedTypeConstructor e1 (TList (Number 0) TUnit) typ1
+
+
 
 
 --- EXPORTED WRAPPER FUNCTIONS ---------------------------------------------------------------
