@@ -29,7 +29,6 @@ dependencies:
 - filepath
 - parsec
 - argparser
-- timeit
 
 ghc-options:
 - -Wall

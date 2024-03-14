@@ -14,6 +14,7 @@ module Bundle.AST
     compose,
     mgbtu,
     btsub,
+    btfv
   )
 where
 
@@ -24,6 +25,7 @@ import qualified Data.Set as Set
 import PrettyPrinter
 import Index.Semantics
 import Control.Exception (assert)
+import Data.Set (Set)
 
 --- LANGUAGE ---------------------------------------------------------------------------------
 
@@ -80,7 +82,13 @@ instance Pretty BundleType where
 
 -- Bundle types are index-bearing syntactical objects
 instance HasIndex BundleType where
-  ifv :: BundleType -> IndexContext
+  iv :: BundleType -> Set IndexVariableId
+  iv BTUnit = Set.empty
+  iv (BTWire _) = Set.empty
+  iv (BTPair b1 b2) = iv b1 `Set.union` iv b2
+  iv (BTList i b) = assert (null (iv i)) $ iv i `Set.union` iv b
+  iv (BTVar _) = Set.empty
+  ifv :: BundleType -> Set IndexVariableId
   ifv BTUnit = Set.empty
   ifv (BTWire _) = Set.empty
   ifv (BTPair b1 b2) = ifv b1 `Set.union` ifv b2

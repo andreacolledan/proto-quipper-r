@@ -78,8 +78,13 @@
 - [x] Parsing indices
 - [x] Parsing PQR
 
+### Performance
+
+- [ ] SMT solving with one file per program (as opposed to per query)
+- [ ] Use HashMap in place of Map
+
 ### Examples
 
 - [x] List functions
 - [x] QFT
-- [ ] Arithmetic
+- [x] Arithmetic

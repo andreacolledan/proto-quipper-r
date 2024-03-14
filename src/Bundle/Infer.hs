@@ -44,26 +44,27 @@ printConstructor (BTPair _ _) = "BTPair type"
 printConstructor (BTList _ _) = "BTList type"
 printConstructor (BTVar _) = "type variable"
 
+
 --- BUNDLE TYPE INFERENCE ---------------------------------------------------------------------------------
 
 data InferenceEnv = InferenceEnv
   { labelContext :: LabelContext,   --the label context, attributes wire types to labels
-    freeVarCounter :: Int           --the free variable counter used in inference
+    freshVariableCounter :: Int           --the free variable counter used in inference
   }
 
 -- freshBTVarName describes a computation returning a fresh type variable name
 freshBTVarName :: StateT InferenceEnv (Either WireTypingError) BTVarId
 freshBTVarName = do
-  env@InferenceEnv {freeVarCounter = c} <- get
-  put $ env {freeVarCounter = c + 1}
+  env@InferenceEnv {freshVariableCounter = c} <- get
+  put $ env {freshVariableCounter = c + 1}
   return $ "a" ++ show c
 
--- tryUnify bt1 bt2 error runs mgbtu bt1 bt2 in a bundle type inference (stateful) setting
+-- unify bt1 bt2 error runs mgbtu bt1 bt2 in a bundle type inference (stateful) setting
 -- If mgbtu returns Nothing, it throws error
-tryUnify :: BundleType -> BundleType -> WireTypingError -> StateT InferenceEnv (Either WireTypingError) BundleTypeSubstitution
-tryUnify bt1 bt2 err = case mgbtu bt1 bt2 of
-  Just s -> return s
-  Nothing -> throwError err
+unify :: Bundle -> BundleType -> BundleType -> StateT InferenceEnv (Either WireTypingError) BundleTypeSubstitution
+unify b bt1 bt2 = case mgbtu bt1 bt2 of
+  Just sub -> return sub
+  Nothing -> throwError $ BundleTypeMismatch b bt2 bt1
 
 -- Lookup a label in the label context and remove it (labels are linear)
 -- Returns the type of the label, throws an error if the label is not found
@@ -86,15 +87,14 @@ inferBundleType (Pair b1 b2) = do
   btype1 <- inferBundleType b1
   btype2 <- inferBundleType b2
   return (BTPair btype1 btype2)
-inferBundleType Nil =
-  return (BTList (Number 0) BTUnit)
+inferBundleType Nil = BTList (Number 0) . BTVar <$> freshBTVarName
 inferBundleType b@(Cons b1 b2) = do
   btype1 <- inferBundleType b1
   btype2 <- inferBundleType b2
   case btype2 of
     BTList i btype1' -> do
-      unless (isBundleSubtype (BTList i btype1') (BTList i btype1)) $ throwError $ BundleTypeMismatch b (BTList i btype1) (BTList i btype1')
-      return (BTList (Plus i (Number 1)) btype1)
+      sub3 <- unify b2 btype1' btype1
+      return (BTList (Plus i (Number 1)) (btsub sub3 btype1))
     _ -> throwError $ UnexpectedBundleTypeContstructor (Cons b1 b2) btype2 (BTList (Number 0) BTUnit)
 
 -- Q <== l : T

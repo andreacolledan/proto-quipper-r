@@ -15,7 +15,7 @@ spec = do
     it "parses '()' as the unit value" $ do
       parse parseProgram "" "()" `shouldBe` Right EUnit
     it "parses '[]' as the empty list" $ do
-      parse parseProgram "" "[]" `shouldBe` Right ENil
+      parse parseProgram "" "[]" `shouldBe` Right (ENil Nothing)
     it "parses a lowercase identifier as a variable" $ do
       parse parseProgram "" "x" `shouldBe` Right (EVar "x")
     it "parses an uppercase identifier as a constant" $ do
@@ -25,7 +25,7 @@ spec = do
     it "parses 'let x = () in x' as a let binding" $ do
       parse parseProgram "" "let x = () in x" `shouldBe` Right (ELet "x" EUnit (EVar "x"))
     it "parses 'let (x,y) = ((),[]) in ([],())' as a destructuring let" $ do
-      parse parseProgram "" "let (x,y) = ((),[]) in ([],())" `shouldBe` Right (EDest "x" "y" (EPair EUnit ENil) (EPair ENil EUnit))
+      parse parseProgram "" "let (x,y) = ((),[]) in ([],())" `shouldBe` Right (EDest "x" "y" (EPair EUnit (ENil Nothing)) (EPair (ENil Nothing) EUnit))
     it "parses 'apply(c,l)' as circuit application" $ do
       parse parseProgram "" "apply(c,l)" `shouldBe` Right (EApply (EVar "c") (EVar "l"))
     it "parses 'lift e' as lifting" $ do
@@ -50,21 +50,21 @@ spec = do
     it "parses '(x,y,z,w)' as (((x,y),z),w)" $ do
       parse parseProgram "" "(x,y,z,w)" `shouldBe` Right (EPair (EPair (EPair (EVar "x") (EVar "y")) (EVar "z")) (EVar "w"))
     it "parses '[x,y,z,q]' as x:(y:(z:(q:[])))" $ do
-      parse parseProgram "" "[x,y,z,q]" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ECons (EVar "z") (ECons (EVar "q") ENil))))
+      parse parseProgram "" "[x,y,z,q]" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ECons (EVar "z") (ECons (EVar "q") (ENil Nothing)))))
   describe "associativity" $ do
     it "application is left associative" $ do
       parse parseProgram "" "f x y" `shouldBe` Right (EApp (EApp (EVar "f") (EVar "x")) (EVar "y"))
     it "cons'ing is right associative" $ do
-      parse parseProgram "" "x:y:z:[]" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ECons (EVar "z") ENil)))
+      parse parseProgram "" "x:y:z:[]" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ECons (EVar "z") (ENil Nothing))))
     it "nested built-in operators are right associative" $ do
       parse parseProgram "" "box[Qubit] let f = force x in lift f" `shouldBe` Right (EBox (BTWire Qubit) (ELet "f" (EForce (EVar "x")) (ELift (EVar "f"))))
   describe "precedence" $ do
     it "application has precedence over abstraction" $ do
       parse parseProgram "" "\\x :: () . x y" `shouldBe` Right (EAbs "x" TUnit (EApp (EVar "x") (EVar "y")))
     it "cons'ing has precedence over abstraction" $ do
-      parse parseProgram "" "\\x :: () . x:y:[]" `shouldBe` Right (EAbs "x" TUnit (ECons (EVar "x") (ECons (EVar "y") ENil)))
+      parse parseProgram "" "\\x :: () . x:y:[]" `shouldBe` Right (EAbs "x" TUnit (ECons (EVar "x") (ECons (EVar "y") (ENil Nothing))))
     it "application has precedence over cons'ing" $ do
-      parse parseProgram "" "f x:y:[]" `shouldBe` Right (ECons (EApp (EVar "f") (EVar "x")) (ECons (EVar "y") ENil))
+      parse parseProgram "" "f x:y:[]" `shouldBe` Right (ECons (EApp (EVar "f") (EVar "x")) (ECons (EVar "y") (ENil Nothing)))
     it "annotation has precedence over abstraction" $ do
       parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () -o[1,0] Qubit" `shouldBe` Right (EAbs "x" TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
     it "annotation has precedence over let" $ do
@@ -72,7 +72,7 @@ spec = do
     it "application has precedence over annotation" $ do
       parse parseProgram "" "f x :: ()" `shouldBe` Right (EAnno (EApp (EVar "f") (EVar "x")) TUnit)
     it "cons has precedence over annotation" $ do
-      parse parseProgram "" "x:y:[] :: List[3] Qubit" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") ENil) `EAnno` TList (Number 3) (TWire Qubit))
+      parse parseProgram "" "x:y:[] :: List[3] Qubit" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ENil Nothing)) `EAnno` TList (Number 3) (TWire Qubit))
     it "index application has precedence over index abstraction" $ do
       parse parseProgram "" "@i . e @ j" `shouldBe` Right (EIAbs "i" (EIApp (EVar "e") (IndexVariable "j")))
     it "application has precedence over index application" $ do

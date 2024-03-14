@@ -38,6 +38,7 @@ library
       Lang.Type.AST
       Lang.Type.Parse
       Lang.Type.Semantics
+      Lang.Type.Unify
       Lang.Unified.AST
       Lang.Unified.Constant
       Lang.Unified.Infer
@@ -59,7 +60,6 @@ library
     , mtl
     , parsec
     , process
-    , timeit
   default-language: Haskell2010
 
 executable pqr
@@ -80,7 +80,6 @@ executable pqr
     , parsec
     , pqr
     , process
-    , timeit
   default-language: Haskell2010
 
 test-suite pqr-test
@@ -113,5 +112,4 @@ test-suite pqr-test
     , parsec
     , pqr
     , process
-    , timeit
   default-language: Haskell2010

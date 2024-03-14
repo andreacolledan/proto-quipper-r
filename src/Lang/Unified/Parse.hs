@@ -61,7 +61,7 @@ unitValue = do
 nil :: Parser Expr
 nil = do
   m_reserved "[]"
-  return ENil
+  return $ ENil Nothing
   <?> "empty list"
 
 -- parse a lowercase identifier as a variable
@@ -181,24 +181,6 @@ dest = do
     Nothing -> fail "Destructuring let-in must bind at least two variables"
   <?> "destructuring let-in"
 
--- parse "case e of { [] -> e1 | x:xs -> e2 }" as (EListCase e e1 x xs e2)
-listCase :: Parser Expr
-listCase = do
-  m_reserved "case"
-  e <- parseExpr
-  m_reserved "of"
-  m_braces $ do
-    m_reserved "[]"
-    m_reservedOp "->"
-    e1 <- parseExpr
-    m_reservedOp "|"
-    x <- m_identifier
-    m_reservedOp ":"
-    xs <- m_identifier
-    m_reservedOp "->"
-    e2 <- parseExpr
-    return $ EListCase e e1 x xs e2
-
 -- parse "let x = e1 in e2" as (ELet x e1 e2)
 letIn :: Parser Expr
 letIn = do
@@ -217,7 +199,7 @@ letIn = do
 list :: Parser Expr
 list = do
   elems <- m_brackets $ m_commaSep parseExpr
-  return $ foldr ECons ENil elems
+  return $ foldr ECons (ENil Nothing) elems
   <?> "list literal"
 
 -- parse "let x:xs = e1 in e2" as (ELetCons x xs e1 e2)

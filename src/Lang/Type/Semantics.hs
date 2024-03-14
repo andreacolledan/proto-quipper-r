@@ -1,6 +1,4 @@
 module Lang.Type.Semantics where
-
-import Bundle.AST
 import Lang.Type.AST
 import Index.AST
 import Index.Semantics
@@ -69,12 +67,3 @@ checkTypeEq (TIForall id t i j) (TIForall id' t' i' j') = let
     && checkEq (isub (IndexVariable fid') id i) (isub (IndexVariable fid') id' i')
     && checkEq (isub (IndexVariable fid') id j) (isub (IndexVariable fid') id' j')
 checkTypeEq _ _ = False
-
--- Coerce a bundle type to a PQR type
--- Raises an error if the input is a type variable (should never happen)
-fromBundleType :: BundleType -> Type
-fromBundleType BTUnit = TUnit
-fromBundleType (BTWire wtype) = TWire wtype
-fromBundleType (BTPair btype1 btype2) = TPair (fromBundleType btype1) (fromBundleType btype2)
-fromBundleType (BTList i btype) = TList i (fromBundleType btype)
-fromBundleType (BTVar _) = error "Cannot convert bundle type variable to PQR type"

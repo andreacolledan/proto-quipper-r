@@ -32,6 +32,7 @@ import Data.Maybe (fromMaybe)
 import PrettyPrinter
 import Index.Semantics
 import Lang.Type.Semantics
+import Lang.Type.Unify
 
 
 -- Corresponds to Γ in the paper
@@ -243,7 +244,7 @@ embedWireBundle :: Bundle -> Value
 embedWireBundle Bundle.UnitValue = UnitValue
 embedWireBundle (Bundle.Label id) = Label id
 embedWireBundle (Bundle.Pair b1 b2) = Pair (embedWireBundle b1) (embedWireBundle b2)
-embedWireBundle Bundle.Nil = Nil
+embedWireBundle (Bundle.Nil) = Nil
 embedWireBundle (Bundle.Cons b1 b2) = Cons (embedWireBundle b1) (embedWireBundle b2)
 
 -- embedBundleType bt returns the PQR type equivalent to bt
@@ -260,25 +261,25 @@ embedBundleType (BTVar id) = TVar id
 -- inferValueType v describes the type inference computation on value v.
 -- If succesful, it returns the type of v together with the substitution accumulated during inference
 inferValueType :: Value -> StateT TypingEnvironment (Either TypingError) (Type, TypeSubstitution)
-inferValueType UnitValue = return (TUnit, Map.empty)
+inferValueType UnitValue = return (TUnit, mempty)
 inferValueType (Label id) = do
   wtype <- labelContextLookup id
-  return (TWire wtype, Map.empty)
+  return (TWire wtype, mempty)
 inferValueType (Variable id) = do
   typ <- typingContextLookup id
-  return (typ, Map.empty)
+  return (typ, mempty)
 inferValueType (Pair v w) = do
   (typ1, sub1) <- inferValueType v
   substituteInEnvironment sub1
   (typ2, sub2) <- inferValueType w
-  return (TPair (tsub sub2 typ1) typ2, compose sub1 sub2)
+  return (TPair (tsub sub2 typ1) typ2, sub1 <> sub2)
 inferValueType (BoxedCircuit inB circ outB) = lift $ do
   (inQ, outQ) <- mapLeft WireTypingError $ inferCircuitSignature circ
   (inBtype, inQ') <- mapLeft WireTypingError $ runBundleTypeInferenceWithRemaining inQ inB
   (outBtype, outQ') <- mapLeft WireTypingError $ runBundleTypeInferenceWithRemaining outQ outB
   unless (Map.null inQ') $ throwError $ MismatchedCircuitInterface Input circ inQ' inB
   unless (Map.null outQ') $ throwError $ MismatchedCircuitInterface Output circ outQ' outB
-  return (TCirc (Number $ width circ) inBtype outBtype, Map.empty)
+  return (TCirc (Number $ width circ) inBtype outBtype, mempty)
 inferValueType (Abs x intyp m) = do
   ((outtyp, i, sub), j) <- withWireCount $ withBoundVariable x intyp $ inferTermType m
   return (TArrow (tsub sub intyp) outtyp i j, sub)
@@ -288,7 +289,7 @@ inferValueType (Lift m) = do
   return (TBang typ, sub)
 inferValueType Nil = do
   a <- freshTypeVariableName
-  return (TList (Number 0) (TVar a), Map.empty)
+  return (TList (Number 0) (TVar a), mempty)
 inferValueType (Cons v w) = do
   (typ1, sub1) <- inferValueType v
   substituteInEnvironment sub1
@@ -296,7 +297,7 @@ inferValueType (Cons v w) = do
   case typ2 of
     TList i typ1' -> do
       sub3 <- tryUnify typ1' (tsub sub2 typ1) $ UnexpectedType (Right w) (TList i typ1) typ2
-      return (TList (Plus i (Number 1)) (tsub sub3 typ1), sub3 `compose` sub2 `compose` sub1)
+      return (TList (Plus i (Number 1)) (tsub sub3 typ1), sub3 <> sub2 <> sub1)
     _ -> throwError $ UnexpectedTypeConstructor (Right w) (TList (Number 0) TUnit) typ2
 inferValueType (Fold id v w) = do
   (stepfuntyp, sub1) <- inferValueType v
@@ -311,12 +312,12 @@ inferValueType (Fold id v w) = do
       let (elemtyp'', acctyp'') = (tsub sub3 elemtyp', tsub sub3 acctyp')
       id' <- freshIndexVariableName
       let e = Max resourceCount (Maximum id (IndexVariable id') (Plus i (Mult (Minus (IndexVariable id') (Plus (IndexVariable id) (Number 1))) (wireCount elemtyp''))))
-      return (TArrow (TList (IndexVariable id') elemtyp'') (isub (IndexVariable id') id acctyp'') e resourceCount, sub2 `compose` sub1)
+      return (TArrow (TList (IndexVariable id') elemtyp'') (isub (IndexVariable id') id acctyp'') e resourceCount, sub2 <> sub1)
     _ -> throwError $ UnfoldableType v stepfuntyp
 inferValueType (Anno v typ) = do
   (typ', sub) <- inferValueType v
   sub' <- tryUnify typ' typ $ UnexpectedType (Right v) typ typ'
-  return (tsub sub' typ, sub' `compose` sub)
+  return (tsub sub' typ, sub' <> sub)
 
 -- inferTermType m describes the type inference computation on term m.
 -- If succesful, it returns
@@ -334,7 +335,7 @@ inferTermType (App v w) = do
       substituteInEnvironment sub1
       (argtyp, sub2) <- inferValueType w
       sub3 <- tryUnify intyp (tsub sub2 argtyp) $ UnexpectedType (Right w) intyp argtyp
-      return (tsub sub3 outtyp, i, sub3 `compose` sub2 `compose` sub1)
+      return (tsub sub3 outtyp, i, sub3 <> sub2 <> sub1)
     _ -> throwError $ UnexpectedTypeConstructor (Right v) (TArrow TUnit TUnit (Number 0) (Number 0)) ftyp
 inferTermType (Force v) = do
   (vtyp, sub) <- inferValueType v
@@ -345,7 +346,7 @@ inferTermType (Let x m n) = do
   (ltype, i, sub1) <- inferTermType m
   substituteInEnvironment sub1
   ((rtype, j, sub2), rWireCount) <- withWireCount $ withBoundVariable x ltype $ inferTermType n
-  return (rtype, Max (Plus i rWireCount) j, sub2 `compose` sub1)
+  return (rtype, Max (Plus i rWireCount) j, sub2 <> sub1)
 inferTermType (Box inbtype v) = do
   (ftyp, sub1) <- inferValueType v
   case ftyp of
@@ -363,7 +364,7 @@ inferTermType (Apply v w) = do
       substituteInEnvironment sub1
       (inBtype', sub2) <- inferValueType w
       sub3 <- tryUnify inBtype' (embedBundleType inBtype) $ UnexpectedType (Right w) (embedBundleType inBtype) inBtype'
-      return (embedBundleType outBtype, i, sub3 `compose` sub2 `compose` sub1)
+      return (embedBundleType outBtype, i, sub3 <> sub2 <> sub1)
     _ -> throwError $ UnexpectedTypeConstructor (Right v) (TCirc (Number 0) BTUnit BTUnit) ctype
 inferTermType (Dest x y v m) = do
   (ltyp, sub1) <- inferValueType v
@@ -371,7 +372,7 @@ inferTermType (Dest x y v m) = do
     TPair ltyp1 ltyp2 -> do
       substituteInEnvironment sub1
       (rtype, j, sub2) <- withBoundVariable x ltyp1 $ withBoundVariable y ltyp2 $ inferTermType m
-      return (rtype, j, sub2 `compose` sub1)
+      return (rtype, j, sub2 <> sub1)
     _ -> throwError $ UnexpectedTypeConstructor (Right v) (TPair TUnit TUnit) ltyp
 
 
@@ -393,7 +394,7 @@ runValueTypeChecking :: TypingContext -> LabelContext -> Value -> Type -> Either
 runValueTypeChecking gamma q v typ = case runValueTypeInference gamma q v of
   -- NOTE: for now we do not have type instantiation, so we do not try and unify the inferred type with the expected type
   Right typ' -> do
-    let sub = fromMaybe Map.empty $ mgtu typ' typ
+    let sub = fromMaybe mempty $ mgtu typ' typ
     unless (checkSubtype (tsub sub typ') typ) $ throwError $ UnexpectedType (Right v) typ typ'
   Left err -> throwError err
 
@@ -411,7 +412,7 @@ runTermTypeInference gamma q m = case runStateT (inferTermType m) (TypingEnviron
 runTermTypeChecking :: TypingContext -> LabelContext -> Term -> Type -> Index -> Either TypingError ()
 runTermTypeChecking gamma q m typ i = case runTermTypeInference gamma q m of
   Right (typ', i') -> do
-    let sub = fromMaybe Map.empty $ mgtu typ' typ
+    let sub = fromMaybe mempty $ mgtu typ' typ
     unless (checkSubtype (tsub sub typ') typ) $ throwError $ UnexpectedType (Left m) typ typ'
     unless (checkLeq i' i) $ throwError $ UnexpectedWidthAnnotation m i i'
   Left err -> throwError err

@@ -1,21 +1,15 @@
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Lang.Type.AST (
   Type(..),
   TVarId,
-  TypeSubstitution,
-  tfv,
-  tsub,
-  compose,
-  mgtu,
   isLinear,
-  toBundleType
-
+  toBundleType,
+  fromBundleType
 ) where
 
 import Bundle.AST ( BundleType (..), WireType, Wide(..) )
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Set
 import qualified Data.Set as Set
 import Index.AST
@@ -111,7 +105,7 @@ isLinear (TArrow {}) = True
 isLinear (TBang _) = False
 isLinear (TList i typ)  | checkEq i (Number 0) = False  --TODO I really don't like this
                         | otherwise = isLinear typ
-isLinear (TVar _) = True
+isLinear (TVar _) = False --Variables are only used in the pre-processing stage, so we are permissive here
 isLinear (TIForall _ typ _ i) = isLinear typ && checkEq i (Number 0) --TODO I really don't like this
 
 -- Turns a suitable PQR type into an identical bundle type
@@ -122,72 +116,16 @@ toBundleType (TPair typ1 typ2) = do
   btype1 <- toBundleType typ1
   btype2 <- toBundleType typ2
   return $ BTPair btype1 btype2
+toBundleType (TVar id) = Just $ BTVar id
+toBundleType (TList i typ) = do
+  btype <- toBundleType typ
+  return $ BTList i btype
 toBundleType _ = Nothing
 
---- SUBSTITUTION ---------------------------------------------------------------------------------
-
-type TypeSubstitution = Map TVarId Type
-
--- tfv t Returns the free type variables occurring in t
-tfv :: Type -> Set TVarId
-tfv TUnit = Set.empty
-tfv (TWire _) = Set.empty
-tfv (TPair t1 t2) = tfv t1 `Set.union` tfv t2
-tfv (TCirc {}) = Set.empty
-tfv (TArrow t1 t2 _ _) = tfv t1 `Set.union` tfv t2
-tfv (TBang t) = tfv t
-tfv (TList _ t) = tfv t
-tfv (TVar id) = Set.singleton id
-tfv (TIForall _ t _ _) = tfv t
-
--- tsub sub t applies the type substitution sub to the type t
-tsub :: TypeSubstitution -> Type -> Type
-tsub _ TUnit = TUnit
-tsub _ typ@(TWire _) = typ
-tsub sub (TPair t1 t2) = TPair (tsub sub t1) (tsub sub t2)
-tsub _ typ@(TCirc {}) = typ
-tsub sub (TArrow typ1 typ2 i j) = TArrow (tsub sub typ1) (tsub sub typ2) i j
-tsub sub (TBang typ) = TBang (tsub sub typ)
-tsub sub (TList i typ) = TList i (tsub sub typ)
-tsub sub typ@(TVar id) = Map.findWithDefault typ id sub
-tsub sub (TIForall id typ i j) = TIForall id (tsub sub typ) i j
-
--- sub1 `compose` sub2 composes the type substitutions sub1 and sub2
--- according to sub2 ∘ sub1 = sub1 U (sub1 sub2)
-compose :: TypeSubstitution -> TypeSubstitution -> TypeSubstitution
-compose sub1 sub2 = Map.union (Map.map (tsub sub1) sub2) sub1
-
-infixr 7 `compose`
-
---- UNIFICATION ---------------------------------------------------------------------------------
-
--- assignTVar id t attempts to return the singleton substitution id |-> t
--- if unnecessary (id != t) it returns the empty substitution
--- if impossible (id occurs in t) it returns Nothing
-assignTVar :: TVarId -> Type -> Maybe TypeSubstitution
-assignTVar id (TVar id') | id == id' = return Map.empty
-assignTVar id t | id `Set.member` tfv t = Nothing
-assignTVar id t = return $ Map.singleton id t
-
--- mgtu t1 t2 attempts to find a most general type substitution sub such that sub(t1) = t2
--- If successful, it returns Just sub, otherwise it returns Nothing
--- TODO checks on equality of indices
--- TODO subtyping
-mgtu :: Type -> Type -> Maybe TypeSubstitution
-mgtu (TVar id) t = assignTVar id t
-mgtu t (TVar id) = assignTVar id t
-mgtu TUnit TUnit = return Map.empty
-mgtu (TWire wt1) (TWire wt2) | wt1 == wt2 = return Map.empty
-mgtu (TPair t1 t2) (TPair t1' t2') = do
-  sub1 <- mgtu t1 t1'
-  sub2 <- mgtu (tsub sub1 t2) (tsub sub1 t2')
-  return $ compose sub2 sub1
-mgtu (TCirc i inBtype outBtype) (TCirc i' inBtype' outBtype') | checkLeq i i' && inBtype == inBtype' && outBtype == outBtype' = return Map.empty
-mgtu (TArrow typ1 typ2 i j) (TArrow typ1' typ2' i' j') | checkLeq i i' && checkEq j j' = do
-  sub1 <- mgtu typ1 typ1'
-  sub2 <- mgtu (tsub sub1 typ2) (tsub sub1 typ2')
-  return $ compose sub2 sub1
-mgtu (TBang typ) (TBang typ') = mgtu typ typ'
-mgtu (TList i typ) (TList i' typ') | checkEq i i' = mgtu typ typ'
-mgtu (TIForall id typ i j) (TIForall id' typ' i' j') | id == id' && checkLeq i i' && checkEq j j' = mgtu typ typ' --TODO alpha conversion
-mgtu _ _ = Nothing
+-- fromBundleType bt returns the PQR type equivalent to bt
+fromBundleType :: BundleType -> Type
+fromBundleType BTUnit = TUnit
+fromBundleType (BTWire wtype) = TWire wtype
+fromBundleType (BTPair b1 b2) = TPair (fromBundleType b1) (fromBundleType b2)
+fromBundleType (BTList i b) = TList i (fromBundleType b)
+fromBundleType (BTVar id) = TVar id

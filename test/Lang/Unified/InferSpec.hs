@@ -10,6 +10,7 @@ import Lang.Unified.AST
 import Lang.Unified.Infer
 import Test.Hspec
 import qualified Circuit
+import Lang.Unified.Constant
 
 simplify :: Either TypingError (Type, Index) -> Either TypingError (Type, Index)
 simplify (Left err) = Left err
@@ -86,29 +87,32 @@ spec = do
         simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
     context "when typing the empty list" $ do
       it "produces an empty list type and wirecount zero if the context is empty" $ do
-        -- ∅;∅;∅ ⊢ [] ==> List[0] () ; 0
-        runTypeInferenceWith emptyEnv ENil `shouldBe` Right (TList (Number 0) TUnit, Number 0)
+        -- ∅;∅;∅ ⊢ [] :: List[0] () ==> List[0] () ; 0
+        runTypeInferenceWith emptyEnv (EAnno (ENil Nothing) (TList (Number 0) TUnit)) `shouldBe` Right (TList (Number 0) TUnit, Number 0)
       it "produces an empty list type and wirecount zero if the context is non-linear" $ do
-        -- ∅;x:();∅ ⊢ [] ==> List[0] a0 ; 0
+        -- ∅;x:();∅ ⊢ [] :: List[0] () ==> List[0] () ; 0
         let gamma = [("x", TUnit)]
-        runTypeInferenceWith (makeEnv gamma []) ENil `shouldBe` Right (TList (Number 0) TUnit, Number 0)
+        runTypeInferenceWith (makeEnv gamma []) (EAnno (ENil Nothing) (TList (Number 0) TUnit)) `shouldBe` Right (TList (Number 0) TUnit, Number 0)
       it "fails when there are linear resources in the environment" $ do
-        -- ∅;x:Qubit;∅ ⊢ [] =/=> 
+        -- ∅;x:Qubit;∅ ⊢ [] :: List[0] () =/=> 
         let gamma = [("x", TWire Qubit)]
-        runTypeInferenceWith (makeEnv gamma []) ENil `shouldSatisfy` isLeft
-        -- ∅;∅;l:Qubit ⊢ [] =/=>
+        runTypeInferenceWith (makeEnv gamma []) (EAnno (ENil Nothing) (TList (Number 0) TUnit)) `shouldSatisfy` isLeft
+        -- ∅;∅;l:Qubit ⊢ [] :: List[0] () =/=>
         let q = [("l", Qubit)]
-        runTypeInferenceWith (makeEnv [] q) ENil `shouldSatisfy` isLeft
+        runTypeInferenceWith (makeEnv [] q) (EAnno (ENil Nothing) (TList (Number 0) TUnit)) `shouldSatisfy` isLeft
+      it "fails when the parameter type is unconstrained" $ do
+        -- ∅;∅;∅ ⊢ [] =/=>
+        runTypeInferenceWith emptyEnv (ENil Nothing) `shouldSatisfy` isLeft
     context "when typing cons" $ do
       it "produces the correct list type and the wirecount of the elements times the length of the list" $ do
         -- ∅;x:Qubit;∅ ⊢ x:[] ==> List[1] Qubit ; 1
         let gamma = [("x", TWire Qubit)]
-        let expr = ECons (EVar "x") ENil
+        let expr = ECons (EVar "x") (ENil Nothing)
         let expected = (TList (Number 1) (TWire Qubit), Number 1)
         simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
         -- ∅;x:Qubit,y:Qubit;∅ ⊢ x:y:[] ==> List[2] (Qubit,Bit) ; 2
         let gamma = [("x", TWire Qubit), ("y", TWire Qubit)]
-        let expr = ECons (EVar "x") (ECons (EVar "y") ENil)
+        let expr = ECons (EVar "x") (ECons (EVar "y") (ENil Nothing))
         let expected = (TList (Number 2) (TWire Qubit), Number 2)
         simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
         -- ∅;x:(Bit,Bit),xs:List[100] (Bit,Bit) ⊢ x:xs ==> List[101] (Bit,Bit) ; 202
@@ -119,7 +123,7 @@ spec = do
       it "fails when the head is of a different type than the rest of the list" $ do
         -- ∅;x:Qubit,y:Bit;∅ ⊢ x:y:[] =/=> 
         let gamma = [("x", TWire Qubit), ("y", TWire Bit)]
-        let expr = ECons (EVar "x") (ECons (EVar "y") ENil)
+        let expr = ECons (EVar "x") (ECons (EVar "y") (ENil Nothing))
         runTypeInferenceWith (makeEnv gamma []) expr `shouldSatisfy` isLeft
     context "when typing abstractions" $ do
       it "produces the correct arrow type and a wirecount equal to the second annotation of the arrow" $ do
@@ -315,26 +319,71 @@ spec = do
         runTypeInferenceWith (makeEnv [] q) expr `shouldSatisfy` isLeft
     context "when typing apply" $ do
       it "produces the correct type and wirecount when both function and argument are values" $ do
-        pending -- TODO
+        -- ∅;∅;∅ ⊢ apply(QInit0,()) ==> Qubit ; 1
+        let expr = EApply (EConst QInit0) EUnit
+        let expected = (TWire Qubit, Number 1)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
       it "produces the correct type and wirecount when the applied circuit term computes" $ do
-        pending -- TODO 
+        -- ∅;f:!(Qubit -o[2,0] Qubit);q:Qubit;∅ ⊢ apply(box::Qubit f, q) ==> Qubit ; 2
+        let gamma = [
+              ("f", TBang (TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0))),
+              ("q", TWire Qubit)]
+        let expr = EApply (EBox (BTWire Qubit) (EVar "f")) (EVar "q")
+        let expected = (TWire Qubit, Number 2)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
       it "produces the correct type and wirecount when the circuit application argument computes" $ do
-        pending -- TODO
+        -- ∅;rev:!(i ->[0,0] List[i] Qubit -o[i,0] List[i] Qubit),c:Circ[16](List[8] Qubit, List[8] Qubit), qs:List[8] Qubit;∅ ⊢ apply(c, (force rev) @8 qs) ==> List[8] Qubit ; 16
+        let gamma = [
+              ("rev", TBang (TIForall "i" (TArrow (TList (IndexVariable "i") (TWire Qubit)) (TList (IndexVariable "i") (TWire Qubit)) (IndexVariable "i") (Number 0)) (Number 0) (Number 0))),
+              ("c", TCirc (Number 16) (BTList (Number 8) (BTWire Qubit)) (BTList (Number 8) (BTWire Qubit))),
+              ("qs", TList (Number 8) (TWire Qubit))]
+        let expr = EApply (EVar "c") (EApp (EIApp (EForce (EVar "rev")) (Number 8)) (EVar "qs"))
+        let expected = (TList (Number 8) (TWire Qubit), Number 16)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
       it "produces the correct type and wirecount when both circuit term and argument compute" $ do
-        pending -- TODO
+        -- ∅;f:!(Qubit -o[2,0] Qubit),q:Qubit,g:Qubit ->[2,0] Qubit;∅ ⊢ apply(box::Qubit f, g q) ==> Qubit ; 2
+        let gamma = [
+              ("f", TBang (TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0))),
+              ("q", TWire Qubit),
+              ("g", TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0))]
+        let expr = EApply (EBox (BTWire Qubit) (EVar "f")) (EApp (EVar "g") (EVar "q"))
+        let expected = (TWire Qubit, Number 2)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
       it "fails if the applied term is not a circuit term" $ do
-        pending -- TODO
+        -- ∅;f:Qubit ->[2,0] Qubit,q:Qubit;∅ ⊢ apply(f,q) =/=>
+        let gamma = [
+              ("f", TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0)),
+              ("q", TWire Qubit)]
+        let expr = EApply (EVar "f") (EVar "q")
+        runTypeInferenceWith (makeEnv gamma []) expr `shouldSatisfy` isLeft
       it "fails if the argument is not of the expected bundle type" $ do
-        pending -- TODO
+        -- ∅;b:Bit;∅ ⊢ apply(QInit0,b) =/=>
+        let gamma = [("b", TWire Bit)]
+        let expr = EApply (EConst QInit0) (EVar "b")
+        runTypeInferenceWith (makeEnv gamma []) expr `shouldSatisfy` isLeft
     context "when typing box" $ do
       it "produces the correct type and wirecount when the argument is a value" $ do
-        pending -- TODO
+        -- ∅;f:!(Qubit -o[2,0] Qubit);∅ ⊢ box::Qubit f ==> Circ[2](Qubit,Qubit) ; 0
+        let gamma = [("f", TBang (TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0)))]
+        let expr = EBox (BTWire Qubit) (EVar "f")
+        let expected = (TCirc (Number 2) (BTWire Qubit) (BTWire Qubit), Number 0)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
       it "produces the correct type and wirecount when the argument computes" $ do
-        pending -- TODO
+        -- ∅;f:() -o[3,0] !(Qubit -o[2,0] Bit);∅ ⊢ box::Qubit (f ()) ==> Circ[2](Qubit,Bit) ; 3
+        let gamma = [("f", TArrow TUnit (TBang (TArrow (TWire Qubit) (TWire Bit) (Number 2) (Number 0))) (Number 3) (Number 0))]
+        let expr = EBox (BTWire Qubit) (EApp (EVar "f") EUnit)
+        let expected = (TCirc (Number 2) (BTWire Qubit) (BTWire Bit), Number 3)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
       it "fails if the argument is not a duplicable function" $ do
-        pending -- TODO
+        -- ∅;f:Qubit ->[2,0] Qubit;∅ ⊢ box::Qubit f =/=>
+        let gamma = [("f", TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0))]
+        let expr = EBox (BTWire Qubit) (EVar "f")
+        runTypeInferenceWith (makeEnv gamma []) expr `shouldSatisfy` isLeft
       it "fails if the argument is not a circuit building function" $ do
-        pending -- TODO
+        -- ∅;f:!(Qubit -o[2,0] Circ[2](Qubit,Qubit));∅ ⊢ box::Qubit f =/=>
+        let gamma = [("f", TBang (TArrow (TWire Qubit) (TCirc (Number 2) (BTWire Qubit) (BTWire Qubit)) (Number 2) (Number 0)))]
+        let expr = EBox (BTWire Qubit) (EVar "f")
+        runTypeInferenceWith (makeEnv gamma []) expr `shouldSatisfy` isLeft
     context "when typing index application" $ do
       it "produces the instantiated type of body expression and its wirecount" $ do
         -- ∅;∅;∅ ⊢ (@i . \x :: List[i] Qubit . x) @100 ==> List[100] Qubit -o[100,0] List[100] Qubit ; 0
@@ -343,27 +392,69 @@ spec = do
         simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
     context "when typing let-in" $ do
       it "produces the right type and wirecount when both the bound expression and the body are values" $ do
-        pending -- TODO
+        -- ∅;∅;∅ ⊢ let x = () in (x,x) ==> ((),()) ; 0
+        let expr = ELet "x" EUnit (EPair (EVar "x") (EVar "x"))
+        let expected = (TPair TUnit TUnit, Number 0)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
       it "produces the right type and wirecount when the bound expression computes" $ do
-        pending -- TODO
+        -- ∅;∅;∅ ⊢ let x = apply(QInit0,()) in (x,()) ==> (Qubit,()) ; 1
+        let expr = ELet "x" (EApply (EConst QInit0) EUnit) (EPair (EVar "x") EUnit)
+        let expected = (TPair (TWire Qubit) TUnit, Number 1)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
       it "produces the right type and wirecount when the body computes" $ do
-        pending -- TODO
+        -- ∅;∅;∅ ⊢ let x = () in apply(QInit0,x) ==> Qubit ; 1
+        let expr = ELet "x" EUnit (EApply (EConst QInit0) (EVar "x"))
+        let expected = (TWire Qubit, Number 1)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
       it "produces the right type and wirecount when both the bound expression and the body compute" $ do
-        pending -- TODO
+        -- ∅;∅;∅ ⊢ let x = apply(QInit0,()) in apply(Hadamard,x) ==> Qubit ; 1
+        let expr = ELet "x" (EApply (EConst QInit0) EUnit) (EApply (EConst Hadamard) (EVar "x"))
+        let expected = (TWire Qubit, Number 1)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
     context "when typing the destructuring let-in" $ do
       it "produces the right type and wirecount when both the bound expression and the body are values" $ do
-        pending -- TODO
+        -- ∅;∅;∅ ⊢ let (x,y) = ((),()) in (y,x) ==> ((),()) ; 0
+        let expr = EDest "x" "y" (EPair EUnit EUnit) (EPair (EVar "y") (EVar "x"))
+        let expected = (TPair TUnit TUnit, Number 0)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
       it "produces the right type and wirecount when the bound expression computes" $ do
-        pending -- TODO
+        -- ∅;initTwo:() -o[2,0] (Qubit,Qubit);∅ ⊢ let (x,y) = initTwo () in (y,x) ==> (Qubit,Qubit) ; 2
+        let gamma = [("initTwo", TArrow TUnit (TPair (TWire Qubit) (TWire Qubit)) (Number 2) (Number 0))]
+        let expr = EDest "x" "y" (EApp (EVar "initTwo") EUnit) (EPair (EVar "y") (EVar "x"))
+        let expected = (TPair (TWire Qubit) (TWire Qubit), Number 2)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
       it "produces the right type and wirecount when the body computes" $ do
-        pending -- TODO
+        -- ∅;initTwo:() -o[2,0] (Qubit,Qubit);∅ ⊢ let (x,y) = ((),()) in initTwo y ==> (Qubit,Qubit) ; 2
+        let gamma = [("initTwo", TArrow TUnit (TPair (TWire Qubit) (TWire Qubit)) (Number 2) (Number 0))]
+        let expr = EDest "x" "y" (EPair EUnit EUnit) (EApp (EVar "initTwo") (EVar "y"))
+        let expected = (TPair (TWire Qubit) (TWire Qubit), Number 2)  
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
       it "produces the right type and wirecount when both the bound expression and the body compute" $ do
-        pending -- TODO
+        -- ∅;initTwo:() -o[2,0] (Qubit,Qubit);∅ ⊢ let (x,y) = initTwo () in apply(CNot,(y,x)) ==> (Qubit,Qubit) ; 2
+        let gamma = [("initTwo", TArrow TUnit (TPair (TWire Qubit) (TWire Qubit)) (Number 2) (Number 0))]
+        let expr = EDest "x" "y" (EApp (EVar "initTwo") EUnit) (EApply (EConst CNot) (EPair (EVar "y") (EVar "x")))
+        let expected = (TPair (TWire Qubit) (TWire Qubit), Number 2)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+      it "fails when the bound expression is not of tensor type" $ do
+        -- ∅;∅;∅ ⊢ let (x,y) = apply(QInit0,()) in (y,x) =/=>
+        let expr = EDest "x" "y" (EApply (EConst QInit0) EUnit) (EPair (EVar "y") (EVar "x"))
+        runTypeInferenceWith emptyEnv expr `shouldSatisfy` isLeft
     context "when typing force" $ do
       it "produces the right type and wirecount when the argument is a value" $ do
-        pending -- TODO
+        -- ∅;∅;∅ ⊢ force (lift \x::Qubit . x) ==> Qubit -o[1,0] Qubit ; 0
+        let expr = EForce (ELift (EAbs "x" (TWire Qubit) (EVar "x")))
+        let expected = (TArrow (TWire Qubit) (TWire Qubit) (Number 1) (Number 0), Number 0)
+        simplify (runTypeInferenceWith emptyEnv expr) `shouldBe` Right expected
       it "produces the right type and wirecount when the argument computes" $ do
-        pending -- TODO
+        -- ∅;f:i ->[1,0] !(Qubit -o[i,0] Qubit);∅ ⊢ force (f @5) ==> Qubit -o[5,0] Qubit ; 1
+        let gamma = [("f", TIForall "i" (TBang (TArrow (TWire Qubit) (TWire Qubit) (IndexVariable "i") (Number 0))) (Number 1) (Number 0))]
+        let expr = EForce (EIApp (EVar "f") (Number 5))
+        let expected = (TArrow (TWire Qubit) (TWire Qubit) (Number 5) (Number 0), Number 1)
+        simplify (runTypeInferenceWith (makeEnv gamma []) expr) `shouldBe` Right expected
+      it "fails if the argument is not of bang type" $ do
+        -- ∅;∅;∅ ⊢ force QInit0 =/=>
+        let expr = EForce (EConst QInit0)
+        runTypeInferenceWith emptyEnv expr `shouldSatisfy` isLeft 
     context "when typing fold" $ do
       it "produces the right type and wirecount when all the arguments are values" $ do
         pending -- TODO
@@ -376,6 +467,16 @@ spec = do
       it "produces the right type and wirecount when all the arguments compute" $ do
         pending -- TODO
       -- We do not test other combinations of computing arguments so far
+      it "fails if the step argument is not of function type" $ do
+        pending -- TODO
+      it "fails if the step function is not duplicable" $ do
+        pending -- TODO
+      it "fails if the step function is non-increasing" $ do
+        pending -- TODO
+      it "fails if the starting accumulator is not of the expected type" $ do
+        pending -- TODO
+      it "fails if the argument is not of list type" $ do
+        pending -- TODO
   describe "domination tests" $ do
   -- Testing by cases on which evaluation step consumes more resources than the others
   -- E.g. for application M N, three tests in which: M dominates the cost, N dominates, the result of the application dominates
