@@ -32,7 +32,7 @@ checkSubtype (TCirc i btype1 btype2) (TCirc i' btype1' btype2') =
   checkTypeEq (fromBundleType btype1) (fromBundleType btype1')
     && checkTypeEq (fromBundleType btype2) (fromBundleType btype2')
     && checkLeq i i'
-checkSubtype (TList i t) (TList i' t') = checkEq i i' && (checkEq i (Number 0) || checkSubtype t t') --TODO remove zero check
+checkSubtype (TList i t) (TList i' t') = checkEq i i' && checkSubtype t t'
 checkSubtype (TIForall id t i j) (TIForall id' t' i' j') = let
   fid = fresh id [i, j, IndexVariable id', i', j']
   fid' = fresh fid [t, t'] -- must do this in two steps since t and t' cannot be put in the same list above

@@ -41,8 +41,10 @@ library
       Lang.Type.Unify
       Lang.Unified.AST
       Lang.Unified.Constant
+      Lang.Unified.Derivation
       Lang.Unified.Infer
       Lang.Unified.Parse
+      Lang.Unified.Pre
       PrettyPrinter
       Solving.CVC5
   other-modules:

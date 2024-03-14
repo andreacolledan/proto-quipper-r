@@ -103,10 +103,9 @@ isLinear (TPair typ1 typ2) = isLinear typ1 && isLinear typ2
 isLinear (TCirc {}) = False
 isLinear (TArrow {}) = True
 isLinear (TBang _) = False
-isLinear (TList i typ)  | checkEq i (Number 0) = False  --TODO I really don't like this
-                        | otherwise = isLinear typ
+isLinear (TList _ typ) = isLinear typ
 isLinear (TVar _) = False --Variables are only used in the pre-processing stage, so we are permissive here
-isLinear (TIForall _ typ _ i) = isLinear typ && checkEq i (Number 0) --TODO I really don't like this
+isLinear (TIForall _ typ _ _) = isLinear typ
 
 -- Turns a suitable PQR type into an identical bundle type
 toBundleType :: Type -> Maybe BundleType

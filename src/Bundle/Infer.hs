@@ -134,9 +134,9 @@ runBundleTypeInference context bundle = case runBundleTypeInferenceWithRemaining
 runBundleTypeCheckingWithRemaining :: LabelContext -> Bundle -> BundleType -> Either WireTypingError LabelContext
 runBundleTypeCheckingWithRemaining context bundle expected = do
   (t, InferenceEnv {labelContext = remaining}) <- runStateT (inferBundleType bundle) (InferenceEnv context 0)
-  if isBundleSubtype t expected
-    then return remaining
-    else throwError $ BundleTypeMismatch bundle expected t
+  case mgbtu t expected of
+    Just sub | isBundleSubtype (btsub sub t) expected -> return remaining
+    _ -> throwError $ BundleTypeMismatch bundle expected t
 
 -- run the top-level type checking
 -- This fails if there are unused labels in the context

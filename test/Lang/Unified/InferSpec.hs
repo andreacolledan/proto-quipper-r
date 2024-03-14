@@ -11,8 +11,9 @@ import Lang.Unified.Infer
 import Test.Hspec
 import qualified Circuit
 import Lang.Unified.Constant
+import Lang.Unified.Derivation
 
-simplify :: Either TypingError (Type, Index) -> Either TypingError (Type, Index)
+simplify :: Either TypeError (Type, Index) -> Either TypeError (Type, Index)
 simplify (Left err) = Left err
 simplify (Right (t, i)) = Right (simplifyType t, simplifyIndex i)
 

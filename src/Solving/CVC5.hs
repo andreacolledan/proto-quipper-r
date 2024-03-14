@@ -98,7 +98,6 @@ querySMTWithContext c@(Constraint rel i j) = unsafePerformIO $ do
     withFile queryFile WriteMode $ \handle -> do
         hPutStrLn handle $ "; PROVE " ++ pretty c
         hPutStrLn handle "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
-        hPutStrLn handle "(set-option :fmf-fun true)" --enable recursive functions TODO: this might no longer be necessary, check
         hPutStrLn handle "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
         hPutStrLn handle "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
         let (constraints, Constraint _ i' j') = desugar c

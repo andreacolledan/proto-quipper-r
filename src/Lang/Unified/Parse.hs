@@ -308,7 +308,6 @@ parseExpr = let
     <|> lift
     <|> dest
     <|> letCons
-    -- <|> listCase
     <|> letIn
     <|> box
     <|> force
