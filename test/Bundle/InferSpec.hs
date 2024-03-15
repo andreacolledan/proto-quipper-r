@@ -7,7 +7,7 @@ import Bundle.Infer
     synthesizeLabelContext,
   )
 import Data.Either (isLeft, isRight)
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as Map
 import Index.AST
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 

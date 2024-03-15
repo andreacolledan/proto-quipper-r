@@ -2,7 +2,10 @@ module CircuitSpec (spec) where
 
 import Bundle.AST
 import Circuit
-import qualified Data.Map as Map
+    ( width,
+      Circuit(Id, Seq),
+      QuantumOperation(QInit, Discard, PauliX, Hadamard) )
+import qualified Data.HashMap.Strict as Map
 import Test.Hspec
 
 -- SPECIFICATION --

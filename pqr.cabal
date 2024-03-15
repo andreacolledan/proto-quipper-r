@@ -53,7 +53,8 @@ library
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing
   build-depends:
-      argparser
+      ansi-terminal
+    , argparser
     , base >=4.7 && <5
     , containers
     , extra
@@ -62,6 +63,8 @@ library
     , mtl
     , parsec
     , process
+    , temporary
+    , unordered-containers
   default-language: Haskell2010
 
 executable pqr
@@ -72,7 +75,8 @@ executable pqr
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      argparser
+      ansi-terminal
+    , argparser
     , base >=4.7 && <5
     , containers
     , extra
@@ -82,6 +86,8 @@ executable pqr
     , parsec
     , pqr
     , process
+    , temporary
+    , unordered-containers
   default-language: Haskell2010
 
 test-suite pqr-test
@@ -93,9 +99,6 @@ test-suite pqr-test
       CircuitSpec
       Index.ParseSpec
       Index.SemanticsSpec
-      Lang.Paper.ASTSpec
-      Lang.Paper.InferSpec
-      Lang.Paper.ParseSpec
       Lang.Type.SemanticsSpec
       Lang.Unified.InferSpec
       Lang.Unified.ParseSpec
@@ -104,7 +107,8 @@ test-suite pqr-test
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      argparser
+      ansi-terminal
+    , argparser
     , base >=4.7 && <5
     , containers
     , extra
@@ -114,4 +118,6 @@ test-suite pqr-test
     , parsec
     , pqr
     , process
+    , temporary
+    , unordered-containers
   default-language: Haskell2010

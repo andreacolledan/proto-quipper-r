@@ -25,7 +25,7 @@ import Bundle.Infer
     runBundleTypeCheckingWithRemaining,
     synthesizeLabelContext,
   )
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as Map
 import PrettyPrinter (Pretty (..))
 
 --- QUANTUM OPERATIONS ---------------------------------------------------------------------------------

@@ -181,5 +181,5 @@ isBundleSubtype :: BundleType -> BundleType -> Bool
 isBundleSubtype BTUnit BTUnit = True
 isBundleSubtype (BTWire wtype1) (BTWire wtype2) = wtype1 == wtype2
 isBundleSubtype (BTPair b1 b2) (BTPair b1' b2') = isBundleSubtype b1 b1' && isBundleSubtype b2 b2'
-isBundleSubtype (BTList i b) (BTList i' b') = checkEq i i' && isBundleSubtype b' b
+isBundleSubtype (BTList i b) (BTList i' b') = checkEq undefined i i' && isBundleSubtype b' b
 isBundleSubtype _ _ = False

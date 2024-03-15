@@ -23,12 +23,15 @@ dependencies:
 - base >= 4.7 && < 5
 - mtl
 - containers
+- unordered-containers
+- temporary
 - extra
 - hspec
 - process
 - filepath
 - parsec
 - argparser
+- ansi-terminal
 
 ghc-options:
 - -Wall

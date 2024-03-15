@@ -15,12 +15,11 @@ import Index.AST
 import Control.Monad (unless)
 import Control.Monad.Except
 import Control.Monad.State.Lazy
-import Data.Map (Map)
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as Map
 import PrettyPrinter
 
 -- Corresponds to Q in the paper
-type LabelContext = Map LabelId WireType
+type LabelContext = Map.HashMap LabelId WireType
 
 data WireTypingError
   = UnboundLabel LabelId

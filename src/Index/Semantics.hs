@@ -7,6 +7,7 @@ where
 
 import Index.AST
 import Solving.CVC5
+import System.IO.Extra (Handle)
 
 -- Index semantics in terms of a reduction function
 -- simplifyIndex i reduces i as much as possible and returns the result
@@ -23,9 +24,9 @@ simplifyIndex (Plus i j) = case (simplifyIndex i, simplifyIndex j) of
   (i', j') -> Plus i' j' -- do not reduce further
 simplifyIndex (Max i j) = case (simplifyIndex i, simplifyIndex j) of
   (Number n, Number m) -> Number (max n m)
-  (i', j') | checkEq i' j' -> i' -- max is idempotent
   (i', Number 0) -> i' -- zero is right identity
   (Number 0, j') -> j' -- zero is left identity
+  (i', j') | i' == j' -> i' -- idempotent
   (i', j') -> Max i' j' -- do not reduce further
 simplifyIndex (Mult i j) = case (simplifyIndex i, simplifyIndex j) of
   (Number n, Number m) -> Number (n * m)
@@ -53,17 +54,17 @@ simplifyIndex (Maximum id i j) = case simplifyIndex i of
 
 -- Θ ⊨ i = j (figs. 10,15)
 -- in this implementation, Θ implicitly contains all the free variables in i and j
-checkEq :: Index -> Index -> Bool
-checkEq i j = case (simplifyIndex i, simplifyIndex j) of
+checkEq :: Handle -> Index -> Index -> Bool
+checkEq qfh i j = case (simplifyIndex i, simplifyIndex j) of
   (i', j') | i' == j' -> True -- identical indices are equal
   (Number n, Number m) -> n == m -- number indices are equal iff their values are equal
   (IndexVariable id, IndexVariable id') -> id == id' -- variables are equal if they are the same name
-  (i', j') -> querySMTWithContext $ Constraint Eq i' j' -- in all other cases, query the solver
+  (i', j') -> querySMTWithContext qfh $ Constraint Eq i' j' -- in all other cases, query the solver
 
 -- Θ ⊨ i ≤ j (figs. 12,15)
 -- in this implementation, Θ implicitly contains all the free variables in i and j
-checkLeq :: Index -> Index -> Bool
-checkLeq i j = case (simplifyIndex i, simplifyIndex j) of
+checkLeq :: Handle -> Index -> Index -> Bool
+checkLeq qfh i j = case (simplifyIndex i, simplifyIndex j) of
   (i', j') | i' == j' -> True -- identical indices are equal
   (Number n, Number m) -> n <= m -- number indices are lesser-or-equal iff their values are lesser-or-equal
-  (i', j') -> querySMTWithContext $ Constraint Leq i' j' -- in all other cases, query the solver
+  (i', j') -> querySMTWithContext qfh $ Constraint Leq i' j' -- in all other cases, query the solver

@@ -26,8 +26,7 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State.Lazy
 import Data.Either.Extra (mapLeft)
-import Data.Map (Map)
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as Map
 import Data.Maybe (fromMaybe)
 import PrettyPrinter
 import Index.Semantics
@@ -36,7 +35,7 @@ import Lang.Type.Unify
 
 
 -- Corresponds to Γ in the paper
-type TypingContext = Map VariableId Type
+type TypingContext = Map.HashMap VariableId Type
 
 -- The state of a typing derivation
 data TypingEnvironment = TypingEnvironment
@@ -49,7 +48,7 @@ data TypingEnvironment = TypingEnvironment
 envIsLinear :: TypingEnvironment -> Bool
 envIsLinear TypingEnvironment {typingContext = gamma, labelContext = q} = (any isLinear . Map.elems) gamma || Map.size q > 0
 
-emptyctx :: Map a b
+emptyctx :: Map.HashMap a b
 emptyctx = Map.empty
 
 
@@ -285,7 +284,7 @@ inferValueType (Abs x intyp m) = do
   return (TArrow (tsub sub intyp) outtyp i j, sub)
 inferValueType (Lift m) = do
   (typ, i, sub) <- withNonLinearContext $ inferTermType m
-  unless (checkEq i (Number 0)) (throwError $ UnexpectedWidthAnnotation m (Number 0) i)
+  unless (checkEq undefined i (Number 0)) (throwError $ UnexpectedWidthAnnotation m (Number 0) i)
   return (TBang typ, sub)
 inferValueType Nil = do
   a <- freshTypeVariableName
@@ -304,7 +303,7 @@ inferValueType (Fold id v w) = do
   case stepfuntyp of
     TBang (TArrow (TPair acctyp elemtyp) incacctyp i _) -> do
       when (id `elem` ifv elemtyp) $ throwError $ IndexVariableCapture v id elemtyp
-      unless (checkTypeEq incacctyp (isub (Plus (IndexVariable id) (Number 1)) id acctyp)) $ throwError $ NonincreasingStepFunction v (isub (Plus (IndexVariable id) (Number 1)) id acctyp) incacctyp
+      unless (checkTypeEq undefined incacctyp (isub (Plus (IndexVariable id) (Number 1)) id acctyp)) $ throwError $ NonincreasingStepFunction v (isub (Plus (IndexVariable id) (Number 1)) id acctyp) incacctyp
       substituteInEnvironment sub1
       ((basetyp, sub2), resourceCount) <- withWireCount $ inferValueType w
       let (elemtyp', acctyp') = (tsub sub2 elemtyp, tsub sub2 acctyp)
@@ -395,7 +394,7 @@ runValueTypeChecking gamma q v typ = case runValueTypeInference gamma q v of
   -- NOTE: for now we do not have type instantiation, so we do not try and unify the inferred type with the expected type
   Right typ' -> do
     let sub = fromMaybe mempty $ mgtu typ' typ
-    unless (checkSubtype (tsub sub typ') typ) $ throwError $ UnexpectedType (Right v) typ typ'
+    unless (checkSubtype undefined (tsub sub typ') typ) $ throwError $ UnexpectedType (Right v) typ typ'
   Left err -> throwError err
 
 -- runTermTypeInference gamma q m runs type inference on m using gamma and q as initial contexts
@@ -413,6 +412,6 @@ runTermTypeChecking :: TypingContext -> LabelContext -> Term -> Type -> Index ->
 runTermTypeChecking gamma q m typ i = case runTermTypeInference gamma q m of
   Right (typ', i') -> do
     let sub = fromMaybe mempty $ mgtu typ' typ
-    unless (checkSubtype (tsub sub typ') typ) $ throwError $ UnexpectedType (Left m) typ typ'
-    unless (checkLeq i' i) $ throwError $ UnexpectedWidthAnnotation m i i'
+    unless (checkSubtype undefined (tsub sub typ') typ) $ throwError $ UnexpectedType (Left m) typ typ'
+    unless (checkLeq undefined i' i) $ throwError $ UnexpectedWidthAnnotation m i i'
   Left err -> throwError err

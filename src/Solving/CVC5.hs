@@ -1,5 +1,6 @@
 module Solving.CVC5 (
   querySMTWithContext
+  , withQueryFile
 ) where
 
 
@@ -14,6 +15,7 @@ import Index.AST
 import Control.Monad.State (evalState, State, MonadState (..))
 import qualified Data.Set as Set
 import GHC.IO.Exception (ExitCode(ExitSuccess, ExitFailure))
+import GHC.IO.Handle.Types (Handle(..))
 
 -- toSafeString i returns a representation of i that is safe to use as a valid filename
 toSafeString :: Index -> String
@@ -93,44 +95,54 @@ desugar' (Maximum id i j) = do
 -- c holds for every possible assignment of its free variables
 -- Returns true if the constraint holds, false otherwise
 -- Throws an error if the solver does
-querySMTWithContext :: Constraint -> Bool
-querySMTWithContext c@(Constraint rel i j) = unsafePerformIO $ do
-    withFile queryFile WriteMode $ \handle -> do
-        hPutStrLn handle $ "; PROVE " ++ pretty c
-        hPutStrLn handle "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
-        hPutStrLn handle "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
-        hPutStrLn handle "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
-        let (constraints, Constraint _ i' j') = desugar c
-        forM_ (ifv i `Set.union` ifv j) $ \id -> do
-            -- for each free index variable in c, initialize an unknown natural variable:
-            hPutStrLn handle $ "(declare-const " ++ id ++ " Int)"
-            hPutStrLn handle $ "(assert (<= 0 " ++ id ++ "))"
-        hPutStr handle constraints -- dump the constraints that desugar bounded maxima
-        -- try to find a counterexample to c:
-        hPutStrLn handle $ "(assert (not (" ++ embedConstraint rel ++ " " ++ embedIndex i' ++ " " ++ embedIndex j' ++ ")))"
-        hPutStrLn handle "(check-sat)"
-    (ec, out, err) <- readProcessWithExitCode "cvc5" [queryFile, "-q", "--tlimit=5000"] [] --run CVC5 and get its stdout
+querySMTWithContext :: Handle -> Constraint -> Bool
+querySMTWithContext qfh c@(Constraint rel i j) = unsafePerformIO $ do
+    hPutStrLn qfh $ "\n; PROVE " ++ pretty c
+    hPutStrLn qfh "(push 1)"
+    let (constraints, Constraint _ i' j') = desugar c
+    forM_ (ifv i `Set.union` ifv j) $ \id -> do
+        -- for each free index variable in c, initialize an unknown natural variable:
+        hPutStrLn qfh $ "(declare-const " ++ id ++ " Int)"
+        hPutStrLn qfh $ "(assert (<= 0 " ++ id ++ "))"
+    hPutStr qfh constraints -- dump the constraints that desugar bounded maxima
+    -- try to find a counterexample to c:
+    hPutStrLn qfh $ "(assert (not (" ++ embedConstraint rel ++ " " ++ embedIndex i' ++ " " ++ embedIndex j' ++ ")))"
+    hPutStrLn qfh "(check-sat)"
+    hFlush qfh
+    (ec, out, err) <- readProcessWithExitCode "cvc5" [handleName qfh, "-q", "--incremental", "--tlimit=5000"] [] --run CVC5 and get its stdout
     -- append the response to the query file as a comment:
-    withFile queryFile AppendMode $ \handle -> do
-        case ec of
-            ExitFailure _ -> do
-                -- the solver threw an error
-                hPutStrLn handle $ "; Error thrown: " ++ show out
-                error $ "CVC5 error: " ++ show out ++ " while solving " ++ pretty c
-            ExitSuccess -> if "unsat" `isPrefixOf` out then do
-                    -- cannot find a counterexample ==> the constraint is valid
-                    hPutStrLn handle "; founds unsat (valid)"
-                    return True
-                else if "sat" `isPrefixOf` out then do
-                    -- found a counterexample ==> the constraint is invalid
-                    hPutStrLn handle "; found sat (invalid)"
-                    return False
-                else do
-                    -- any other response is considered an error
-                    hPutStrLn handle $ "; got response: " ++ out
-                    error $ "CVC5 unknown response: " ++ out ++ " while solving " ++ pretty c
-    where
-        -- query files are stored in the queries/ subdirectory
-        queryFile :: FilePath
-        queryFile = let filename = take 50 $ show rel ++ "(" ++ toSafeString i ++ "AND" ++ toSafeString j ++ ")"
-            in "queries" </> filename <.> "smt2"
+    result <- case ec of
+        ExitFailure _ -> do
+            -- the solver threw an error
+            hPutStrLn qfh $ "; Error thrown: " ++ show err
+            error $ "CVC5 error: " ++ show err ++ " while solving " ++ pretty c
+        ExitSuccess -> --let response = last (words out) in
+            if "unsat" `isPrefixOf` out then do
+                -- cannot find a counterexample ==> the constraint is valid
+                hPutStrLn qfh "; founds unsat (valid)"
+                return True
+            else if "sat" `isPrefixOf` out then do
+                -- found a counterexample ==> the constraint is invalid
+                hPutStrLn qfh "; found sat (invalid)"
+                return False
+            else do
+                -- any other response is considered an error
+                hPutStrLn qfh $ "; got response: " ++ out
+                error $ "CVC5 unknown response: " ++ out ++ " while solving " ++ pretty c
+    hPutStrLn qfh "(pop 1)"
+    return result
+
+withQueryFile :: FilePath -> (Handle -> IO r) -> IO r
+withQueryFile filepath action = do
+  let filename = takeFileName filepath
+  let queryfilename = replaceExtension filename ".smt2"
+  let queryfilepath = "queries" </> queryfilename
+  withFile queryfilepath WriteMode $ \fh -> do
+    hPutStrLn fh "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
+    hPutStrLn fh "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
+    hPutStrLn fh "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
+    action fh
+
+handleName :: Handle -> String
+handleName (FileHandle file _ ) = file
+handleName (DuplexHandle file _ _ ) = file

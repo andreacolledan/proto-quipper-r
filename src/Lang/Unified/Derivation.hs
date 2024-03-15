@@ -34,7 +34,7 @@ import Control.Monad (unless, when)
 import Control.Monad.Error.Class
 import Control.Monad.State
 import Data.Foldable.Extra (notNull)
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as Map
 import qualified Data.Set as Set
 import Index.AST
 import Index.Semantics
@@ -71,9 +71,9 @@ mustBeUsed :: Binding -> Bool
 mustBeUsed (Binding typ used) = isLinear typ && not used
 
 -- The datatype of typing contexts (Corresponds to Γ or Φ in the paper)
-type TypingContext = Map.Map VariableId [Binding]
+type TypingContext = Map.HashMap VariableId [Binding]
 
-emptyctx :: Map.Map a b
+emptyctx :: Map.HashMap a b
 emptyctx = Map.empty
 
 removeUsed :: TypingContext -> TypingContext
@@ -151,7 +151,7 @@ instance Show TypeError where
   show (UnusedLinearVariable id surr) = "* Unused linear variable '" ++ id ++ "'" ++ printSurroundings surr
   show (LiftedLinearVariable id surr) = "* Linear variable '" ++ id ++ "' cannot be consumed in a lifted expression" ++ printSurroundings surr
   show (UnexpectedType exp typ1 typ2 surr) =
-    "* Expected expression \n  " ++ pretty exp ++ "\n  to have type\n  " ++ pretty (simplifyType typ1) ++ "\n  got instead \n  " ++ pretty (simplifyType typ2) ++ printSurroundings surr
+    "* Expected expression '" ++ trnc 80 (pretty exp) ++ "'\n   to have type '" ++ pretty (simplifyType typ1) ++ "',\n   got '" ++ pretty (simplifyType typ2) ++ " instead" ++ printSurroundings surr
   show (MismatchedInputInterface c q b surr) = "* Bundle '" ++ pretty b ++ "' is not a valid input interface for circuit '" ++ pretty c ++ "', whose input labels are '" ++ pretty q ++ "'" ++ printSurroundings surr
   show (MismatchedOutputInterface c q b surr) = "* Bundle '" ++ pretty b ++ "' is not a valid output interface for circuit '" ++ pretty c ++ "', whose output labels are '" ++ pretty q ++ "'" ++ printSurroundings surr
   show (UnexpectedWidthAnnotation m i j surr) =
@@ -175,7 +175,7 @@ printSurroundings (e : es) = "\n* While typing " ++ pretty e ++ go es 3
     go :: [Expr] -> Int -> String
     go [] _ = ""
     go _ 0 = "\n..."
-    go (e : es) n = "\n  In " ++ pretty e ++ go es (n - 1)
+    go (e : es) n = "\n  In " ++ trnc 80 (pretty e) ++ go es (n - 1)
 
 -- Shows the name of the top level constructor of a type
 printConstructor :: Type -> String
@@ -188,6 +188,9 @@ printConstructor (TBang {}) = "bang type"
 printConstructor (TList {}) = "list type"
 printConstructor (TVar {}) = "type variable"
 printConstructor (TIForall {}) = "forall type"
+
+trnc :: Int -> String -> String
+trnc n s = if length s > n then take n s ++ "..." else s
 
 -- Necessary to avoid redundant case analysis in subsequent passes
 instance MonadFail (Either TypeError) where
