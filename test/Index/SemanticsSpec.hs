@@ -24,7 +24,6 @@ spec = around (withQueryFile "test-semantics") $ do
       let i = Plus (Plus (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
       let j = Plus (IndexVariable "a") (Plus (IndexVariable "b") (IndexVariable "c"))
       checkEq qfh i j `shouldBe` True
-    it "works for simple open terms" $ \qfh -> do
       -- ∀a,b,c. a+c = max(a,b) + c
       let i = Plus (IndexVariable "a") (IndexVariable "c")
       let j = Plus (Max (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")

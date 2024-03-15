@@ -110,26 +110,30 @@ querySMTWithContext qfh c@(Constraint rel i j) = unsafePerformIO $ do
     hPutStrLn qfh $ "(assert (not (" ++ embedConstraint rel ++ " " ++ embedIndex i' ++ " " ++ embedIndex j' ++ ")))"
     hPutStrLn qfh "(check-sat)"
     hFlush qfh
-    (ec, out, err) <- readProcessWithExitCode "cvc5" [handleName qfh, "-q", "--incremental", "--tlimit=5000"] [] --run CVC5 and get its stdout
+    (ec, out, err) <- readProcessWithExitCode "cvc5" [handleName qfh, "-q", "--incremental"] [] --run CVC5 and get its stdout
     -- append the response to the query file as a comment:
     result <- case ec of
         ExitFailure _ -> do
             -- the solver threw an error
             hPutStrLn qfh $ "; Error thrown: " ++ show err
             error $ "CVC5 error: " ++ show err ++ " while solving " ++ pretty c
-        ExitSuccess -> let response = last (words out) in
-            if "unsat" `isPrefixOf` response then do
+        ExitSuccess -> case reverse (lines out) of --response is sat/unsat for each query so far
+            "unsat" : _ -> do
                 -- cannot find a counterexample ==> the constraint is valid
                 hPutStrLn qfh "; founds unsat (valid)"
                 return True
-            else if "sat" `isPrefixOf` response then do
+            "sat" : _ -> do
                 -- found a counterexample ==> the constraint is invalid
                 hPutStrLn qfh "; found sat (invalid)"
                 return False
-            else do
+            other : _ -> do
                 -- any other response is considered an error
-                hPutStrLn qfh $ "; got response: " ++ response
-                error $ "CVC5 unknown response: " ++ response ++ " while solving " ++ pretty c
+                hPutStrLn qfh $ "; got response: " ++ other
+                error $ "CVC5 unknown response: " ++ other ++ " while solving " ++ pretty c
+            [] -> do
+                -- empty response is considered an error
+                hPutStrLn qfh "; got empty response"
+                error $ "CVC5 empty response while solving " ++ pretty c       
     hPutStrLn qfh "(pop 1)"
     return result
 
