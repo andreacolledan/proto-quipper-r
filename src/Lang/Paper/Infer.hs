@@ -212,7 +212,7 @@ withWireCount der = do
   let gammaDiff = Map.difference gamma gamma'
   let qDiff = Map.difference q q'
   let resourceCount = wireCount gammaDiff `Plus` wireCount qDiff
-  return (outcome, simplifyIndex resourceCount)
+  return (outcome, resourceCount)
 
 -- withNonLinearContext der describes a derivation like der which fails
 -- if der consumes any linear resource
@@ -245,7 +245,6 @@ embedWireBundle (Bundle.Label id) = Label id
 embedWireBundle (Bundle.Pair b1 b2) = Pair (embedWireBundle b1) (embedWireBundle b2)
 embedWireBundle (Bundle.Nil) = Nil
 embedWireBundle (Bundle.Cons b1 b2) = Cons (embedWireBundle b1) (embedWireBundle b2)
-
 -- embedBundleType bt returns the PQR type equivalent to bt
 embedBundleType :: BundleType -> Type
 embedBundleType BTUnit = TUnit

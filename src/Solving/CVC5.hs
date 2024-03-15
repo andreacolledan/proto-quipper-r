@@ -99,13 +99,14 @@ querySMTWithContext :: Handle -> Constraint -> Bool
 querySMTWithContext qfh c@(Constraint rel i j) = unsafePerformIO $ do
     hPutStrLn qfh $ "\n; PROVE " ++ pretty c
     hPutStrLn qfh "(push 1)"
-    let (constraints, Constraint _ i' j') = desugar c
     forM_ (ifv i `Set.union` ifv j) $ \id -> do
         -- for each free index variable in c, initialize an unknown natural variable:
         hPutStrLn qfh $ "(declare-const " ++ id ++ " Int)"
         hPutStrLn qfh $ "(assert (<= 0 " ++ id ++ "))"
+    let (constraints, Constraint _ i' j') = desugar c
     hPutStr qfh constraints -- dump the constraints that desugar bounded maxima
     -- try to find a counterexample to c:
+    hPutStrLn qfh "; assert the negation of the constraint to check if it is valid"
     hPutStrLn qfh $ "(assert (not (" ++ embedConstraint rel ++ " " ++ embedIndex i' ++ " " ++ embedIndex j' ++ ")))"
     hPutStrLn qfh "(check-sat)"
     hFlush qfh
@@ -116,19 +117,19 @@ querySMTWithContext qfh c@(Constraint rel i j) = unsafePerformIO $ do
             -- the solver threw an error
             hPutStrLn qfh $ "; Error thrown: " ++ show err
             error $ "CVC5 error: " ++ show err ++ " while solving " ++ pretty c
-        ExitSuccess -> --let response = last (words out) in
-            if "unsat" `isPrefixOf` out then do
+        ExitSuccess -> let response = last (words out) in
+            if "unsat" `isPrefixOf` response then do
                 -- cannot find a counterexample ==> the constraint is valid
                 hPutStrLn qfh "; founds unsat (valid)"
                 return True
-            else if "sat" `isPrefixOf` out then do
+            else if "sat" `isPrefixOf` response then do
                 -- found a counterexample ==> the constraint is invalid
                 hPutStrLn qfh "; found sat (invalid)"
                 return False
             else do
                 -- any other response is considered an error
-                hPutStrLn qfh $ "; got response: " ++ out
-                error $ "CVC5 unknown response: " ++ out ++ " while solving " ++ pretty c
+                hPutStrLn qfh $ "; got response: " ++ response
+                error $ "CVC5 unknown response: " ++ response ++ " while solving " ++ pretty c
     hPutStrLn qfh "(pop 1)"
     return result
 

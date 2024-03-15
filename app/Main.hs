@@ -39,13 +39,13 @@ main = withParseResult commandLineParser $ \args -> do
       when verb $ do
         putStrLn $ "Parsed successfully as \n\t" ++ pretty ast
         putStrLn "Inferring type..."
-      outcome <- withQueryFile file $ \fh -> return $! runTypeInference ast fh
-      case outcome of
-        Left err -> do
-          hSetSGR stderr [SetColor Foreground Vivid Red]
-          hPrint stderr err
-          hSetSGR stderr [Reset]
-        Right (t, i) -> do
-          putStrLn $ "* Inferred type: " ++ pretty (simplifyType t)
-          putStrLn $ "* Inferred bound: " ++ pretty (simplifyIndex i)
-      
+      withQueryFile file $ \qfh -> do
+        let outcome = runTypeInference ast qfh
+        case outcome of
+          Left err -> do
+            hSetSGR stderr [SetColor Foreground Vivid Red]
+            hPrint stderr err
+            hSetSGR stderr [Reset]
+          Right (t, i) -> do
+            putStrLn $ "* Inferred type: " ++ pretty (simplifyType qfh t)
+            putStrLn $ "* Inferred bound: " ++ pretty (simplifyIndex qfh i)

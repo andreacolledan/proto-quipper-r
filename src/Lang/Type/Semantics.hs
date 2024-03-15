@@ -6,14 +6,14 @@ import System.IO.Extra (Handle)
 
 -- Type semantics in the form of a reduction function
 -- Note that types simplify only in the presence of indices
-simplifyType :: Type -> Type
-simplifyType (TPair t1 t2) = TPair (simplifyType t1) (simplifyType t2)
-simplifyType (TArrow t1 t2 i j) = TArrow (simplifyType t1) (simplifyType t2) (simplifyIndex i) (simplifyIndex j)
-simplifyType (TBang t) = TBang (simplifyType t)
-simplifyType (TList i t) = TList (simplifyIndex i) (simplifyType t)
-simplifyType (TCirc i inBtype outBtype) = TCirc (simplifyIndex i) inBtype outBtype
-simplifyType (TIForall id t i j) = TIForall id (simplifyType t) (simplifyIndex i) (simplifyIndex j)
-simplifyType t = t
+simplifyType :: Handle -> Type -> Type
+simplifyType qfh (TPair t1 t2) = TPair (simplifyType qfh t1) (simplifyType qfh t2)
+simplifyType qfh (TArrow t1 t2 i j) = TArrow (simplifyType qfh t1) (simplifyType qfh t2) (simplifyIndex qfh i) (simplifyIndex qfh j)
+simplifyType qfh (TBang t) = TBang (simplifyType qfh t)
+simplifyType qfh (TList i t) = TList (simplifyIndex qfh i) (simplifyType qfh t)
+simplifyType qfh (TCirc i inBtype outBtype) = TCirc (simplifyIndex qfh i) inBtype outBtype
+simplifyType qfh (TIForall id t i j) = TIForall id (simplifyType qfh t) (simplifyIndex qfh i) (simplifyIndex qfh j)
+simplifyType _ t = t
 
 -- Θ ⊢ t1 <: t2 (Figure 15)
 -- Note that in this implementation Θ is assumed to contain all the free index variables of t1 and t2

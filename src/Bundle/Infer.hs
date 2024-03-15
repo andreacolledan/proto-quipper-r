@@ -17,6 +17,7 @@ import Control.Monad.Except
 import Control.Monad.State.Lazy
 import qualified Data.HashMap.Strict as Map
 import PrettyPrinter
+import System.IO.Extra (Handle)
 
 -- Corresponds to Q in the paper
 type LabelContext = Map.HashMap LabelId WireType
@@ -87,7 +88,7 @@ inferBundleType (Pair b1 b2) = do
   btype2 <- inferBundleType b2
   return (BTPair btype1 btype2)
 inferBundleType Nil = BTList (Number 0) . BTVar <$> freshBTVarName
-inferBundleType b@(Cons b1 b2) = do
+inferBundleType (Cons b1 b2) = do
   btype1 <- inferBundleType b1
   btype2 <- inferBundleType b2
   case btype2 of

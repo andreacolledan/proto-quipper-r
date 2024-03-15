@@ -151,21 +151,21 @@ instance Show TypeError where
   show (UnusedLinearVariable id surr) = "* Unused linear variable '" ++ id ++ "'" ++ printSurroundings surr
   show (LiftedLinearVariable id surr) = "* Linear variable '" ++ id ++ "' cannot be consumed in a lifted expression" ++ printSurroundings surr
   show (UnexpectedType exp typ1 typ2 surr) =
-    "* Expected expression '" ++ trnc 80 (pretty exp) ++ "'\n   to have type '" ++ pretty (simplifyType typ1) ++ "',\n   got '" ++ pretty (simplifyType typ2) ++ " instead" ++ printSurroundings surr
+    "* Expected expression '" ++ trnc 80 (pretty exp) ++ "'\n   to have type '" ++ pretty typ1 ++ "',\n   got '" ++ pretty typ2 ++ " instead" ++ printSurroundings surr
   show (MismatchedInputInterface c q b surr) = "* Bundle '" ++ pretty b ++ "' is not a valid input interface for circuit '" ++ pretty c ++ "', whose input labels are '" ++ pretty q ++ "'" ++ printSurroundings surr
   show (MismatchedOutputInterface c q b surr) = "* Bundle '" ++ pretty b ++ "' is not a valid output interface for circuit '" ++ pretty c ++ "', whose output labels are '" ++ pretty q ++ "'" ++ printSurroundings surr
   show (UnexpectedWidthAnnotation m i j surr) =
     "* Expected expression '" ++ pretty m ++ "' to have width annotation '" ++ pretty i ++ "', got '" ++ pretty j ++ "' instead" ++ printSurroundings surr
   show (UnexpectedIndex i1 i2 surr) = "* Expected index '" ++ pretty i1 ++ "', got '" ++ pretty i2 ++ "' instead" ++ printSurroundings surr
-  show (UnboxableType v typ surr) = "* Cannot box value '" ++ pretty v ++ "' of type '" ++ pretty (simplifyType typ) ++ "'" ++ printSurroundings surr
-  show (UnfoldableStepfunction v typ surr) = "* Expression '" ++ pretty v ++ "' of type '" ++ pretty (simplifyType typ) ++ "' is not a valid step function" ++ printSurroundings surr
-  show (UnfoldableAccumulator v typ surr) = "* Expression '" ++ pretty v ++ "' of type '" ++ pretty (simplifyType typ) ++ "' is not a valid accumulator" ++ printSurroundings surr
+  show (UnboxableType v typ surr) = "* Cannot box value '" ++ pretty v ++ "' of type '" ++ pretty typ ++ "'" ++ printSurroundings surr
+  show (UnfoldableStepfunction v typ surr) = "* Expression '" ++ pretty v ++ "' of type '" ++ pretty typ ++ "' is not a valid step function" ++ printSurroundings surr
+  show (UnfoldableAccumulator v typ surr) = "* Expression '" ++ pretty v ++ "' of type '" ++ pretty typ ++ "' is not a valid accumulator" ++ printSurroundings surr
   show (UnfoldableArg v typ surr) = "* Expression '" ++ pretty v ++ "' of type '" ++ pretty typ ++ "' is not a valid fold argument" ++ printSurroundings surr
   show (UnboundIndexVariable id surr) = "* Unbound index variable '" ++ id ++ "'" ++ printSurroundings surr
   show (ShadowedIndexVariable id surr) = "* Shadowed index variable '" ++ id ++ "'" ++ printSurroundings surr
   show (OverusedLinearVariable id surr) = "* Linear variable '" ++ id ++ "' is used more than once" ++ printSurroundings surr
-  show (UnexpectedEmptyList e t surr) = "* Cannot conclude that expression '" ++ pretty e ++ "' of type '" ++ pretty (simplifyType t) ++ "' is a non-empty list" ++ printSurroundings surr
-  show (ExpectedBundleType e t surr) = "* Expected expression '" ++ pretty e ++ "' to have bundle type, got '" ++ pretty (simplifyType t) ++ "' instead" ++ printSurroundings surr
+  show (UnexpectedEmptyList e typ surr) = "* Cannot conclude that expression '" ++ pretty e ++ "' of type '" ++ pretty typ ++ "' is a non-empty list" ++ printSurroundings surr
+  show (ExpectedBundleType e typ surr) = "* Expected expression '" ++ pretty e ++ "' to have bundle type, got '" ++ pretty typ ++ "' instead" ++ printSurroundings surr
   show (CannotSynthesizeType e surr) = "* Cannot synthesize type for expression '" ++ pretty e ++ "'. Consider annotating it with a type" ++ printSurroundings surr
 
 printSurroundings :: [Expr] -> String
@@ -311,7 +311,7 @@ withWireCount der = do
   let gammaDiff = diffcount gamma gamma'
   let qDiff = wireCount $ Map.difference q q'
   let resourceCount = gammaDiff `Plus` qDiff
-  return (outcome, simplifyIndex resourceCount)
+  return (outcome, resourceCount)
   where
     diffcount :: TypingContext -> TypingContext -> Index
     diffcount gamma1 gamma2 =

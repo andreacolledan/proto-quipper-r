@@ -11,59 +11,60 @@ spec :: Spec
 spec = around (withQueryFile "test-semantics") $ do
   describe "index equality" $ do
     it "works for simple closed terms" $ \qfh -> do
-      -- \|== 1 + 2 = 3
+      -- 1 + 2 = 3
       let i = Plus (Number 1) (Number 2)
       let j = Number 3
       checkEq qfh i j `shouldBe` True
-      -- \|== 1 + 3 ≠ 3
+      -- 1 + 3 ≠ 3
       let i = Plus (Number 1) (Number 3)
       let j = Number 3
       checkEq qfh i j `shouldBe` False
     it "works for simple open terms" $ \qfh -> do
-      -- \|== ∀a,b,c. (a + b) + c = a + (b + c)
+      -- ∀a,b,c. (a + b) + c = a + (b + c)
       let i = Plus (Plus (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
       let j = Plus (IndexVariable "a") (Plus (IndexVariable "b") (IndexVariable "c"))
       checkEq qfh i j `shouldBe` True
-      -- \|=/= ∀a,b,c. a+c = max(a,b) + c
+    it "works for simple open terms" $ \qfh -> do
+      -- ∀a,b,c. a+c = max(a,b) + c
       let i = Plus (IndexVariable "a") (IndexVariable "c")
       let j = Plus (Max (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
       checkEq qfh i j `shouldBe` False
     it "works for closed maxima" $ \qfh -> do
-      -- \|== max[i<4] i*2 + 2 = 8
+      -- max[i<4] i*2 + 2 = 8
       let i = Maximum "i" (Number 4) (Plus (Mult (IndexVariable "i") (Number 2)) (Number 2))
       let j = Number 8
       checkEq qfh i j `shouldBe` True
-      -- \|== max[i<4] i*2 + 2 ≠ 9
+      -- max[i<4] i*2 + 2 ≠ 9
       let j = Number 9
       checkEq qfh i j `shouldBe` False
   describe "index inequality" $ do
     it "works for closed terms" $ \qfh -> do
-      -- \|== + 1 <= 3
+      -- 1 + 1 <= 3
       let i = Plus (Number 1) (Number 1)
       let j = Number 3
       checkLeq qfh i j `shouldBe` True
     it "works for open terms" $ \qfh -> do
-      -- \|== ∀a,b,c. max(a,b) <= max(a+c,b)
+      -- ∀a,b,c. max(a,b) <= max(a+c,b)
       let i = Max (IndexVariable "a") (IndexVariable "b")
       let j = Max (Plus (IndexVariable "a") (IndexVariable "c")) (IndexVariable "b")
       checkLeq qfh i j `shouldBe` True
-      -- \|== ∀a,b,c. a+c <= max(a,b) + c
+      -- ∀a,b,c. a+c <= max(a,b) + c
       let i = Plus (IndexVariable "a") (IndexVariable "c")
       let j = Plus (Max (IndexVariable "a") (IndexVariable "b")) (IndexVariable "c")
       checkLeq qfh i j `shouldBe` True
-      -- \|=/= ∀a,b,c. max(a,b) <= a+c
+      -- ∀a,b,c. max(a,b) <= a+c
       let i = Max (IndexVariable "a") (IndexVariable "b")
       let j = Plus (IndexVariable "a") (IndexVariable "c")
       checkLeq qfh i j `shouldBe` False
     it "works for maxima" $ \qfh -> do
-      -- \|== ∀j. max[i<j] i + 1 <= j + 1
+      -- ∀j. max[i<j] i + 1 <= j + 1
       let i = Maximum "i" (IndexVariable "j") (Plus (IndexVariable "i") (Number 1))
       let j = IndexVariable "j" `Plus` Number 1
       checkLeq qfh i j `shouldBe` True
-    -- \|== ∀j. max[i<j] i + 1 - 1 <= j
-    -- let i = Maximum "i" (IndexVariable "j") (Minus (Plus (IndexVariable "i") (Number 1)) (Number 1))
-    -- let j = IndexVariable "j"
-    -- checkLeq qfh i j `shouldBe` True
+      -- ∀j. max[i<j] i + 1 - 1 <= j
+      let i = Maximum "i" (IndexVariable "j") (Minus (Plus (IndexVariable "i") (Number 1)) (Number 1))
+      let j = IndexVariable "j"
+      checkLeq qfh i j `shouldBe` True
     it "works in the example cases" $ \qfh -> do
       -- ∀j.max[i<j] i+1 <= j
       let i = Maximum "i" (IndexVariable "j") (Plus (IndexVariable "i") (Number 1))
