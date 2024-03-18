@@ -1,24 +1,31 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
+
 module Lang.Type.Parse
   ( parseType,
   )
 where
 
 import Bundle.AST (WireType (..))
-import Lang.Type.AST
 import Bundle.Parse
 import Index.Parse
+import Lang.Type.AST
 import Text.Parsec
 import Text.Parsec.Expr
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
 
+--- TYPE PARSER MODULE -------------------------------------------
+---
+--- This module defines the parser for PQR types.
+--- The parser is built using the Parsec library.
+------------------------------------------------------------------
+
 typeLang :: LanguageDef st
 typeLang =
   emptyDef
-    { reservedOpNames = ["->","-o", "!"],
-      reservedNames = ["Bit", "Qubit","List", "Circ"]
+    { reservedOpNames = ["->", "-o", "!"],
+      reservedNames = ["Bit", "Qubit", "List", "Circ"]
     }
 
 typeTokenParser :: TokenParser st

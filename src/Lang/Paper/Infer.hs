@@ -12,10 +12,8 @@ module Lang.Paper.Infer
   )
 where
 
-import Bundle.AST (Bundle, BundleType (..), LabelId, Wide (wireCount), isBundleSubtype, WireType)
+import Bundle.AST (Bundle, BundleType (..), LabelId, Wide (wireCount), WireType, isBundleSubtype)
 import qualified Bundle.AST as Bundle
-import Index.AST
-import Lang.Paper.AST
 import Bundle.Infer
   ( LabelContext,
     WireTypingError (..),
@@ -28,20 +26,31 @@ import Control.Monad.State.Lazy
 import Data.Either.Extra (mapLeft)
 import qualified Data.HashMap.Strict as Map
 import Data.Maybe (fromMaybe)
-import PrettyPrinter
+import Index.AST
 import Index.Semantics
+import Lang.Paper.AST
 import Lang.Type.Semantics
 import Lang.Type.Unify
+import PrettyPrinter
 
+--- PAPER LANGUAGE INFERENCE MODULE (UNUSED)--------------------------------------------------------------------------
+---
+--- This module defines the type inference rules for the language presented in the paper.
+--- This is currently not used in the application, it is no longer tested and is only kept for reference.
+--- For the actual implementation of inference the language, see
+--- Lang.Unified.Derivation for the commot type derivation operations (e.g. context lookup, binding, etc.)
+--- Lang.Unified.Pre for the type inference pre-processing stage (without indices)
+--- Lang.Unified.Infer for the type synthesis stage (with index checking)
+------------------------------------------------------------------------------------------------------------
 
 -- Corresponds to Γ in the paper
 type TypingContext = Map.HashMap VariableId Type
 
 -- The state of a typing derivation
 data TypingEnvironment = TypingEnvironment
-  { typingContext :: TypingContext, --attributes types to variable names (linear/nonlinear)
-    labelContext :: LabelContext,   --attributes wire types to label names (linear)
-    freeVarCounter :: Int           --the counter used to initialize fresh variable names
+  { typingContext :: TypingContext, -- attributes types to variable names (linear/nonlinear)
+    labelContext :: LabelContext, -- attributes wire types to label names (linear)
+    freeVarCounter :: Int -- the counter used to initialize fresh variable names
   }
 
 -- check if a typing environment contains any linear variable.
@@ -50,7 +59,6 @@ envIsLinear TypingEnvironment {typingContext = gamma, labelContext = q} = (any i
 
 emptyctx :: Map.HashMap a b
 emptyctx = Map.empty
-
 
 --- TYPING ERRORS ---------------------------------------------------------------
 
@@ -124,7 +132,6 @@ printConstructor (TList {}) = "TList type"
 printConstructor (TVar {}) = "type variable"
 printConstructor (TIForall {}) = "forall type"
 
-
 --- TYPING ENVIRONMENT OPERATIONS ---------------------------------------------------------------
 
 -- typingContextLookup x looks up variable x in the typing context
@@ -160,13 +167,12 @@ freshIndexVariableName = do
   put $ env {freeVarCounter = c + 1}
   return $ "i" ++ show c
 
--- substituteInEnvironment sub applies sub to the typing context 
+-- substituteInEnvironment sub applies sub to the typing context
 substituteInEnvironment :: TypeSubstitution -> StateT TypingEnvironment (Either TypingError) ()
 substituteInEnvironment sub = do
   env@TypingEnvironment {typingContext = gamma} <- get
   let gamma' = Map.map (tsub sub) gamma
   put env {typingContext = gamma'}
-
 
 --- DERIVATION COMBINATORS ---------------------------------------------------------------
 
@@ -235,7 +241,6 @@ tryUnify t1 t2 err = case mgtu t1 t2 of
   Just s -> return s
   Nothing -> throwError err
 
-
 --- BUNDLE CHECKING WITHIN TYPE CHECKING ------------------------------------------------------------
 
 -- embedWireBundle b returns the PQR value equivalent to b
@@ -245,6 +250,7 @@ embedWireBundle (Bundle.Label id) = Label id
 embedWireBundle (Bundle.Pair b1 b2) = Pair (embedWireBundle b1) (embedWireBundle b2)
 embedWireBundle (Bundle.Nil) = Nil
 embedWireBundle (Bundle.Cons b1 b2) = Cons (embedWireBundle b1) (embedWireBundle b2)
+
 -- embedBundleType bt returns the PQR type equivalent to bt
 embedBundleType :: BundleType -> Type
 embedBundleType BTUnit = TUnit
@@ -252,7 +258,6 @@ embedBundleType (BTWire wtype) = TWire wtype
 embedBundleType (BTPair b1 b2) = TPair (embedBundleType b1) (embedBundleType b2)
 embedBundleType (BTList i b) = TList i (embedBundleType b)
 embedBundleType (BTVar id) = TVar id
-
 
 --- PQR TYPE INFERENCE ---------------------------------------------------------------
 
@@ -302,7 +307,7 @@ inferValueType (Fold id v w) = do
   case stepfuntyp of
     TBang (TArrow (TPair acctyp elemtyp) incacctyp i _) -> do
       when (id `elem` ifv elemtyp) $ throwError $ IndexVariableCapture v id elemtyp
-      unless (checkTypeEq undefined incacctyp (isub (Plus (IndexVariable id) (Number 1)) id acctyp)) $ throwError $ NonincreasingStepFunction v (isub (Plus (IndexVariable id) (Number 1)) id acctyp) incacctyp
+      unless (undefined undefined incacctyp (isub (Plus (IndexVariable id) (Number 1)) id acctyp)) $ throwError $ NonincreasingStepFunction v (isub (Plus (IndexVariable id) (Number 1)) id acctyp) incacctyp
       substituteInEnvironment sub1
       ((basetyp, sub2), resourceCount) <- withWireCount $ inferValueType w
       let (elemtyp', acctyp') = (tsub sub2 elemtyp, tsub sub2 acctyp)
@@ -372,8 +377,6 @@ inferTermType (Dest x y v m) = do
       (rtype, j, sub2) <- withBoundVariable x ltyp1 $ withBoundVariable y ltyp2 $ inferTermType m
       return (rtype, j, sub2 <> sub1)
     _ -> throwError $ UnexpectedTypeConstructor (Right v) (TPair TUnit TUnit) ltyp
-
-
 
 --- EXPOSED INFERENCE AND CHECKING FUNCTIONS --------------------------------------------------------------
 

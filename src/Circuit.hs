@@ -1,3 +1,5 @@
+{-# LANGUAGE InstanceSigs #-}
+
 module Circuit
   ( QuantumOperation (..),
     sig,
@@ -28,21 +30,28 @@ import Bundle.Infer
 import qualified Data.HashMap.Strict as Map
 import PrettyPrinter (Pretty (..))
 
---- QUANTUM OPERATIONS ---------------------------------------------------------------------------------
+--- CIRCUIT MODULE ------------------------------------------------------------------------
+---
+--- This module defines the low-level circuit description language that is the target
+--- of circuit building in PQR. A circuit is either an identity on some label, or
+--- a finite sequence of elementary quantum operations applied to wires.
+-------------------------------------------------------------------------------------------
+
+--- ELEMENTARY QUANTUM OPERATIONS ---------------------------------------------------------------------------------
 
 -- The datatype of elementary quantum operations
 data QuantumOperation
-  = QInit Bool
-  | Discard
-  | Measure
-  | Hadamard
-  | PauliX
-  | PauliY
-  | PauliZ
-  | Phase
-  | Toffoli
-  | R Int
-  | CNot
+  = QInit Bool  -- Initialize a qubit to |0⟩ (False) or |1⟩ (True)
+  | Discard     -- Discard a qubit
+  | Measure     -- Measure a qubit
+  | Hadamard    -- Hadamard gate
+  | PauliX      -- Pauli-X gate
+  | PauliY      -- Pauli-Y gate
+  | PauliZ      -- Pauli-Z gate
+  | Phase       -- Phase gate
+  | Toffoli     -- Toffoli gate
+  | R Int       -- R(π/n) gate
+  | CNot        -- Controlled-NOT gate
   deriving (Eq, Show)
 
 instance Pretty QuantumOperation where
@@ -58,7 +67,7 @@ instance Pretty QuantumOperation where
   pretty (R n) = "R(π/" ++ show n ++ ")"
   pretty CNot = "CNot"
 
--- Returns the signature (input/output types) of a quantum operation
+-- 'sig qop' returns the signature (input/output bundle types) of quantum operation qop
 sig :: QuantumOperation -> (BundleType, BundleType)
 sig (QInit _) = (BTUnit, BTWire Qubit)
 sig Discard = (BTWire Qubit, BTUnit)
@@ -72,30 +81,31 @@ sig Toffoli = (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit), BTP
 sig (R _) = (BTWire Qubit, BTWire Qubit)
 sig CNot = (BTPair (BTWire Qubit) (BTWire Qubit), BTPair (BTWire Qubit) (BTWire Qubit))
 
--- Returns the net change in the number of qubits after applying a quantum operation
+-- | @net qop@ returns the net change in the number of wires in the circuit due to quantum operation @qop@.
 -- E.g. if a quantum operation consumes 2 qubits and produces 1 qubit, then the net change is -1
--- E.g. if a quantum operation consumes 0 qubits and produces 1 qubit, then the net change is 1
+-- if a quantum operation consumes 0 qubits and produces 1 qubit, then the net change is 1
 net :: QuantumOperation -> Int
 net (QInit _) = 1
 net Discard = -1
 net _ = 0
 
---- CIRCUITS ---------------------------------------------------------------------------------
+--- CIRCUITS OBJECTS ---------------------------------------------------------------------------------
 
 -- The datatype of quantum circuits (Fig. 9)
--- A circuit is either the identity circuit on some labels,
--- or a circuit, followed by a quantum operation consuming some wires and outputting some wires
+-- A circuit is either the identity circuit on some typed labels,
+-- or a sequence of quantum operations applied to bundles
 data Circuit
   = Id LabelContext -- ID_Q
   | Seq Circuit QuantumOperation Bundle Bundle -- C; g(b1) -> b2
   deriving (Eq, Show)
 
 instance Pretty Circuit where
+  pretty :: Circuit -> String
   pretty (Id q) = "Inputs:" ++ pretty q
   pretty (Seq circ op bin bout) = pretty circ ++ "; " ++ pretty op ++ "(" ++ pretty bin ++ ") -> " ++ pretty bout
 
--- Returns the width of a circuit
--- Def. 1 (Circuit Width)
+-- (Def. 1 (Circuit Width))
+-- | @width c@ returns the width of circuit c
 width :: Circuit -> Int
 width (Id q) = Map.size q -- if the circuit is the identity circuit on q, then the width is the wire count of q
 width (Seq circ op _ _) = width circ + max 0 (net op - discarded circ) -- we reuse as many previously discarded wires as possible
@@ -105,9 +115,9 @@ width (Seq circ op _ _) = width circ + max 0 (net op - discarded circ) -- we reu
     discarded (Seq circ op _ _) = max 0 (discarded circ - net op)
 
 -- C => Q -> L (Fig. 10)
--- inferCircuitSignature c infers the circuit signature of c
--- If succesful, it returns a pair of the input and output labels of c, respectively
--- Otherwise, it returns a WireTypingError
+-- | @inferCircuitSignature c@ returns the input/output signature of circuit @c@.
+-- Returns either a 'WireTypingError' ('Left') if the circuit is ill-typed, or @(q,l)@ ('Right'),
+-- where @q@ is the input label context and @l@ is the output label context of @c@.
 inferCircuitSignature :: Circuit -> Either WireTypingError (LabelContext, LabelContext)
 inferCircuitSignature (Id q) = Right (q, q)
 inferCircuitSignature (Seq circ op bin bout) = do

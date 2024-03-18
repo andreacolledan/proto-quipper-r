@@ -1,6 +1,7 @@
-module Lang.Unified.Pre (
-  annotateNil
-) where
+module Lang.Unified.Pre
+  ( annotateNil,
+  )
+where
 
 import Bundle.AST (BundleType (..))
 import Bundle.Infer
@@ -15,19 +16,22 @@ import Lang.Unified.AST
 import Lang.Unified.Constant
 import Lang.Unified.Derivation
 
--------------------------------------------------------------------------------
---- Inference of Type Variables Required for Lists ----------------------------
--------------------------------------------------------------------------------
+--- PREPROCESSING MODULE ------------------------------------------------------------------------------------
+---
+--- This module defines the preprocessing stage of type inference.
+--- Actual inference (i.e. unification) is only carried out at this stage.
+--- Right now, this stage is responsible for checking obvious (i.e. not having to do with indices)
+--- type errors and annotating empty lists with the correct parameter type.
+-------------------------------------------------------------------------------------------------------------
 
 -- At this stage, placeholder for all indices, which are irrelevant
 irr :: Index
 irr = IndexVariable "_"
 
--- annotateType :: Expr -> StateT TypingEnvironment (Either TypeError) Expr
--- annotateType e = case inferBaseType e of
---   Left err -> throwError err
---   Right (e', typ, sub) -> return $ subst sub e'
-
+-- | @ inferBaseType e @ infers the type of expression @e@, without indices, annotating intermediate expressions as necessary.
+-- The result is a triple @(e', t, s)@, where @e'@ is the annotated expression, @t@ is its type, and @s@ is the compound
+-- type substitution that was applied to the expression.
+-- TODO: many unnecessary substitutions are happening, their application could be better tailored to the specific typing case
 inferBaseType :: Expr -> TypeDerivation (Expr, Type, TypeSubstitution)
 -- UNIT
 inferBaseType EUnit = withScope EUnit $ return (EUnit, TUnit, mempty)
@@ -175,6 +179,8 @@ inferBaseType e@(EConst c) = withScope e $ return (EConst c, typeOf c, mempty)
 
 --- TOP-LEVEL EXPORTED FUNCTIONS -------------------------------------------------------
 
+-- | @ annotateNil env e @ annotates all the empty lists in expression @e@ with the correct parameter type under environment @env@.
+-- If successful, returns the annotated expression. Otherwise, returns the error.
 annotateNil :: TypingEnvironment -> Expr -> Either TypeError Expr
 annotateNil env e = case evalTypeDerivation (inferBaseType e) env of
   Left err -> Left err

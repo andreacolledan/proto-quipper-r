@@ -1,3 +1,4 @@
+{-# LANGUAGE InstanceSigs #-}
 module Lang.Type.Unify (
   TypeSubstitution(..),
   HasType(..),
@@ -7,26 +8,37 @@ module Lang.Type.Unify (
 import Lang.Type.AST
 import Data.Set
 import qualified Data.Set as Set
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as Map
 
-newtype TypeSubstitution = TypeSubstitution (Map.Map TVarId Type)
+--- TYPE UNIFICATION MODULE ---------------------------------------------------------------------------------
+---
+--- This module defines the unification algorithm for PQR types. Indices are ignored at this stage.
+-------------------------------------------------------------------------------------------------------------
 
--- sub1 `compose` sub2 composes the type substitutions sub1 and sub2
--- according to sub2 ∘ sub1 = sub1 U (sub1 sub2)
+--- TYPE SUBSTITUTION ----------------------------------------------------------------------------------------
+
+newtype TypeSubstitution = TypeSubstitution (Map.HashMap TVarId Type)
+
+-- | @compose sub1 sub2@ composes the type substitutions @sub1@ and @sub2@
+-- according to @sub2 ∘ sub1 = sub1 ∪ (sub1 sub2)@.
 compose :: TypeSubstitution -> TypeSubstitution -> TypeSubstitution
 compose sub1@(TypeSubstitution map1) (TypeSubstitution map2) = TypeSubstitution $ Map.union (Map.map (tsub sub1) map2) map1
 
+-- It is useful for readability to make substitution a Monoid with identity and composition
 instance Semigroup TypeSubstitution where
+  (<>) :: TypeSubstitution -> TypeSubstitution -> TypeSubstitution
   (<>) = compose
 instance Monoid TypeSubstitution where
   mempty = TypeSubstitution Map.empty
   mappend = (<>)
 
+-- | Typeclass of datatypes with type variables
 class HasType a where
+  -- | @tfv t@ returns the set of free type variables in @t@
   tfv :: a -> Set TVarId
+  -- | @tsub sub t@ applies the type substitution @sub@ to @t@
   tsub :: TypeSubstitution -> a -> a
 
--- Typeclass of datatypes with type variables
 instance HasType Type where
   tfv TUnit = Set.empty
   tfv (TWire _) = Set.empty
@@ -50,16 +62,16 @@ instance HasType Type where
 
 --- UNIFICATION ---------------------------------------------------------------------------------
 
--- assignTVar id t attempts to return the singleton substitution id |-> t
--- if unnecessary (id != t) it returns the empty substitution
--- if impossible (id occurs in t) it returns Nothing
+-- | @assignTVar id t@ attempts to return the singleton substitution @[id ↦ t]@.
+-- It returns the empty substitution if @id == t@.
+-- It returns 'Nothing' if @id@ occurs in @t@.
 assignTVar :: TVarId -> Type -> Maybe TypeSubstitution
 assignTVar id (TVar id') | id == id' = return mempty
 assignTVar id t | id `Set.member` tfv t = Nothing
 assignTVar id t = return $ TypeSubstitution $ Map.singleton id t
 
--- mgtu t1 t2 attempts to find a most general type substitution sub such that sub(t1) = t2
--- If successful, it returns Just sub, otherwise it returns Nothing
+-- | @mgtu t1 t2@ attempts to find the most general type substitution @sub@ such that @sub t1 == t2@.
+-- If such a substitution does not exist, it returns 'Nothing'.
 mgtu :: Type -> Type -> Maybe TypeSubstitution
 mgtu (TVar id) t = assignTVar id t
 mgtu t (TVar id) = assignTVar id t

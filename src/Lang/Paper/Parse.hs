@@ -1,20 +1,28 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use <$>" #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
 module Lang.Paper.Parse
   ( parseProgram,
   )
 where
 
-import Lang.Paper.AST
-import Data.Char
 import Bundle.Parse (parseBundleType)
+import Data.Char
+import Lang.Paper.AST
 import Lang.Type.Parse (parseType)
 import Text.Parsec
+import Text.Parsec.Expr (Assoc (AssocRight), Operator (Infix, Postfix), buildExpressionParser)
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
-import Text.Parsec.Expr (buildExpressionParser, Operator (Postfix, Infix), Assoc (AssocRight))
+
+--- PAPER LANGUAGE PARSER ---------------------------------------------------------------------------------
+---
+--- This module defines the parser for the language as presented in the paper.
+--- This is currently not used in the application, it is no longer tested and is only kept for reference.
+--- For the actual implementation of the language, see Lang.Unified.Parse.
+-----------------------------------------------------------------------------------------------------------
 
 languageDef :: LanguageDef st
 languageDef =
@@ -126,25 +134,23 @@ annOperator = do
   t <- parseType
   return $ \v -> Anno v t
 
-
 -- Parser for values
 parseValue :: Parser Value
 -- the parsing of cons is left-recursive, so we need chainr1
-parseValue = let
-  operators = [[Infix consOperator AssocRight], [Postfix annOperator]]
-  baseValue = unitValue
-        <|> tuple
-        <|> lambda
-        <|> lift
-        <|> list
-        <|> fold
-        <|> m_parens parseValue
-        <|> try constant
-        <|> try variable
-        <?> "value"
-  in buildExpressionParser operators baseValue
-      
-
+parseValue =
+  let operators = [[Infix consOperator AssocRight], [Postfix annOperator]]
+      baseValue =
+        unitValue
+          <|> tuple
+          <|> lambda
+          <|> lift
+          <|> list
+          <|> fold
+          <|> m_parens parseValue
+          <|> try constant
+          <|> try variable
+          <?> "value"
+   in buildExpressionParser operators baseValue
 
 --- TERM PARSING -----------------------------------------------
 

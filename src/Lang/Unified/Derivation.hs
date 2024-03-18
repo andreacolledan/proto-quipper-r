@@ -1,31 +1,31 @@
 {-# LANGUAGE FlexibleInstances #-}
 
-module Lang.Unified.Derivation (
-  TypeDerivation,
-  TypeError(..),
-  TypingEnvironment(..),
-  emptyEnv,
-  makeEnv,
-  mustBeUsed,
-  makeEnvForall,
-  envIsLinear,
-  runTypeDerivation,
-  evalTypeDerivation,
-  execTypeDerivation,
-  throwLocalError,
-  typingContextLookup,
-  labelContextLookup,
-  substituteInEnvironment,
-  checkWellFormedness,
-  makeFreshVariable,
-  unify,
-  withBoundVariable,
-  withWireCount,
-  withNonLinearContext,
-  withBoundIndexVariable,
-  withScope
-
-) where
+module Lang.Unified.Derivation
+  ( TypeDerivation,
+    TypeError (..),
+    TypingEnvironment (..),
+    emptyEnv,
+    makeEnv,
+    mustBeUsed,
+    makeEnvForall,
+    envIsLinear,
+    runTypeDerivation,
+    evalTypeDerivation,
+    execTypeDerivation,
+    throwLocalError,
+    typingContextLookup,
+    labelContextLookup,
+    substituteInEnvironment,
+    checkWellFormedness,
+    makeFreshVariable,
+    unify,
+    withBoundVariable,
+    withWireCount,
+    withNonLinearContext,
+    withBoundIndexVariable,
+    withScope,
+  )
+where
 
 import Bundle.AST
 import Bundle.Infer
@@ -37,9 +37,7 @@ import Data.Foldable.Extra (notNull)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Set as Set
 import Index.AST
-import Index.Semantics
 import Lang.Type.AST
-import Lang.Type.Semantics
 import Lang.Type.Unify
 import Lang.Unified.AST
 import PrettyPrinter
@@ -50,37 +48,43 @@ import PrettyPrinter
 --- a linear setting. It defines the type of type derivation computations,
 --- their environment, the basic operations used to manipulate it and
 --- some useful combinators to build more complex derivations.
----
 ------------------------------------------------------------------------------------------
 
---- TYPING ENVIRONMENTS ------------------------------------------------------------------
+--- BINDINGS ------------------------------------------------------------------
 
--- The datatype of bindings (carries the type of a variable and whether it has been used yet)
-data Binding = Binding {getType :: Type, isUsed :: Bool} deriving (Eq, Show)
+-- | The datatype of bindings (carries the type of a variable and whether it has been used yet)
+data BindingInfo = BindingInfo {getType :: Type, isUsed :: Bool} deriving (Eq, Show)
 
-instance Wide Binding where
+-- 
+instance Wide BindingInfo where
   wireCount binding = if isUsed binding then Number 0 else wireCount (getType binding)
 
-instance Pretty Binding where
+instance Pretty BindingInfo where
   pretty = pretty . getType
 
-canBeUsed :: Binding -> Bool
-canBeUsed (Binding typ used) = not used || not (isLinear typ)
+-- | @canBeUsed b@ returns 'True' if the binding @b@ is of a parameter type
+-- or if it is a linear type and the corresponding variable has not been used yet.
+canBeUsed :: BindingInfo -> Bool
+canBeUsed (BindingInfo typ used) = not used || not (isLinear typ)
 
-mustBeUsed :: Binding -> Bool
-mustBeUsed (Binding typ used) = isLinear typ && not used
+-- | @mustBeUsed b@ returns 'True' if the binding @b@ is of a linear type
+-- and the corresponding variable has not been used yet.
+mustBeUsed :: BindingInfo -> Bool
+mustBeUsed (BindingInfo typ used) = not used && isLinear typ
 
--- The datatype of typing contexts (Corresponds to Γ or Φ in the paper)
-type TypingContext = Map.HashMap VariableId [Binding]
+--- TYPING CONTEXTS -----------------------------------------------------------
 
+-- | The datatype of typing contexts (Corresponds to Γ or Φ in the paper)
+type TypingContext = Map.HashMap VariableId [BindingInfo]
+
+-- | The empty typing context
 emptyctx :: Map.HashMap a b
 emptyctx = Map.empty
 
-removeUsed :: TypingContext -> TypingContext
-removeUsed = Map.filter notNull . Map.map (filter canBeUsed)
+--- TYPING ENVIRONMENTS --------------------------------------------------------
 
--- The datatype of typing environments
--- Represents the state of any derivation
+-- | The datatype of typing environments.
+-- Represents the state of any linear type derivation
 data TypingEnvironment = TypingEnvironment
   { typingContext :: TypingContext, -- attributes types to variable names (linear/nonlinear)
     labelContext :: LabelContext, -- attributes wire types to label names (linear)
@@ -90,30 +94,30 @@ data TypingEnvironment = TypingEnvironment
     freshCounter :: Int -- a counter for generating fresh index variables
   }
 
-instance Eq TypingEnvironment where
-  TypingEnvironment gamma1 q1 theta1 _ _ _ == TypingEnvironment gamma2 q2 theta2 _ _ _ =
-    removeUsed gamma1 == removeUsed gamma2 && q1 == q2 && theta1 == theta2
-
 instance Wide TypingEnvironment where
   wireCount TypingEnvironment {typingContext = gamma, labelContext = q} = wireCount gamma `Plus` wireCount q
 
+-- | @makeEnvForall theta gamma q@ initializes a typing environment from the dictionary-like definitions of @gamma@ and @q@.
+-- The index variables in @theta@ are considered to be in scope.
 makeEnvForall :: [IndexVariableId] -> [(VariableId, Type)] -> [(LabelId, WireType)] -> TypingEnvironment
 makeEnvForall theta gamma q =
-  let gamma' = Map.fromList [(id, [Binding typ False]) | (id, typ) <- gamma]
+  let gamma' = Map.fromList [(id, [BindingInfo typ False]) | (id, typ) <- gamma]
    in TypingEnvironment gamma' (Map.fromList q) (Set.fromList theta) [] True 0
 
+-- | @makeEnv gamma q@ initializes a typing environment from the dictionary-like definitions of @gamma@ and @q@.
+-- No index variables are considered to be in scope.
 makeEnv :: [(VariableId, Type)] -> [(LabelId, WireType)] -> TypingEnvironment
 makeEnv = makeEnvForall []
 
+-- | The empty typing environment. No variables are in scope.
 emptyEnv :: TypingEnvironment
 emptyEnv = makeEnv [] []
 
--- check if a typing environment contains any linear variable.
+-- | @envIsLinear env@ returns 'True' if the environment @env@ contains any linear variables or labels.
 envIsLinear :: TypingEnvironment -> Bool
 envIsLinear TypingEnvironment {typingContext = gamma, labelContext = q} =
   let remainingVars = [id | (id, bs) <- Map.toList gamma, any mustBeUsed bs] -- remaining linear variables
    in not (null remainingVars) || not (Map.null q)
-
 
 --- TYPING ERRORS ---------------------------------------------------------------
 
@@ -168,6 +172,7 @@ instance Show TypeError where
   show (ExpectedBundleType e typ surr) = "* Expected expression '" ++ pretty e ++ "' to have bundle type, got '" ++ pretty typ ++ "' instead" ++ printSurroundings surr
   show (CannotSynthesizeType e surr) = "* Cannot synthesize type for expression '" ++ pretty e ++ "'. Consider annotating it with a type" ++ printSurroundings surr
 
+-- | @printSurroundings es@ returns a string describing the expressions in @es@, if any
 printSurroundings :: [Expr] -> String
 printSurroundings [] = ""
 printSurroundings (e : es) = "\n* While typing " ++ pretty e ++ go es 3
@@ -177,7 +182,7 @@ printSurroundings (e : es) = "\n* While typing " ++ pretty e ++ go es 3
     go _ 0 = "\n..."
     go (e : es) n = "\n  In " ++ trnc 80 (pretty e) ++ go es (n - 1)
 
--- Shows the name of the top level constructor of a type
+-- | @printConstructor t@ returns a string describing the top-level constructor of type @t@
 printConstructor :: Type -> String
 printConstructor TUnit = "unit type"
 printConstructor (TWire {}) = "wire type"
@@ -189,13 +194,9 @@ printConstructor (TList {}) = "list type"
 printConstructor (TVar {}) = "type variable"
 printConstructor (TIForall {}) = "forall type"
 
+-- | @trnc n s@ returns the first @n@ characters of @s@, followed by "..." if @s@ is longer than @n@
 trnc :: Int -> String -> String
 trnc n s = if length s > n then take n s ++ "..." else s
-
--- Necessary to avoid redundant case analysis in subsequent passes
-instance MonadFail (Either TypeError) where
-  fail _ = error "Internal error: base type changed from preprocessing to typechecking"
-
 
 --- TYPE DERIVATIONS ---------------------------------------------------------------
 
@@ -230,13 +231,13 @@ typingContextLookup id = do
     (b : bs) ->
       if canBeUsed b
         then do
-          put env {typingContext = Map.insert id (Binding (getType b) True : bs) gamma}
+          put env {typingContext = Map.insert id (BindingInfo (getType b) True : bs) gamma}
           return $ getType b
         else throwLocalError $ OverusedLinearVariable id
     [] -> error "Internal error: empty binding list"
 
--- labelContextLookup l looks up label l in the label context and removes it
--- throws Unbound UnboundLabel if the label is absent
+-- | @labelContextLookup id@ looks up label @id@ in the label context and removes it.
+-- It throws 'UnboundLabel' if the label is absent.
 labelContextLookup :: LabelId -> TypeDerivation WireType
 labelContextLookup id = do
   env@TypingEnvironment {labelContext = q} <- get
@@ -244,13 +245,15 @@ labelContextLookup id = do
   put $ env {labelContext = Map.delete id q}
   return outcome
 
--- substituteInEnvironment sub applies sub to the typing context
+-- | @substituteInEnvironment sub@ applies the substitution @sub@ to the typing environment
 substituteInEnvironment :: TypeSubstitution -> TypeDerivation ()
 substituteInEnvironment sub = do
   env@TypingEnvironment {typingContext = gamma} <- get
-  let gamma' = Map.map (map (\(Binding t u) -> Binding (tsub sub t) u)) gamma
+  let gamma' = Map.map (map (\(BindingInfo t u) -> BindingInfo (tsub sub t) u)) gamma
   put env {typingContext = gamma'}
 
+-- | @checkWellFormedness x@ checks that all the index variables in @x@ are in scope.
+-- It throws 'UnboundIndexVariable' if any of them is not.
 checkWellFormedness :: (HasIndex a) => a -> TypeDerivation ()
 checkWellFormedness x = do
   theta <- gets indexContext
@@ -258,12 +261,18 @@ checkWellFormedness x = do
     fv | Set.null fv -> return () -- all the free variables in the type are also in the context, good
     fv -> throwLocalError $ UnboundIndexVariable (Set.findMin fv) -- some free variables are not in scope, bad
 
+-- | @makeFreshVariable prefix@ returns a fresh variable name with the given prefix.
+-- TODO: using 'scopes', this function could also return a variable that is fresh in the current scope.
 makeFreshVariable :: String -> TypeDerivation VariableId
 makeFreshVariable prefix = do
   env@TypingEnvironment {freshCounter = c} <- get
   put env {freshCounter = c + 1}
   return $ prefix ++ show c
 
+-- | @unify e t1 t2@ attempts to find the most general type substitution @sub@ such that @sub t1 == t2@.
+-- If such a substitution does not exist, it throws 'UnexpectedType'. If it exists, the resulting substitution
+-- is applied to the current typing environment and returned.
+-- Expression @e@ is only used for error reporting.
 unify :: Expr -> Type -> Type -> TypeDerivation TypeSubstitution
 unify e t1 t2 = case mgtu t1 t2 of
   Just sub -> do
@@ -271,11 +280,9 @@ unify e t1 t2 = case mgtu t1 t2 of
     return sub
   Nothing -> throwLocalError $ UnexpectedType e t2 t1
 
+--- DERIVATION COMBINATORS ------------------------------------------------------
 
--- Derivation combinators:
-
--- withBoundVariable x typ der describes derivation der
--- in which the variable name x is bound to type typ
+-- | @withBoundVariable x typ der@ is derivation @der@ in which variable @x@ is bound to type @typ@.
 withBoundVariable :: VariableId -> Type -> TypeDerivation a -> TypeDerivation a
 withBoundVariable x typ der = do
   bindVariable x typ
@@ -287,7 +294,7 @@ withBoundVariable x typ der = do
     bindVariable id typ = do
       env@TypingEnvironment {typingContext = gamma} <- get
       bs <- maybe (return []) return (Map.lookup id gamma)
-      let gamma' = Map.insert id (Binding typ False : bs) gamma
+      let gamma' = Map.insert id (BindingInfo typ False : bs) gamma
       put env {typingContext = gamma'}
     unbindVariable :: VariableId -> StateT TypingEnvironment (Either TypeError) ()
     unbindVariable id = do
@@ -299,9 +306,8 @@ withBoundVariable x typ der = do
           when (mustBeUsed b) (throwLocalError $ UnusedLinearVariable id)
           put env {typingContext = if null bs then Map.delete id gamma else Map.insert id bs gamma}
 
--- withWireCount der describes derivation der
--- in which the result of the computation is paired with an index describing
--- how many wires have been consumed during der
+-- | @withWireCount der@ is derivation @der@ in which the result of the computation is paired with an index describing
+-- how many wires have been consumed during @der@.
 withWireCount :: TypeDerivation a -> TypeDerivation (a, Index)
 withWireCount der = do
   TypingEnvironment {typingContext = gamma, labelContext = q} <- get
@@ -326,8 +332,8 @@ withWireCount der = do
             gamma1
             gamma2
 
--- withNonLinearContext der describes a derivation like der which fails
--- if der consumes any linear resource
+-- | @withNonLinearContext der@ is derivation @der@ in which a 'LiftedLinearVariable' error is thrown if any linear resource from the
+-- existing typing context is consumed. This is useful to ensure that a computation is not consuming linear resources.
 withNonLinearContext :: TypeDerivation a -> TypeDerivation a
 withNonLinearContext der = do
   TypingEnvironment {typingContext = gamma, labelContext = q} <- get
@@ -349,6 +355,7 @@ withNonLinearContext der = do
             (_, _) -> error "Internal error: empty binding list"
         )
 
+-- | @withBoundIndexVariable id der@ is derivation @der@ in which index variable @id@ is in scope.
 withBoundIndexVariable :: IndexVariableId -> TypeDerivation a -> TypeDerivation a
 withBoundIndexVariable id der = do
   env@TypingEnvironment {indexContext = theta} <- get
@@ -359,6 +366,8 @@ withBoundIndexVariable id der = do
   put env {indexContext = Set.delete id theta}
   return outcome
 
+-- | @withScope e der@ is derivation @der@ in which expression the enclosing expression @e@ is visible.
+-- This is only used to provide good error messages in case of failure and it has no effect on the contexts.
 withScope :: Expr -> TypeDerivation a -> TypeDerivation a
 withScope e der = do
   env@TypingEnvironment {scopes = es} <- get
@@ -367,3 +376,9 @@ withScope e der = do
   env@TypingEnvironment {scopes = es} <- get
   put env {scopes = tail es}
   return outcome
+
+--- OTHER STUFF ----------------------------------------------------------------
+
+-- Necessary to avoid redundant case analysis in subsequent passes
+instance MonadFail (Either TypeError) where
+  fail _ = error "Internal error: unexpected type form in subsequent typing pass"

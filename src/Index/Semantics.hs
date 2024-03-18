@@ -10,11 +10,9 @@ import Solving.CVC5
 import System.IO.Extra (Handle)
 import qualified Data.Set as Set
 
--- Index semantics in terms of a reduction function
--- simplifyIndex qfh i reduces i as much as possible and returns the result
--- If i is closed, then the result is in the form (Number n) for some n
--- If i is not closed, then some tactics are employed to simplify the expression,
--- but the result may still contain free variables
+-- | @simplifyIndex qfh i@ returns index expression @i@ in a normal form.
+-- Note that this might not be a natural number (e.g. if @i@ contains free variables).
+-- Handle @qfh@ is used to interact with the SMT solver.
 simplifyIndex :: Handle -> Index -> Index
 simplifyIndex _ (Number n) = Number n
 simplifyIndex _ (IndexVariable id) = IndexVariable id
@@ -54,7 +52,9 @@ simplifyIndex qfh (Maximum id i j) = case simplifyIndex qfh i of
   
 
 -- Θ ⊨ i = j (figs. 10,15)
--- in this implementation, Θ implicitly contains all the free variables in i and j
+-- | @checkEq qfh i j@ checks if index expressions @i@ and @j@ are equal
+-- for all assignments of their free index variables.
+-- Handle @qfh@ is used to interact with the SMT solver.
 checkEq :: Handle -> Index -> Index -> Bool
 checkEq qfh i j = case (simplifyIndex qfh i, simplifyIndex qfh j) of
   (i', j') | i' == j' -> True -- identical indices are equal
@@ -62,7 +62,9 @@ checkEq qfh i j = case (simplifyIndex qfh i, simplifyIndex qfh j) of
   (i', j') -> querySMTWithContext qfh $ Constraint Eq i' j' -- in all other cases, query the solver
 
 -- Θ ⊨ i ≤ j (figs. 12,15)
--- in this implementation, Θ implicitly contains all the free variables in i and j
+-- | @checkLeq qfh i j@ checks if index expression @i@ is lesser-or-equal than index expression @j@
+-- for all assignments of their free index variables.
+-- Handle @qfh@ is used to interact with the SMT solver.
 checkLeq :: Handle -> Index -> Index -> Bool
 checkLeq qfh i j = case (simplifyIndex qfh i, simplifyIndex qfh j) of
   (i', j') | i' == j' -> True -- identical indices are lesser-or-equal

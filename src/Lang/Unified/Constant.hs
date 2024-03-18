@@ -7,6 +7,11 @@ import Lang.Type.AST
 import Index.AST
 import Bundle.AST (BundleType(..), WireType (..))
 
+--- CONSTANTS -----------------------------------------------------------------------------------------------
+---
+--- This module defines the constants of the PQR language.
+-------------------------------------------------------------------------------------------------------------
+
 -- Enum of constants
 data Constant
   -- Qubit metaoperations
@@ -40,6 +45,7 @@ instance Pretty Constant where
   pretty Toffoli = "Toffoli"
   pretty MakeCRGate = "MakeCRGate"
 
+-- | @typeOf c@ returns the type of constant @c@
 typeOf :: Constant -> Type
 typeOf QInit0 = TCirc (Number 1) BTUnit (BTWire Qubit)
 typeOf QInit1 = TCirc (Number 1) BTUnit (BTWire Qubit)

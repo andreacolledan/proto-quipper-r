@@ -1,37 +1,43 @@
-{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE InstanceSigs #-}
 
-module Lang.Type.AST (
-  Type(..),
-  TVarId,
-  isLinear,
-  toBundleType,
-  fromBundleType
-) where
+module Lang.Type.AST
+  ( Type (..),
+    TVarId,
+    isLinear,
+    toBundleType,
+    fromBundleType,
+  )
+where
 
-import Bundle.AST ( BundleType (..), WireType, Wide(..) )
+import Bundle.AST (BundleType (..), Wide (..), WireType)
 import Data.Set
 import qualified Data.Set as Set
 import Index.AST
-import Index.Semantics
 import PrettyPrinter
 
---- TYPES ---------------------------------------------------------------------------------------
+--- TYPE SYNTAX MODULE ---------------------------------------------------------------------------------------
+---
+--- This module defines the abstract syntax of PQR types.
+--- The syntax is almost identical to the one in the paper, with the exception of the introduction of
+--- type variables (used internally) and dependent function types (which internalize the index
+--- meta-theoretical results in the paper).
+-------------------------------------------------------------------------------------------------------------
 
 type TVarId = String
 
--- The datatype of PQR types
 -- Fig. 8
+-- | The datatype of PQR types
 data Type
-  = TUnit                                     -- ()
-  | TWire WireType                            -- Bit | Qubit
-  | TPair Type Type                           -- (t1, t2)
-  | TCirc Index BundleType BundleType         -- Circ[i](bt1, vt2)
-  | TArrow Type Type Index Index              -- t1 -o[i,j] t2
-  | TBang Type                                -- !t
-  | TList Index Type                          -- TList[I] t
-  | TVar TVarId                               -- α
-  | TIForall IndexVariableId Type Index Index -- i ->[i,j] t
+  = TUnit                                     -- Unit type        : ()
+  | TWire WireType                            -- Wire type        : Bit | Qubit
+  | TPair Type Type                           -- Tensor type      : (t1, t2)
+  | TCirc Index BundleType BundleType         -- Circuit type     : Circ[i](bt1, vt2)
+  | TArrow Type Type Index Index              -- Function type    : t1 -o[i,j] t2
+  | TBang Type                                -- Bang type        : !t
+  | TList Index Type                          -- List type        : TList[i] t
+  | TVar TVarId                               -- Type variable    : 
+  | TIForall IndexVariableId Type Index Index -- Dep. fun. type   : i ->[i,j] t
   deriving (Show, Eq)
 
 instance Pretty Type where
@@ -45,8 +51,8 @@ instance Pretty Type where
   pretty (TVar id) = id
   pretty (TIForall id typ i j) = "(" ++ id ++ " ->[" ++ pretty i ++ ", " ++ pretty j ++ "] " ++ pretty typ ++ ")"
 
--- PQR types are amenable to wire counting
 -- Def. 2 (Wire Count)
+-- PQR types are amenable to wire counting
 instance Wide Type where
   wireCount TUnit = Number 0
   wireCount (TWire _) = Number 1
@@ -90,12 +96,12 @@ instance HasIndex Type where
   isub i id (TBang typ) = TBang (isub i id typ)
   isub i id (TList j typ) = TList (isub i id j) (isub i id typ)
   isub _ _ (TVar a) = TVar a
-  isub i id (TIForall id' typ j k) = let
-    id'' = fresh id' [IndexVariable id, i, j, k]
-    id''' = fresh id'' [typ] --must do this in two steps since typ cannot be put in the same list above
-    in TIForall id''' (isub i id . isub (IndexVariable id''') id' $ typ) (isub i id . isub (IndexVariable id''') id' $ j) (isub i id . isub (IndexVariable id''') id' $ k)
+  isub i id (TIForall id' typ j k) =
+    let id'' = fresh id' [IndexVariable id, i, j, k]
+        id''' = fresh id'' [typ] -- must do this in two steps since typ cannot be put in the same list above
+     in TIForall id''' (isub i id . isub (IndexVariable id''') id' $ typ) (isub i id . isub (IndexVariable id''') id' $ j) (isub i id . isub (IndexVariable id''') id' $ k)
 
--- Returns True iff the given type is linear
+-- | @isLinear t@ returns 'True' @t@ is a linear type, and 'False' otherwise
 isLinear :: Type -> Bool
 isLinear TUnit = False
 isLinear (TWire _) = True
@@ -104,10 +110,11 @@ isLinear (TCirc {}) = False
 isLinear (TArrow {}) = True
 isLinear (TBang _) = False
 isLinear (TList _ typ) = isLinear typ
-isLinear (TVar _) = False --Variables are only used in the pre-processing stage, so we are permissive here
+isLinear (TVar _) = False -- Variables are only used in the pre-processing stage, so we are permissive here
 isLinear (TIForall _ typ _ _) = isLinear typ
 
--- Turns a suitable PQR type into an identical bundle type
+-- | Turns a suitable PQR 'Type' into an identical 'BundleType'.
+-- @toBundleType t@ returns @'Just' bt@ if PQR 'Type' @t@ is also a bundle type, and 'Nothing' otherwise
 toBundleType :: Type -> Maybe BundleType
 toBundleType TUnit = Just BTUnit
 toBundleType (TWire wtype) = Just $ BTWire wtype
@@ -121,7 +128,8 @@ toBundleType (TList i typ) = do
   return $ BTList i btype
 toBundleType _ = Nothing
 
--- fromBundleType bt returns the PQR type equivalent to bt
+-- | Turns a 'BundleType' into an identical PQR 'Type'. 
+-- @fromBundleType bt@ returns the PQR 'Type' corresponding to bundle type @bt@
 fromBundleType :: BundleType -> Type
 fromBundleType BTUnit = TUnit
 fromBundleType (BTWire wtype) = TWire wtype

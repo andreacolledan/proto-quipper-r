@@ -22,8 +22,15 @@ import qualified Bundle.AST as Bundle
 import Circuit (Circuit)
 import qualified Circuit
 import Index.AST
-import PrettyPrinter
 import Lang.Type.AST
+import PrettyPrinter
+
+--- PAPER LANGUAGE MODULE (UNUSED)--------------------------------------------------------------------------
+---
+--- This module defines the abstract syntax of the language almost exactly as presented in the paper.
+--- This is currently not used in the application, it is no longer tested and is only kept for reference.
+--- For the actual implementation of the language, see Lang.Unified.AST.
+------------------------------------------------------------------------------------------------------------
 
 type VariableId = String
 
@@ -77,10 +84,9 @@ instance Pretty Term where
   pretty (App m n) = "(" ++ pretty m ++ " " ++ pretty n ++ ")"
   pretty (Force v) = "force(" ++ pretty v ++ ")"
 
+--- PRIMITIVE BOXED CIRCUITS ---------------------------------------------------------------------------------
 
-  --- PRIMITIVE BOXED CIRCUITS ---------------------------------------------------------------------------------
-
-  -- Hadamard gate, maps a single qubit to a superposition of 0 and 1
+-- Hadamard gate, maps a single qubit to a superposition of 0 and 1
 hadamard :: Value
 hadamard = BoxedCircuit (Bundle.Label "a") Circuit.hadamard (Bundle.Label "b")
 
@@ -100,6 +106,3 @@ qdiscard = BoxedCircuit (Bundle.Label "a") Circuit.qdiscard Bundle.UnitValue
 cnot :: Value
 cnot =
   BoxedCircuit (Bundle.Pair (Bundle.Label "a") (Bundle.Label "b")) Circuit.cnot (Bundle.Pair (Bundle.Label "c") (Bundle.Label "d"))
-
-
-

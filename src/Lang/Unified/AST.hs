@@ -13,9 +13,15 @@ import Lang.Unified.Constant
 import Lang.Type.Unify (HasType (..), TypeSubstitution)
 import qualified Data.Set as Set
 
+--- PQR SYNTAX MODULE ---------------------------------------------------------------------------------------
+---
+--- This module defines the abstract syntax of PQR expressions. This syntax is based on the one in the paper,
+--- but it exhibits significant differences and additional constructs which make it more usable.
+-------------------------------------------------------------------------------------------------------------
+
 type VariableId = String
 
--- The datatype of PQR expressions
+-- | The datatype of PQR expressions
 data Expr =
   EUnit                                       -- Unit value               : ()
   | ELabel LabelId                            -- Label (internal)         :
@@ -91,7 +97,7 @@ instance HasType Expr where
   tsub _ (ELabel id) = ELabel id
   tsub _ (EVar id) = EVar id
   tsub sub (EPair e1 e2) = EPair (tsub sub e1) (tsub sub e2)
-  tsub _ e@(ECirc {}) = error "todo unimplemented"
+  tsub _ e@(ECirc {}) = error "todo unimplemented" -- TODO: implement conversion between type and bundle type substitutions
   tsub sub (EAbs id t e) = EAbs id (tsub sub t) (tsub sub e)
   tsub sub (EApp e1 e2) = EApp (tsub sub e1) (tsub sub e2)
   tsub sub (ELift e) = ELift (tsub sub e)
@@ -101,7 +107,7 @@ instance HasType Expr where
   tsub sub (EFold e1 e2 e3) = EFold (tsub sub e1) (tsub sub e2) (tsub sub e3)
   tsub sub (EAnno e t) = EAnno (tsub sub e) (tsub sub t)
   tsub sub (EApply e1 e2) = EApply (tsub sub e1) (tsub sub e2)
-  tsub sub (EBox bt e) = EBox (btsub (error "todo unimplemented") bt) (tsub sub e)
+  tsub sub (EBox bt e) = EBox (btsub (error "todo unimplemented") bt) (tsub sub e) -- TODO: implement conversion between type and bundle type substitutions
   tsub sub (ELet id e1 e2) = ELet id (tsub sub e1) (tsub sub e2)
   tsub sub (EDest id1 id2 e1 e2) = EDest id1 id2 (tsub sub e1) (tsub sub e2)
   tsub sub (EIAbs id e) = EIAbs id (tsub sub e)

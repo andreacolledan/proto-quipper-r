@@ -17,7 +17,6 @@ import Control.Monad.Except
 import Control.Monad.State.Lazy
 import qualified Data.HashMap.Strict as Map
 import PrettyPrinter
-import System.IO.Extra (Handle)
 
 -- Corresponds to Q in the paper
 type LabelContext = Map.HashMap LabelId WireType
