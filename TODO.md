@@ -70,7 +70,7 @@
 
 - [x] Better error messages
 - [x] Better handling of shadowing
-- [ ] Better unification
+- [x] Better unification
   
 ### Parser
 
@@ -80,11 +80,12 @@
 
 ### Performance
 
-- [ ] SMT solving with one file per program (as opposed to per query)
-- [ ] Use HashMap in place of Map
+- [x] SMT solving with one file per program (as opposed to per query)
+- [x] Use HashMap in place of Map
 
 ### Examples
 
 - [x] List functions
 - [x] QFT
 - [x] Arithmetic
+
