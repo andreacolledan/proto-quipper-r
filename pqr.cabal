@@ -32,9 +32,6 @@ library
       Index.AST
       Index.Parse
       Index.Semantics
-      Lang.Paper.AST
-      Lang.Paper.Infer
-      Lang.Paper.Parse
       Lang.Type.AST
       Lang.Type.Parse
       Lang.Type.Semantics

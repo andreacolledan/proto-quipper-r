@@ -1,6 +1,6 @@
 module Solving.CVC5
   ( querySMTWithContext,
-    withQueryFile,
+    withSolver,
   )
 where
 
@@ -14,7 +14,6 @@ import PrettyPrinter
 import System.FilePath
 import System.Process as Proc
 import System.IO
-import System.IO.Unsafe
 
 --- SMT SOLVER (CVC5) MODULE ------------------------------------------------------------
 ---
@@ -111,9 +110,8 @@ goDesugarMaxima (Maximum id i j) = do
 -- | @querySMTWithContext qfh c@ queries the CVC5 solver to check if the constraint @c@ holds for every possible assignment of its free variables.
 -- It returns @True@ if the constraint holds, @False@ otherwise or if an error occurs in the interaction with the solver.
 -- The handle @qfh@ is used to communicate with the SMT solver.
-{-# NOINLINE querySMTWithContext #-}
-querySMTWithContext :: Handle -> Constraint -> Bool
-querySMTWithContext qfh c@(Constraint rel i j) = unsafePerformIO $ do
+querySMTWithContext :: Handle -> Constraint -> IO Bool
+querySMTWithContext qfh c@(Constraint rel i j) = do
   hPutStrLn qfh $ "\n; PROVE " ++ pretty c
   hPutStrLn qfh "(push 1)"
   forM_ (ifv i `Set.union` ifv j) $ \id -> do
@@ -151,13 +149,13 @@ querySMTWithContext qfh c@(Constraint rel i j) = unsafePerformIO $ do
         -- empty response is considered an error
         hPutStrLn qfh "; got empty response"
         error $ "CVC5 empty response while solving " ++ pretty c
-  hPutStrLn qfh "(pop 1)"
+  hPutStr qfh "(pop 1)"
   return result
 
--- | @withQueryFile filepath action@ opens the file @filepath@ for writing and runs the action @action@ with the handle to the file.
+-- | @withSolver filepath action@ opens the file @filepath@ for writing and runs the action @action@ with the handle to the file.
 -- Used in main to initialize the file for the queries to the SMT solver.
-withQueryFile :: FilePath -> (Handle -> IO r) -> IO r
-withQueryFile filepath action = do
+withSolver :: FilePath -> (Handle -> IO r) -> IO r
+withSolver filepath action = do
   let filename = takeFileName filepath
   let queryfilename = replaceExtension filename ".smt2"
   let queryfilepath = "queries" </> queryfilename

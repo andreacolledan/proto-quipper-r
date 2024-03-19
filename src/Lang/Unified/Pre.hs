@@ -7,7 +7,6 @@ import Bundle.AST (BundleType (..))
 import Bundle.Infer
 import Circuit
 import Control.Monad (unless)
-import Control.Monad.State
 import Data.Either.Extra
 import Index.AST
 import Lang.Type.AST
@@ -15,6 +14,9 @@ import Lang.Type.Unify
 import Lang.Unified.AST
 import Lang.Unified.Constant
 import Lang.Unified.Derivation
+import Control.Monad.Error.Class
+import Control.Monad.Except (runExceptT)
+import Control.Monad.Identity (Identity(runIdentity))
 
 --- PREPROCESSING MODULE ------------------------------------------------------------------------------------
 ---
@@ -155,7 +157,7 @@ inferBaseType e@(EFold e1 e2 e3) = withScope e $ do
   return (tsub sub (EFold e1' e2' e3'), tsub sub acctyp, sub)
 -- BOXED CIRCUIT
 inferBaseType e@(ECirc b1 c b2) = withScope e $ do
-  (inbt, inrem, outbt, outrem) <- lift $ mapLeft WireTypingError $ do
+  (inbt, inrem, outbt, outrem) <- liftEither $ mapLeft WireTypingError $ do
     (inlabels, outlabels) <- inferCircuitSignature c
     (inbt, inrem) <- runBundleTypeInferenceWithRemaining inlabels b1
     (outbt, outrem) <- runBundleTypeInferenceWithRemaining outlabels b2
@@ -181,7 +183,6 @@ inferBaseType e@(EConst c) = withScope e $ return (EConst c, typeOf c, mempty)
 
 -- | @ annotateNil env e @ annotates all the empty lists in expression @e@ with the correct parameter type under environment @env@.
 -- If successful, returns the annotated expression. Otherwise, returns the error.
-annotateNil :: TypingEnvironment -> Expr -> Either TypeError Expr
-annotateNil env e = case evalTypeDerivation (inferBaseType e) env of
-  Left err -> Left err
-  Right (e', _, _) -> Right e'
+annotateNil :: TypingEnvironment -> Expr -> DerivationResult Expr
+annotateNil env e = extractFirst <$> evalTypeDerivation (inferBaseType e) env
+  where extractFirst (a, _, _) = a

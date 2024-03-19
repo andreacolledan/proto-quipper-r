@@ -1,8 +1,10 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Lang.Unified.Derivation
   ( TypeDerivation,
     TypeError (..),
+    DerivationResult,
     TypingEnvironment (..),
     emptyEnv,
     makeEnv,
@@ -24,6 +26,10 @@ module Lang.Unified.Derivation
     withNonLinearContext,
     withBoundIndexVariable,
     withScope,
+    unlessSubtype,
+    unlessEq,
+    unlessLeq,
+    unlessZero
   )
 where
 
@@ -33,7 +39,6 @@ import Circuit
 import Control.Monad (unless, when)
 import Control.Monad.Error.Class
 import Control.Monad.State
-import Data.Foldable.Extra (notNull)
 import qualified Data.HashMap.Strict as Map
 import qualified Data.Set as Set
 import Index.AST
@@ -41,6 +46,11 @@ import Lang.Type.AST
 import Lang.Type.Unify
 import Lang.Unified.AST
 import PrettyPrinter
+import Control.Monad.Except
+import Control.Monad.Identity
+import Lang.Type.Semantics (checkSubtype)
+import System.IO.Extra (Handle)
+import Index.Semantics
 
 --- TYPE DERIVATIONS MODULE --------------------------------------------------------------
 ---
@@ -200,17 +210,19 @@ trnc n s = if length s > n then take n s ++ "..." else s
 
 --- TYPE DERIVATIONS ---------------------------------------------------------------
 
+type DerivationResult = ExceptT TypeError IO
+
 -- The datatype of type derivations
 -- Stateful computations with a typing environment, which may throw a type error
-type TypeDerivation = StateT TypingEnvironment (Either TypeError)
+type TypeDerivation = StateT TypingEnvironment DerivationResult
 
-runTypeDerivation :: TypeDerivation a -> TypingEnvironment -> Either TypeError (a, TypingEnvironment)
+runTypeDerivation :: TypeDerivation a -> TypingEnvironment -> DerivationResult (a, TypingEnvironment)
 runTypeDerivation = runStateT
 
-evalTypeDerivation :: TypeDerivation a -> TypingEnvironment -> Either TypeError a
+evalTypeDerivation :: TypeDerivation a -> TypingEnvironment -> DerivationResult a
 evalTypeDerivation = evalStateT
 
-execTypeDerivation :: TypeDerivation a -> TypingEnvironment -> Either TypeError TypingEnvironment
+execTypeDerivation :: TypeDerivation a -> TypingEnvironment -> DerivationResult TypingEnvironment
 execTypeDerivation = execStateT
 
 -- Basic derivation operators:
@@ -290,13 +302,13 @@ withBoundVariable x typ der = do
   unbindVariable x -- this throws an error if x is linear and der does not consume it
   return outcome
   where
-    bindVariable :: VariableId -> Type -> StateT TypingEnvironment (Either TypeError) ()
+    bindVariable :: VariableId -> Type -> TypeDerivation ()
     bindVariable id typ = do
       env@TypingEnvironment {typingContext = gamma} <- get
       bs <- maybe (return []) return (Map.lookup id gamma)
       let gamma' = Map.insert id (BindingInfo typ False : bs) gamma
       put env {typingContext = gamma'}
-    unbindVariable :: VariableId -> StateT TypingEnvironment (Either TypeError) ()
+    unbindVariable :: VariableId -> TypeDerivation ()
     unbindVariable id = do
       env@TypingEnvironment {typingContext = gamma} <- get
       case Map.lookup id gamma of
@@ -377,8 +389,31 @@ withScope e der = do
   put env {scopes = tail es}
   return outcome
 
+unlessSubtype :: Handle -> Type -> Type -> TypeDerivation () -> TypeDerivation ()
+unlessSubtype qfh t1 t2 der = do
+  c <- liftIO $ checkSubtype qfh t1 t2
+  unless c der
+
+unlessLeq :: Handle -> Index -> Index -> TypeDerivation () -> TypeDerivation ()
+unlessLeq qfh i j der = do
+  c <- liftIO $ checkLeq qfh i j
+  unless c der
+
+unlessEq :: Handle -> Index -> Index -> TypeDerivation () -> TypeDerivation ()
+unlessEq qfh i j der = do
+  c <- liftIO $ checkEq qfh i j
+  unless c der
+
+unlessZero :: Handle -> Index -> TypeDerivation () -> TypeDerivation ()
+unlessZero qfh i = unlessEq qfh i (Number 0)
+
+
 --- OTHER STUFF ----------------------------------------------------------------
 
 -- Necessary to avoid redundant case analysis in subsequent passes
 instance MonadFail (Either TypeError) where
+  fail _ = error "Internal error: unexpected type form in subsequent typing pass"
+
+
+instance MonadFail Identity where
   fail _ = error "Internal error: unexpected type form in subsequent typing pass"

@@ -30,7 +30,7 @@ commandLineParser =
 
 main :: IO ()
 main = withParseResult commandLineParser $ \args -> do
-  let CommandLineArguments {filepath = file, paper = p, verbose = verb} = args
+  let CommandLineArguments {filepath = file, verbose = verb} = args
   when verb $ putStrLn $ "Parsing " ++ file ++ "..."
   contents <- readFile file
   case parse U.parseProgram "" contents of
@@ -39,8 +39,8 @@ main = withParseResult commandLineParser $ \args -> do
       when verb $ do
         putStrLn $ "Parsed successfully as \n\t" ++ pretty ast
         putStrLn "Inferring type..."
-      withQueryFile file $ \qfh -> do
-        let outcome = runTypeInference ast qfh
+      withSolver file $ \qfh -> do
+        outcome <- runTypeInference ast qfh
         case outcome of
           Left err -> do
             hSetSGR stderr [SetColor Foreground Vivid Red]
