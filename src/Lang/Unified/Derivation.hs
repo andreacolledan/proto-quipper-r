@@ -49,8 +49,8 @@ import PrettyPrinter
 import Control.Monad.Except
 import Control.Monad.Identity
 import Lang.Type.Semantics (checkSubtype)
-import System.IO.Extra (Handle)
 import Index.Semantics
+import Solving.CVC5 (SolverHandle)
 
 --- TYPE DERIVATIONS MODULE --------------------------------------------------------------
 ---
@@ -389,22 +389,22 @@ withScope e der = do
   put env {scopes = tail es}
   return outcome
 
-unlessSubtype :: Handle -> Type -> Type -> TypeDerivation () -> TypeDerivation ()
+unlessSubtype :: SolverHandle -> Type -> Type -> TypeDerivation () -> TypeDerivation ()
 unlessSubtype qfh t1 t2 der = do
   c <- liftIO $ checkSubtype qfh t1 t2
   unless c der
 
-unlessLeq :: Handle -> Index -> Index -> TypeDerivation () -> TypeDerivation ()
+unlessLeq :: SolverHandle -> Index -> Index -> TypeDerivation () -> TypeDerivation ()
 unlessLeq qfh i j der = do
   c <- liftIO $ checkLeq qfh i j
   unless c der
 
-unlessEq :: Handle -> Index -> Index -> TypeDerivation () -> TypeDerivation ()
+unlessEq :: SolverHandle -> Index -> Index -> TypeDerivation () -> TypeDerivation ()
 unlessEq qfh i j der = do
   c <- liftIO $ checkEq qfh i j
   unless c der
 
-unlessZero :: Handle -> Index -> TypeDerivation () -> TypeDerivation ()
+unlessZero :: SolverHandle -> Index -> TypeDerivation () -> TypeDerivation ()
 unlessZero qfh i = unlessEq qfh i (Number 0)
 
 

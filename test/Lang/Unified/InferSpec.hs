@@ -12,10 +12,10 @@ import Test.Hspec
 import qualified Circuit
 import Lang.Unified.Constant
 import Lang.Unified.Derivation
-import Solving.CVC5 (withSolver)
-import System.IO.Extra (Handle)
+    ( emptyEnv, makeEnv, makeEnvForall, TypeError, TypingEnvironment )
+import Solving.CVC5 (withSolver, SolverHandle)
 
-runInferenceForTesting :: TypingEnvironment -> Expr -> Handle -> IO (Either TypeError (Type, Index))
+runInferenceForTesting :: TypingEnvironment -> Expr -> SolverHandle -> IO (Either TypeError (Type, Index))
 runInferenceForTesting env expr qfh = do
   outcome <- runTypeInferenceWith env expr qfh
   return $ case outcome of

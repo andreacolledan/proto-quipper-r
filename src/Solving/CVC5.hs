@@ -1,19 +1,19 @@
 module Solving.CVC5
   ( querySMTWithContext,
     withSolver,
+    SolverHandle,
   )
 where
 
 import Control.Monad
 import Control.Monad.State (MonadState (..), State, evalState)
 import qualified Data.Set as Set
-import GHC.IO.Exception (ExitCode (ExitFailure, ExitSuccess))
 import GHC.IO.Handle.Types (Handle (..))
 import Index.AST
 import PrettyPrinter
-import System.FilePath
 import System.Process as Proc
 import System.IO
+import System.FilePath
 
 --- SMT SOLVER (CVC5) MODULE ------------------------------------------------------------
 ---
@@ -110,62 +110,88 @@ goDesugarMaxima (Maximum id i j) = do
 -- | @querySMTWithContext qfh c@ queries the CVC5 solver to check if the constraint @c@ holds for every possible assignment of its free variables.
 -- It returns @True@ if the constraint holds, @False@ otherwise or if an error occurs in the interaction with the solver.
 -- The handle @qfh@ is used to communicate with the SMT solver.
-querySMTWithContext :: Handle -> Constraint -> IO Bool
-querySMTWithContext qfh c@(Constraint rel i j) = do
-  hPutStrLn qfh $ "\n; PROVE " ++ pretty c
-  hPutStrLn qfh "(push 1)"
+querySMTWithContext :: SolverHandle -> Constraint -> IO Bool
+querySMTWithContext (sin, sout) c@(Constraint rel i j) = do
+  hPutStrLn sin $ "\n; PROVE " ++ pretty c
+  hPutStrLn sin "(push 1)"
   forM_ (ifv i `Set.union` ifv j) $ \id -> do
     -- for each free index variable in c, initialize an unknown natural variable:
-    hPutStrLn qfh $ "(declare-const " ++ id ++ " Int)"
-    hPutStrLn qfh $ "(assert (<= 0 " ++ id ++ "))"
+    hPutStrLn sin $ "(declare-const " ++ id ++ " Int)"
+    hPutStrLn sin $ "(assert (<= 0 " ++ id ++ "))"
   let (constraints, Constraint _ i' j') = desugarMaxima c
-  hPutStr qfh constraints -- dump the constraints that desugar bounded maxima
+  hPutStr sin constraints -- dump the constraints that desugar bounded maxima
   -- try to find a counterexample to c:
-  hPutStrLn qfh "; assert the negation of the constraint to check if it is valid"
-  hPutStrLn qfh $ "(assert (not (" ++ embedConstraint rel ++ " " ++ embedIndex i' ++ " " ++ embedIndex j' ++ ")))"
-  hPutStrLn qfh "(check-sat)"
-  hFlush qfh
-  (ec, out, err) <- readProcessWithExitCode "cvc5" [handleName qfh, "-q", "--incremental"] [] -- run CVC5 and get its stdout
+  hPutStrLn sin "; assert the negation of the constraint to check if it is valid"
+  hPutStrLn sin $ "(assert (not (" ++ embedConstraint rel ++ " " ++ embedIndex i' ++ " " ++ embedIndex j' ++ ")))"
+  hPutStrLn sin "(check-sat)"
+  hFlush sin
+  resp <- hGetLine sout
   -- append the response to the query file as a comment:
-  result <- case ec of
-    ExitFailure _ -> do
-      -- the solver threw an error
-      hPutStrLn qfh $ "; Error thrown: " ++ show err
-      error $ "CVC5 error: " ++ show err ++ " while solving " ++ pretty c
-    ExitSuccess -> case reverse (lines out) of -- response is sat/unsat for each query so far
-      "unsat" : _ -> do
-        -- cannot find a counterexample ==> the constraint is valid
-        hPutStrLn qfh "; founds unsat (valid)"
-        return True
-      "sat" : _ -> do
-        -- found a counterexample ==> the constraint is invalid
-        hPutStrLn qfh "; found sat (invalid)"
-        return False
-      other : _ -> do
-        -- any other response is considered an error
-        hPutStrLn qfh $ "; got response: " ++ other
-        error $ "CVC5 unknown response: " ++ other ++ " while solving " ++ pretty c
-      [] -> do
-        -- empty response is considered an error
-        hPutStrLn qfh "; got empty response"
-        error $ "CVC5 empty response while solving " ++ pretty c
-  hPutStr qfh "(pop 1)"
+  result <- case resp of -- response is sat/unsat for each query so far
+    "unsat" -> do
+      -- cannot find a counterexample ==> the constraint is valid
+      hPutStrLn sin "; founds unsat (valid)"
+      return True
+    "sat" -> do
+      -- found a counterexample ==> the constraint is invalid
+      hPutStrLn sin "; found sat (invalid)"
+      return False
+    [] -> do
+      -- empty response is considered an error
+      hPutStrLn sin "; got empty response"
+      error $ "CVC5 empty response while solving " ++ pretty c
+    other -> do
+      -- any other response is considered an error
+      hPutStrLn sin $ "; got response: " ++ other
+      error $ "CVC5 unknown response: " ++ other ++ " while solving " ++ pretty c
+  hPutStrLn sin "(pop 1)"
   return result
+
+-- -- | @withSolver filepath action@ opens the file @filepath@ for writing and runs the action @action@ with the handle to the file.
+-- -- Used in main to initialize the file for the queries to the SMT solver.
+-- withSolver :: FilePath -> (Handle -> IO r) -> IO r
+-- withSolver filepath action = do
+--   let filename = takeFileName filepath
+--   let queryfilename = replaceExtension filename ".smt2"
+--   let queryfilepath = "queries" </> queryfilename
+--   withFile queryfilepath WriteMode $ \fh -> do
+--     hPutStrLn fh "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
+--     hPutStrLn fh "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
+--     hPutStrLn fh "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
+--     action fh
+
+type SolverHandle = (Handle, Handle)
 
 -- | @withSolver filepath action@ opens the file @filepath@ for writing and runs the action @action@ with the handle to the file.
 -- Used in main to initialize the file for the queries to the SMT solver.
-withSolver :: FilePath -> (Handle -> IO r) -> IO r
+withSolver :: FilePath -> (SolverHandle -> IO r) -> IO r
 withSolver filepath action = do
   let filename = takeFileName filepath
   let queryfilename = replaceExtension filename ".smt2"
   let queryfilepath = "queries" </> queryfilename
-  withFile queryfilepath WriteMode $ \fh -> do
-    hPutStrLn fh "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
-    hPutStrLn fh "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
-    hPutStrLn fh "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
-    action fh
+  p@(Just sIn, Just sOut, _, _) <- createProcess $ (shell $ "tee " ++ queryfilepath ++ " | cvc5 -q --incremental --interactive"){
+    std_in = CreatePipe,
+    std_out = CreatePipe
+  }
+  hPutStrLn sIn "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
+  hPutStrLn sIn "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
+  hPutStrLn sIn "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
+  outcome <- action (sIn, sOut)
+  cleanupProcess p
+  return outcome
+
 
 -- | @handleName h@ returns the name of the file associated with the handle @h@.
 handleName :: Handle -> String
 handleName (FileHandle file _) = file
 handleName (DuplexHandle file _ _) = file
+
+-- getResponse :: Handle -> IO String
+-- getResponse h = do
+--   line <- hGetLine h
+--   case words line of 
+--     ["cvc5>"] -> getResponse h
+--     "cvc5>" : rest -> return $ last rest
+--     _ -> getResponse h
+
+  

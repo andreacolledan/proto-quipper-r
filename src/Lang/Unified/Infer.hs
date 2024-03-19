@@ -17,8 +17,8 @@ import Lang.Unified.AST
 import Lang.Unified.Constant
 import Lang.Unified.Derivation
 import Lang.Unified.Pre
-import System.IO.Extra (Handle)
 import Control.Monad.Except
+import Solving.CVC5 (SolverHandle)
 
 --- TYPE SYNTHESIS MODULE ---------------------------------------------------------------
 ---
@@ -33,7 +33,7 @@ import Control.Monad.Except
 -- and @i@ is the upper bound on the width of the circuit built by @e@.
 -- Otherwise, it throws a 'TypeError'.
 -- The handle @qfh@ is used to communicate with the SMT solver.
-inferWithIndices :: Handle -> Expr -> TypeDerivation (Type, Index)
+inferWithIndices :: SolverHandle -> Expr -> TypeDerivation (Type, Index)
 -- UNIT
 inferWithIndices _ EUnit = withScope EUnit $ return (TUnit, Number 0)
 -- LABEL
@@ -176,7 +176,7 @@ inferWithIndices qfh e@(ELetCons x y e1 e2) = withScope e $ do
 
 -- | @runTypeInferenceWith env e qfh@ runs the whole type inference pipeline on expression @e@,
 -- using the typing environment @env@ and the handle @qfh@ to communicate with the SMT solver.
-runTypeInferenceWith :: TypingEnvironment -> Expr -> Handle -> IO (Either TypeError (Type, Index))
+runTypeInferenceWith :: TypingEnvironment -> Expr -> SolverHandle -> IO (Either TypeError (Type, Index))
 runTypeInferenceWith env e qfh = runExceptT $ do
   e' <- annotateNil env e
   ((typ, i), remaining) <- runTypeDerivation (inferWithIndices qfh e') env
@@ -187,5 +187,5 @@ runTypeInferenceWith env e qfh = runExceptT $ do
 
 -- | @runTypeInference e qfh@ runs the whole type inference pipeline on expression @e@,
 -- using the handle @qfh@ to communicate with the SMT solver.
-runTypeInference :: Expr -> Handle -> IO (Either TypeError (Type, Index))
+runTypeInference :: Expr -> SolverHandle -> IO (Either TypeError (Type, Index))
 runTypeInference = runTypeInferenceWith emptyEnv

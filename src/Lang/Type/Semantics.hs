@@ -3,12 +3,13 @@ module Lang.Type.Semantics where
 import Index.AST
 import Index.Semantics
 import Lang.Type.AST
-import System.IO.Extra (Handle)
+import Solving.CVC5 (SolverHandle)
+
 
 -- | @simplifyType t@ returns type @t@ in which all index annotations have been simplified
 -- to a normal form according to 'simplifyIndex'.
--- Handle @qfh@ is used to interact with the SMT solver.
-simplifyType :: Handle -> Type -> Type
+-- SolverHandle @qfh@ is used to interact with the SMT solver.
+simplifyType :: SolverHandle -> Type -> Type
 simplifyType qfh (TPair t1 t2) = TPair (simplifyType qfh t1) (simplifyType qfh t2)
 simplifyType qfh (TArrow t1 t2 i j) = TArrow (simplifyType qfh t1) (simplifyType qfh t2) (simplifyIndex qfh i) (simplifyIndex qfh j)
 simplifyType qfh (TBang t) = TBang (simplifyType qfh t)
@@ -19,8 +20,8 @@ simplifyType _ t = t
 
 -- Θ ⊢ t1 <: t2 (Figure 15)
 -- | @checkSubtype qfh t1 t2@ checks if type @t1@ is a subtype of type @t2@.
--- Handle @qfh@ is used to interact with the SMT solver.
-checkSubtype :: Handle -> Type -> Type -> IO Bool
+-- SolverHandle @qfh@ is used to interact with the SMT solver.
+checkSubtype :: SolverHandle -> Type -> Type -> IO Bool
 checkSubtype _ TUnit TUnit = return True
 checkSubtype _ (TWire wtype1) (TWire wtype2) = return $ wtype1 == wtype2
 checkSubtype qfh (TBang t) (TBang t') = checkSubtype qfh t t'

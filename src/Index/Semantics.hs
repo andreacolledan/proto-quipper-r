@@ -8,13 +8,12 @@ where
 
 import Index.AST
 import Solving.CVC5
-import System.IO.Extra (Handle)
 import qualified Data.Set as Set
 
 -- | @simplifyIndex qfh i@ returns index expression @i@ in a normal form.
 -- Note that this might not be a natural number (e.g. if @i@ contains free variables).
--- Handle @qfh@ is used to interact with the SMT solver.
-simplifyIndex :: Handle -> Index -> Index
+-- SolverHandle @qfh@ is used to interact with the SMT solver.
+simplifyIndex :: SolverHandle -> Index -> Index
 simplifyIndex _ (Number n) = Number n
 simplifyIndex _ (IndexVariable id) = IndexVariable id
 simplifyIndex qfh (Plus i j) = case (simplifyIndex qfh i, simplifyIndex qfh j) of
@@ -55,8 +54,8 @@ simplifyIndex qfh (Maximum id i j) = case simplifyIndex qfh i of
 -- Θ ⊨ i = j (figs. 10,15)
 -- | @checkEq qfh i j@ checks if index expressions @i@ and @j@ are equal
 -- for all assignments of their free index variables.
--- Handle @qfh@ is used to interact with the SMT solver.
-checkEq :: Handle -> Index -> Index -> IO Bool
+-- SolverHandle @qfh@ is used to interact with the SMT solver.
+checkEq :: SolverHandle -> Index -> Index -> IO Bool
 checkEq qfh i j = case (simplifyIndex qfh i, simplifyIndex qfh j) of
   (i', j') | i' == j' -> return True -- identical indices are equal
   (i', j') | Set.null (ifv i') && Set.null (ifv j') -> return False -- if both indices are closed and not equal, they are not equal
@@ -65,8 +64,8 @@ checkEq qfh i j = case (simplifyIndex qfh i, simplifyIndex qfh j) of
 -- Θ ⊨ i ≤ j (figs. 12,15)
 -- | @checkLeq qfh i j@ checks if index expression @i@ is lesser-or-equal than index expression @j@
 -- for all assignments of their free index variables.
--- Handle @qfh@ is used to interact with the SMT solver.
-checkLeq :: Handle -> Index -> Index -> IO Bool
+-- SolverHandle @qfh@ is used to interact with the SMT solver.
+checkLeq :: SolverHandle -> Index -> Index -> IO Bool
 checkLeq qfh i j = case (simplifyIndex qfh i, simplifyIndex qfh j) of
   (i', j') | i' == j' -> return True -- identical indices are lesser-or-equal
   (Number n, Number m) -> return $ n <= m -- number indices are lesser-or-equal iff their values are lesser-or-equal

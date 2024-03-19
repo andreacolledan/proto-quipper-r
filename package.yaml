@@ -32,6 +32,7 @@ dependencies:
 - parsec
 - argparser
 - ansi-terminal
+- pipes
 
 ghc-options:
 - -Wall

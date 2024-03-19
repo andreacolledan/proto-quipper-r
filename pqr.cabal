@@ -59,6 +59,7 @@ library
     , hspec
     , mtl
     , parsec
+    , pipes
     , process
     , temporary
     , unordered-containers
@@ -81,6 +82,7 @@ executable pqr
     , hspec
     , mtl
     , parsec
+    , pipes
     , pqr
     , process
     , temporary
@@ -113,6 +115,7 @@ test-suite pqr-test
     , hspec
     , mtl
     , parsec
+    , pipes
     , pqr
     , process
     , temporary
