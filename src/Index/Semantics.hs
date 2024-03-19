@@ -25,7 +25,7 @@ simplifyIndex qfh (Max i j) = case (simplifyIndex qfh i, simplifyIndex qfh j) of
   (Number n, Number m) -> Number (max n m)
   (i', Number 0) -> i' -- zero is right identity
   (Number 0, j') -> j' -- zero is left identity
-  (i', j') | checkEq qfh i' j' -> i' -- idempotent
+  --(i', j') | checkEq qfh i' j' -> i' -- idempotent
   (i', j') -> Max i' j' -- do not reduce further
 simplifyIndex qfh (Mult i j) = case (simplifyIndex qfh i, simplifyIndex qfh j) of
   (Number n, Number m) -> Number (n * m)
@@ -38,14 +38,14 @@ simplifyIndex qfh (Minus i j) = case (simplifyIndex qfh i, simplifyIndex qfh j) 
   (Number n, Number m) -> Number (max 0 (n - m))
   (i', Number 0) -> i' -- zero is right identity
   (Number 0, _) -> Number 0 -- zero is left absorbing
-  (i', j') | checkEq qfh i' j' -> Number 0 -- i - i = 0 for all i
+  --(i', j') | checkEq qfh i' j' -> Number 0 -- i - i = 0 for all i
   (i', j') -> Minus i' j' -- do not reduce further
 simplifyIndex qfh (Maximum id i j) = case simplifyIndex qfh i of
   -- if upper bound is 0, the range is empty and the maximum defaults to 0
   Number 0 -> Number 0
   -- if the upper bound is known, unroll the maximum into a sequence of binary maxima
   Number n ->
-    let unrolling = foldr1 Max [isub (Number step) id (simplifyIndex qfh j) | step <- [0 .. n - 1]]
+    let unrolling = foldr1 Max [simplifyIndex qfh (isub (Number step) id j) | step <- [0 .. n - 1]]
      in simplifyIndex qfh unrolling
   -- if the upper bound is not known, do not reduce further
   i' -> Maximum id i' (simplifyIndex qfh j)

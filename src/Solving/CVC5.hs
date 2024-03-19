@@ -7,14 +7,14 @@ where
 import Control.Monad
 import Control.Monad.State (MonadState (..), State, evalState)
 import qualified Data.Set as Set
-import GHC.IO (unsafePerformIO)
 import GHC.IO.Exception (ExitCode (ExitFailure, ExitSuccess))
 import GHC.IO.Handle.Types (Handle (..))
 import Index.AST
 import PrettyPrinter
 import System.FilePath
-import System.IO
 import System.Process as Proc
+import System.IO
+import System.IO.Unsafe
 
 --- SMT SOLVER (CVC5) MODULE ------------------------------------------------------------
 ---
@@ -111,6 +111,7 @@ goDesugarMaxima (Maximum id i j) = do
 -- | @querySMTWithContext qfh c@ queries the CVC5 solver to check if the constraint @c@ holds for every possible assignment of its free variables.
 -- It returns @True@ if the constraint holds, @False@ otherwise or if an error occurs in the interaction with the solver.
 -- The handle @qfh@ is used to communicate with the SMT solver.
+{-# NOINLINE querySMTWithContext #-}
 querySMTWithContext :: Handle -> Constraint -> Bool
 querySMTWithContext qfh c@(Constraint rel i j) = unsafePerformIO $ do
   hPutStrLn qfh $ "\n; PROVE " ++ pretty c

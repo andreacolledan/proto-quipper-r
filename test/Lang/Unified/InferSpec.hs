@@ -19,7 +19,6 @@ simplify :: Handle -> Either TypeError (Type, Index) -> Either TypeError (Type, 
 simplify _ (Left err) = Left err
 simplify qfh (Right (t, i)) = Right (simplifyType qfh t, simplifyIndex qfh i)
 
-{-# NOINLINE spec #-}
 spec :: Spec
 spec = around (withQueryFile "test-inference") $ do
     describe "type inference on values" $ do
