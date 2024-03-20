@@ -2,13 +2,15 @@
 module Lang.Type.Unify (
   TypeSubstitution(..),
   HasType(..),
-  mgtu
+  mgtu,
+  toBundleTypeSubstitution
 ) where
 
 import Lang.Type.AST
 import Data.Set
 import qualified Data.Set as Set
 import qualified Data.HashMap.Strict as Map
+import qualified Bundle.AST as B
 
 --- TYPE UNIFICATION MODULE ---------------------------------------------------------------------------------
 ---
@@ -58,6 +60,16 @@ instance HasType Type where
   tsub sub (TList i typ) = TList i (tsub sub typ)
   tsub (TypeSubstitution map) typ@(TVar id) = Map.findWithDefault typ id map
   tsub sub (TIForall id typ i j) = TIForall id (tsub sub typ) i j
+
+-- | @fromBundleTypeSubstitution bts@ converts a 'BundleTypeSubstitution' @bts@ to an identical
+-- PQR 'TypeSubstitution'.
+fromBundleTypeSubstitution :: B.BundleTypeSubstitution -> TypeSubstitution
+fromBundleTypeSubstitution bts = TypeSubstitution $ Map.map fromBundleType bts
+
+-- | @toBundleTypeSubstitution ts@ converts a PQR 'TypeSubstitution' @ts@ to a
+-- 'BundleTypeSubstitution' which only substitutes the variables whose image under @ts@ is a 'BundleType'.
+toBundleTypeSubstitution :: TypeSubstitution -> B.BundleTypeSubstitution
+toBundleTypeSubstitution (TypeSubstitution ts) = Map.mapMaybe toBundleType ts
 
 
 --- UNIFICATION ---------------------------------------------------------------------------------

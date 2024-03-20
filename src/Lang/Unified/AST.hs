@@ -10,7 +10,7 @@ import Lang.Type.AST
 import Circuit ( Circuit )
 import PrettyPrinter (Pretty(..))
 import Lang.Unified.Constant
-import Lang.Type.Unify (HasType (..), TypeSubstitution)
+import Lang.Type.Unify (HasType (..), TypeSubstitution, toBundleTypeSubstitution)
 import qualified Data.Set as Set
 
 --- PQR SYNTAX MODULE ---------------------------------------------------------------------------------------
@@ -97,7 +97,7 @@ instance HasType Expr where
   tsub _ (ELabel id) = ELabel id
   tsub _ (EVar id) = EVar id
   tsub sub (EPair e1 e2) = EPair (tsub sub e1) (tsub sub e2)
-  tsub _ e@(ECirc {}) = error "todo unimplemented" -- TODO: implement conversion between type and bundle type substitutions
+  tsub _ e@(ECirc {}) = e -- bundle types do not contain type variables
   tsub sub (EAbs id t e) = EAbs id (tsub sub t) (tsub sub e)
   tsub sub (EApp e1 e2) = EApp (tsub sub e1) (tsub sub e2)
   tsub sub (ELift e) = ELift (tsub sub e)
@@ -107,7 +107,7 @@ instance HasType Expr where
   tsub sub (EFold e1 e2 e3) = EFold (tsub sub e1) (tsub sub e2) (tsub sub e3)
   tsub sub (EAnno e t) = EAnno (tsub sub e) (tsub sub t)
   tsub sub (EApply e1 e2) = EApply (tsub sub e1) (tsub sub e2)
-  tsub sub (EBox bt e) = EBox (btsub (error "todo unimplemented") bt) (tsub sub e) -- TODO: implement conversion between type and bundle type substitutions
+  tsub sub (EBox bt e) = let sub' = toBundleTypeSubstitution sub in EBox (btsub sub' bt) (tsub sub e)
   tsub sub (ELet id e1 e2) = ELet id (tsub sub e1) (tsub sub e2)
   tsub sub (EDest id1 id2 e1 e2) = EDest id1 id2 (tsub sub e1) (tsub sub e2)
   tsub sub (EIAbs id e) = EIAbs id (tsub sub e)

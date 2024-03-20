@@ -19,8 +19,7 @@ module Bundle.AST
 where
 
 import Index.AST
-import Data.Map (Map)
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as Map
 import qualified Data.Set as Set
 import PrettyPrinter
 import Index.Semantics
@@ -101,7 +100,7 @@ instance HasIndex BundleType where
 
 --- SUBSTITUTION ---------------------------------------------------------------------------------
 
-type BundleTypeSubstitution = Map BTVarId BundleType
+type BundleTypeSubstitution = Map.HashMap BTVarId BundleType
 
 -- btfv bt Returns the free bundle type variables occurring in bt
 btfv :: BundleType -> Set.Set BTVarId
