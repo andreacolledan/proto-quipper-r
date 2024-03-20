@@ -1,5 +1,5 @@
 # Proto-Quipper-R
-Proto-Quipper-R is a quantum circuit description language endowed with a linear-dependent type checker that can verify upper bounds on the width of the quantum circuits produced by a program. A more detailed description of a the language can be found [here](Lang/Unified/).
+Proto-Quipper-R is a quantum circuit description language endowed with a linear-dependent type checker that can verify upper bounds on the width of the quantum circuits produced by a program. A more detailed description of a the language can be found [here](src/Lang/Unified/README.md).
 
 ## Getting started
 
