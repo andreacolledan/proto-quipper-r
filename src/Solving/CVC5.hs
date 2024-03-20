@@ -147,23 +147,12 @@ querySMTWithContext (sin, sout) c@(Constraint rel i j) = do
   hPutStrLn sin "(pop 1)"
   return result
 
--- -- | @withSolver filepath action@ opens the file @filepath@ for writing and runs the action @action@ with the handle to the file.
--- -- Used in main to initialize the file for the queries to the SMT solver.
--- withSolver :: FilePath -> (Handle -> IO r) -> IO r
--- withSolver filepath action = do
---   let filename = takeFileName filepath
---   let queryfilename = replaceExtension filename ".smt2"
---   let queryfilepath = "queries" </> queryfilename
---   withFile queryfilepath WriteMode $ \fh -> do
---     hPutStrLn fh "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
---     hPutStrLn fh "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
---     hPutStrLn fh "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
---     action fh
-
+-- | @SolverHandle@ is a pair of handles to communicate with the SMT solver.
+-- The first handle is used to send queries to the solver, the second handle is used to read the solver's responses.
 type SolverHandle = (Handle, Handle)
 
--- | @withSolver filepath action@ opens the file @filepath@ for writing and runs the action @action@ with the handle to the file.
--- Used in main to initialize the file for the queries to the SMT solver.
+-- | @withSolver filepath action@ initializes a new SMT solver process and runs the action @action@ with the solver handle.
+-- The file @filepath@ is used to store the queries and responses of the solver.
 withSolver :: FilePath -> (SolverHandle -> IO r) -> IO r
 withSolver filepath action = do
   let filename = takeFileName filepath
@@ -185,13 +174,4 @@ withSolver filepath action = do
 handleName :: Handle -> String
 handleName (FileHandle file _) = file
 handleName (DuplexHandle file _ _) = file
-
--- getResponse :: Handle -> IO String
--- getResponse h = do
---   line <- hGetLine h
---   case words line of 
---     ["cvc5>"] -> getResponse h
---     "cvc5>" : rest -> return $ last rest
---     _ -> getResponse h
-
   

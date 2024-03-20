@@ -18,9 +18,12 @@ import Solving.CVC5 (withSolver, SolverHandle)
 runInferenceForTesting :: TypingEnvironment -> Expr -> SolverHandle -> IO (Either TypeError (Type, Index))
 runInferenceForTesting env expr qfh = do
   outcome <- runTypeInferenceWith env expr qfh
-  return $ case outcome of
-    Left err -> Left err
-    Right (t, i) -> Right (simplifyType qfh t, simplifyIndex qfh i)
+  case outcome of
+    Left err -> return $ Left err
+    Right (t, i) -> do
+      t' <- simplifyType qfh t
+      i' <- simplifyIndexStrong qfh i
+      return $ Right (t', i')
 
 shouldSatisfyIO :: (HasCallStack, Show a) => IO a -> (a -> Bool) -> Expectation
 action `shouldSatisfyIO` p = action >>= (`shouldSatisfy` p)

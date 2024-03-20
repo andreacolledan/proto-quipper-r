@@ -47,5 +47,7 @@ main = withParseResult commandLineParser $ \args -> do
             hPrint stderr err
             hSetSGR stderr [Reset]
           Right (t, i) -> do
-            putStrLn $ "* Inferred type: " ++ pretty (simplifyType qfh t)
-            putStrLn $ "* Inferred bound: " ++ pretty (simplifyIndex qfh i)
+            t' <- simplifyType qfh t
+            i' <- simplifyIndexStrong qfh i
+            putStrLn $ "* Inferred type: " ++ pretty t'
+            putStrLn $ "* Inferred bound: " ++ pretty i'

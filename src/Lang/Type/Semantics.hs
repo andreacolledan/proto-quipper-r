@@ -9,14 +9,14 @@ import Solving.CVC5 (SolverHandle)
 -- | @simplifyType t@ returns type @t@ in which all index annotations have been simplified
 -- to a normal form according to 'simplifyIndex'.
 -- SolverHandle @qfh@ is used to interact with the SMT solver.
-simplifyType :: SolverHandle -> Type -> Type
-simplifyType qfh (TPair t1 t2) = TPair (simplifyType qfh t1) (simplifyType qfh t2)
-simplifyType qfh (TArrow t1 t2 i j) = TArrow (simplifyType qfh t1) (simplifyType qfh t2) (simplifyIndex qfh i) (simplifyIndex qfh j)
-simplifyType qfh (TBang t) = TBang (simplifyType qfh t)
-simplifyType qfh (TList i t) = TList (simplifyIndex qfh i) (simplifyType qfh t)
-simplifyType qfh (TCirc i inBtype outBtype) = TCirc (simplifyIndex qfh i) inBtype outBtype
-simplifyType qfh (TIForall id t i j) = TIForall id (simplifyType qfh t) (simplifyIndex qfh i) (simplifyIndex qfh j)
-simplifyType _ t = t
+simplifyType :: SolverHandle -> Type -> IO Type
+simplifyType qfh (TPair t1 t2) = TPair <$> simplifyType qfh t1 <*> simplifyType qfh t2
+simplifyType qfh (TArrow t1 t2 i j) = TArrow <$> simplifyType qfh t1 <*> simplifyType qfh t2 <*> simplifyIndexStrong qfh i <*> simplifyIndexStrong qfh j
+simplifyType qfh (TBang t) = TBang <$> simplifyType qfh t
+simplifyType qfh (TList i t) = TList <$> simplifyIndexStrong qfh i <*> simplifyType qfh t
+simplifyType qfh (TCirc i inBtype outBtype) = TCirc <$> simplifyIndexStrong qfh i <*> pure inBtype <*> pure outBtype
+simplifyType qfh (TIForall id t i j) = TIForall id <$> simplifyType qfh t <*> simplifyIndexStrong qfh i <*> simplifyIndexStrong qfh j
+simplifyType _ t = return t
 
 -- Θ ⊢ t1 <: t2 (Figure 15)
 -- | @checkSubtype qfh t1 t2@ checks if type @t1@ is a subtype of type @t2@.
