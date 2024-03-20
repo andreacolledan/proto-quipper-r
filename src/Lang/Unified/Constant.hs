@@ -19,6 +19,10 @@ data Constant
   | QInit1
   | QDiscard
   | Meas
+  -- Bit metaoperations
+  | CInit0
+  | CInit1
+  | CDiscard
   -- Single qubit gates
   | Hadamard
   | PauliX
@@ -36,6 +40,9 @@ instance Pretty Constant where
   pretty QInit0 = "QInit0"
   pretty QInit1 = "QInit1"
   pretty QDiscard = "QDiscard"
+  pretty CInit0 = "CInit0"
+  pretty CInit1 = "CInit1"
+  pretty CDiscard = "CDiscard"
   pretty Meas = "Meas"
   pretty Hadamard = "Hadamard"
   pretty PauliX = "PauliX"
@@ -51,6 +58,9 @@ typeOf QInit0 = TCirc (Number 1) BTUnit (BTWire Qubit)
 typeOf QInit1 = TCirc (Number 1) BTUnit (BTWire Qubit)
 typeOf QDiscard = TCirc (Number 1) (BTWire Qubit) BTUnit
 typeOf Meas = TCirc (Number 1) (BTWire Qubit) (BTWire Bit)
+typeOf CInit0 = TCirc (Number 1) BTUnit (BTWire Bit)
+typeOf CInit1 = TCirc (Number 1) BTUnit (BTWire Bit)
+typeOf CDiscard = TCirc (Number 1) (BTWire Bit) BTUnit
 typeOf Hadamard = TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
 typeOf PauliX = TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
 typeOf PauliY = TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)

@@ -91,6 +91,9 @@ constant = try $ do
     "QInit1" -> return $ EConst QInit1
     "QDiscard" -> return $ EConst QDiscard
     "Meas" -> return $ EConst Meas
+    "CInit0" -> return $ EConst CInit0
+    "CInit1" -> return $ EConst CInit1
+    "CDiscard" -> return $ EConst CDiscard
     "Hadamard" -> return $ EConst Hadamard
     "PauliX" -> return $ EConst PauliX
     "PauliY" -> return $ EConst PauliY

@@ -1,5 +1,5 @@
 # Proto-Quipper-R
-Proto-Quipper-R is a quantum circuit description language endowed with a linear-dependent type checker that can verify upper bounds on the width of the quantum circuits produced by a program.
+Proto-Quipper-R is a quantum circuit description language endowed with a linear-dependent type checker that can verify upper bounds on the width of the quantum circuits produced by a program. A more detailed description of a the language can be found [here](Lang/Unified/).
 
 ## Getting started
 
@@ -43,22 +43,6 @@ i ->[0,0] List[i] Qubit -o[i,0] List[i] Qubit
 meaning that for every natural-valued expression `e`, `qft @e` takes as input a list of `e` qubits and builds a circuit of width `e` that outputs a list of `e` qubits.
 
 The whole code for `qft`, as well as other examples, can be found in the `examples/unified` directory. 
-
-<!-- ## The language
-
-As a language, Proto-Quipper-R is based on the Proto-Quipper family of theoretical programming languages. As such, Proto-Quipper-R is, at its core, a lambda calculus with bespoke constructs to describe and manipulate quantum circuits.
-
-### Basic datatypes
-TODO Qubit,bit,linearity,circuits
-
-### Manipulating circuits
-TODO apply, box
-
-### Dependent linear functions
-TODO linear functions, index quantification
-
-### Recursion
-TODO fold -->
 
 ## Installing
 Note: Proto-Quipper-R requires [cvc5](https://cvc5.github.io) to be installed and present in your `PATH`.
