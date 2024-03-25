@@ -8,7 +8,7 @@ import Solving.CVC5 (withSolver)
 -- SPECIFICATION --
 
 spec :: Spec
-spec = around (withSolver "test-semantics") $ do
+spec = around (withSolver Nothing) $ do
   describe "index equality" $ do
     it "works for simple closed terms" $ \qfh -> do
       -- 1 + 2 = 3

@@ -33,7 +33,7 @@ shouldSatisfyIO :: (HasCallStack, Show a) => IO a -> (a -> Bool) -> Expectation
 action `shouldSatisfyIO` p = action >>= (`shouldSatisfy` p)
 
 spec :: Spec
-spec = around (withSolver "test-inference") $ do
+spec = around (withSolver Nothing) $ do
     describe "type inference on values" $ do
     -- Tests for the type inference of terms that do not produce any side-effect
       context "when typing the unit value" $ do
