@@ -15,6 +15,9 @@ import Lang.Unified.Derivation
     ( emptyEnv, makeEnv, makeEnvForall, TypeError, TypingEnvironment )
 import Solving.CVC5 (withSolver, SolverHandle)
 
+-- | Helper function used specifically in a test environment. @runInferenceForTesting env expr qfh@ runs inference
+-- on @expr@ under environment @env@ using @qfh@ to access the solver. It returns 'Either' a 'TypeError' ('Left') or
+-- a pair of the inferred type and index ('Right'). The type and index are simplified aggressively for readability.
 runInferenceForTesting :: TypingEnvironment -> Expr -> SolverHandle -> IO (Either TypeError (Type, Index))
 runInferenceForTesting env expr qfh = do
   outcome <- runTypeInferenceWith env expr qfh
@@ -25,43 +28,9 @@ runInferenceForTesting env expr qfh = do
       i' <- simplifyIndexStrong qfh i
       return $ Right (t', i')
 
+-- | Like 'shouldSatisfy', but for 'IO' actions.
 shouldSatisfyIO :: (HasCallStack, Show a) => IO a -> (a -> Bool) -> Expectation
 action `shouldSatisfyIO` p = action >>= (`shouldSatisfy` p)
-
-shouldFailWIth :: (HasCallStack, Show a) => IO (Either TypeError a) -> (TypeError -> Bool) -> Expectation
-action `shouldFailWIth` p = do
-  result <- action
-  case result of
-    Left e -> if p e then return () else expectationFailure $ "Expectation failed on " ++ show e
-    Right x -> expectationFailure $ "Expected the action to fail, but it returned " ++ show x
-
--- -- The datatype of errors that can occur during a derivation
--- data TypeError
---   = WireTypingError WireTypingError
---   | UnboundVariable VariableId [Expr]
---   | UnboundIndexVariable IndexVariableId [Expr]
---   | UnexpectedType Expr Type Type [Expr]
---   | UnexpectedIndex Index Index [Expr]
---   | UnexpectedWidthAnnotation Expr Index Index [Expr]
---   | ExpectedBundleType Expr Type [Expr]
---   | CannotSynthesizeType Expr [Expr]
---   | -- Linearity errors
---     UnusedLinearVariable VariableId [Expr]
---   | OverusedLinearVariable VariableId [Expr]
---   | LiftedLinearVariable VariableId [Expr]
---   | -- Boxed circuit errors
---     MismatchedInputInterface Circuit LabelContext Bundle [Expr]
---   | MismatchedOutputInterface Circuit LabelContext Bundle [Expr]
---   | -- Box errors
---     UnboxableType Expr Type [Expr]
---   | -- Fold errors
---     UnfoldableStepfunction Expr Type [Expr]
---   | UnfoldableAccumulator Expr Type [Expr]
---   | UnfoldableArg Expr Type [Expr]
---   | -- Other
---     ShadowedIndexVariable IndexVariableId [Expr]
---   | UnexpectedEmptyList Expr Type [Expr]
---   deriving (Eq)
 
 spec :: Spec
 spec = around (withSolver "test-inference") $ do
@@ -504,19 +473,43 @@ spec = around (withSolver "test-inference") $ do
           runInferenceForTesting emptyEnv expr qfh `shouldSatisfyIO` isLeft 
       context "when typing fold" $ do
         it "produces the right type and wirecount when all the arguments are values" $ \qfh -> do
+          -- ∅;step:!(i ->[0,0] (List[i] Qubit, Qubit) -o[1,0] List[i+1] Qubit); l:Qubit,k:Qubit ⊢ fold (step, [], [l,k]) ==> List[2] Qubit ; 2
+          let gamma = [
+                ("step", TBang (TIForall "i" (TArrow (TPair (TList (IndexVariable "i") (TWire Qubit)) (TWire Qubit)) (TList (Plus (IndexVariable "i") (Number 1)) (TWire Qubit)) (Number 1) (Number 0)) (Number 0) (Number 0)))]
+          let q = [("l", Qubit), ("k", Qubit)]
+          let expr = EFold (EVar "step") (ENil Nothing) (ECons (ELabel "l") (ECons (ELabel "k") (ENil Nothing)))
+          let expected = (TList (Number 2) (TWire Qubit), Number 2)
+          runInferenceForTesting  (makeEnv gamma q) expr qfh `shouldReturn` Right expected
+        it "produces the right type and wirecount when the step argument computes" $ \qfh -> do
+          -- ∅;pstep:j ->[2*j,0] !(i ->[0,0] (List[i] Qubit, Qubit) -o[1,0] List[i+1] Qubit), l:Qubit,k:Qubit;∅ ⊢ fold (pstep @2, [], [l,k]) ==> List[2] Qubit ; 6
+          -- while pstep @ 2 is building a circuit of width 4, l and k pass besides it: total width is 6
+          let gamma = [
+                ("pstep", TIForall "j" (TBang (TIForall "i" (TArrow (TPair (TList (IndexVariable "i") (TWire Qubit)) (TWire Qubit)) (TList (Plus (IndexVariable "i") (Number 1)) (TWire Qubit)) (Number 1) (Number 0)) (Number 0) (Number 0))) (Mult (Number 2) (IndexVariable "j")) (Number 0))]
+          let q = [("l", Qubit), ("k", Qubit)]
+          let expr = EFold (EIApp (EVar "pstep") (Number 2)) (ENil Nothing) (ECons (ELabel "l") (ECons (ELabel "k") (ENil Nothing)))
+          let expected = (TList (Number 2) (TWire Qubit), Number 6)
+          runInferenceForTesting  (makeEnv gamma q) expr qfh `shouldReturn` Right expected
+        it "produces the right type and wirecount when the starting accumulator argument computes" $ \qfh -> do
+          -- ∅;step:!(i ->[0,0] (List[1+2*i] Qubit, Qubit) -o[1+2*(i+1),0] List[1+2*(i+1)] Qubit), inc: j ->[0,0] List[j] Qubit -o[j+1,0] List[j+1] Qubit;∅
+          -- ⊢ fold (step, (inc @0) [], [l,k]) ==> List[5] Qubit ; 5
+          let gamma = [
+                ("step", TBang (TIForall "i" (TArrow (TPair (TList (Plus (Number 1) (Mult (Number 2) (IndexVariable "i"))) (TWire Qubit)) (TWire Qubit)) (TList (Plus (Number 1) (Mult (Number 2) (Plus (IndexVariable "i") (Number 1)))) (TWire Qubit)) (Plus (Number 1) (Mult (Number 2) (Plus (IndexVariable "i") (Number 1)))) (Number 0)) (Number 0) (Number 0))),
+                ("inc", TIForall "j" (TArrow (TList (IndexVariable "j") (TWire Qubit)) (TList (Plus (IndexVariable "j") (Number 1)) (TWire Qubit)) (Plus (IndexVariable "j") (Number 1)) (Number 0)) (Number 0) (Number 0))]
+          let q = [("l", Qubit), ("k", Qubit)]
+          let expr = EFold (EVar "step") (EApp (EIApp (EVar "inc") (Number 0)) (ENil Nothing)) (ECons (ELabel "l") (ECons (ELabel "k") (ENil Nothing)))
+          let expected = (TList (Number 5) (TWire Qubit), Number 5)
+          runInferenceForTesting  (makeEnv gamma q) expr qfh `shouldReturn` Right expected
           pending -- TODO
-        it "produces the right type and wirecount when the step function computes" $ \qfh -> do
-          pending -- TODO
-        it "produces the right type and wirecount when the starting accumulator computes" $ \qfh -> do
-          pending -- TODO
-        it "produces the right type and wirecount when the argument list computes" $ \qfh -> do
+        it "produces the right type and wirecount when the list argument computes" $ \qfh -> do
           pending -- TODO
         it "produces the right type and wirecount when all the arguments compute" $ \qfh -> do
           pending -- TODO
         -- We do not test other combinations of computing arguments so far
-        it "fails if the step argument is not of function type" $ \qfh -> do
-          pending -- TODO
         it "fails if the step function is not duplicable" $ \qfh -> do
+          pending -- TODO
+        it "fails if the step argument is not universally quantified" $ \qfh -> do
+          pending -- TODO
+        it "fails if the step argument is not of function type" $ \qfh -> do
           pending -- TODO
         it "fails if the step function is non-increasing" $ \qfh -> do
           pending -- TODO

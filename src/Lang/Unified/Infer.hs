@@ -160,7 +160,7 @@ inferWithIndices qfh e@(EIAbs id e1) = withScope e $ do
 -- INDEX APPLICATION
 inferWithIndices qfh e@(EIApp e1 g) = withScope e $ do
   (TIForall id typ2 j1 _, i) <- inferWithIndices qfh e1
-  checkWellFormedness j1
+  checkWellFormedness g
   return (isub g id typ2, Max i (isub g id j1))
 -- CONSTANTS
 inferWithIndices _ e@(EConst c) = withScope e $ return (typeOf c, Number 0)

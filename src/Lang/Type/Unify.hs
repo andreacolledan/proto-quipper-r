@@ -7,8 +7,7 @@ module Lang.Type.Unify (
 ) where
 
 import Lang.Type.AST
-import Data.Set
-import qualified Data.Set as Set
+import qualified Data.HashSet as Set
 import qualified Data.HashMap.Strict as Map
 import qualified Bundle.AST as B
 
@@ -37,7 +36,7 @@ instance Monoid TypeSubstitution where
 -- | Typeclass of datatypes with type variables
 class HasType a where
   -- | @tfv t@ returns the set of free type variables in @t@
-  tfv :: a -> Set TVarId
+  tfv :: a -> Set.HashSet TVarId
   -- | @tsub sub t@ applies the type substitution @sub@ to @t@
   tsub :: TypeSubstitution -> a -> a
 

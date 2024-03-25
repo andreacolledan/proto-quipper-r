@@ -11,7 +11,7 @@ import Circuit ( Circuit )
 import PrettyPrinter (Pretty(..))
 import Lang.Unified.Constant
 import Lang.Type.Unify (HasType (..), TypeSubstitution, toBundleTypeSubstitution)
-import qualified Data.Set as Set
+import qualified Data.HashSet as Set
 
 --- PQR SYNTAX MODULE ---------------------------------------------------------------------------------------
 ---
@@ -70,7 +70,7 @@ instance Pretty Expr where
   pretty (ELetCons x y e1 e2) = "(let " ++ x ++ ":" ++ y ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
 
 instance HasType Expr where
-  tfv :: Expr -> Set.Set TVarId
+  tfv :: Expr -> Set.HashSet TVarId
   tfv EUnit = Set.empty
   tfv (ELabel _) = Set.empty
   tfv (EVar _) = Set.empty

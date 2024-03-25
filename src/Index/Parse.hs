@@ -107,17 +107,6 @@ minusOp =
     return Minus
     <?> "minus"
 
-maximumOp :: Parser (Index -> Index)
-maximumOp = do
-  try $ do
-    m_reserved "max"
-    m_symbol "["
-  i <- m_identifier
-  m_reservedOp "<"
-  j <- parseIndex
-  m_symbol "]"
-  return $ Maximum i j
-
 delimitedIndex :: Parser Index
 delimitedIndex =
   m_parens parseIndex

@@ -7,7 +7,7 @@ where
 
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.List as List
-import qualified Data.Set as Set
+import qualified Data.HashSet as Set
 
 -- | The @Pretty@ typeclass is used to define a pretty-printing function 'pretty' for a type.
 class (Show a) => Pretty a where
@@ -20,7 +20,7 @@ instance (Pretty v) => Pretty (HashMap.HashMap String v) where
   pretty m = "{" ++ List.intercalate ", " (List.map (\(k, v) -> k ++ " : " ++ pretty v) (HashMap.toList m)) ++ "}"
 
 -- If v is pretty, then so is a Set of v (used for index contexts)
-instance (Pretty a) => Pretty (Set.Set a) where
+instance (Pretty a) => Pretty (Set.HashSet a) where
   pretty s = "{" ++ List.intercalate ", " (List.map pretty (Set.toList s)) ++ "}"
 
 -- If a and b are both pretty, then so is the sum of a and b

@@ -20,11 +20,10 @@ where
 
 import Index.AST
 import qualified Data.HashMap.Strict as Map
-import qualified Data.Set as Set
+import qualified Data.HashSet as Set
 import PrettyPrinter
 import Index.Semantics
 import Control.Exception (assert)
-import Data.Set (Set)
 
 --- LANGUAGE ---------------------------------------------------------------------------------
 
@@ -81,13 +80,13 @@ instance Pretty BundleType where
 
 -- Bundle types are index-bearing syntactical objects
 instance HasIndex BundleType where
-  iv :: BundleType -> Set IndexVariableId
+  iv :: BundleType -> Set.HashSet IndexVariableId
   iv BTUnit = Set.empty
   iv (BTWire _) = Set.empty
   iv (BTPair b1 b2) = iv b1 `Set.union` iv b2
   iv (BTList i b) = assert (null (iv i)) $ iv i `Set.union` iv b
   iv (BTVar _) = Set.empty
-  ifv :: BundleType -> Set IndexVariableId
+  ifv :: BundleType -> Set.HashSet IndexVariableId
   ifv BTUnit = Set.empty
   ifv (BTWire _) = Set.empty
   ifv (BTPair b1 b2) = ifv b1 `Set.union` ifv b2
@@ -103,7 +102,7 @@ instance HasIndex BundleType where
 type BundleTypeSubstitution = Map.HashMap BTVarId BundleType
 
 -- btfv bt Returns the free bundle type variables occurring in bt
-btfv :: BundleType -> Set.Set BTVarId
+btfv :: BundleType -> Set.HashSet BTVarId
 btfv BTUnit = Set.empty
 btfv (BTWire _) = Set.empty
 btfv (BTPair b1 b2) = btfv b1 `Set.union` btfv b2

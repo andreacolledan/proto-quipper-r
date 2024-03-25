@@ -9,7 +9,7 @@ where
 
 import Index.AST
 import Solving.CVC5
-import qualified Data.Set as Set
+import qualified Data.HashSet as Set
 
 -- | @simplifyIndex qfh i@ returns index expression @i@ in a normal form.
 -- Note that this might not be a natural number (e.g. if @i@ contains free variables).

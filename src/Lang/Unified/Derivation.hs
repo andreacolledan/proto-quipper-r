@@ -40,7 +40,7 @@ import Control.Monad (unless, when)
 import Control.Monad.Error.Class
 import Control.Monad.State
 import qualified Data.HashMap.Strict as Map
-import qualified Data.Set as Set
+import qualified Data.HashSet as Set
 import Index.AST
 import Lang.Type.AST
 import Lang.Type.Unify
@@ -269,9 +269,9 @@ substituteInEnvironment sub = do
 checkWellFormedness :: (HasIndex a) => a -> TypeDerivation ()
 checkWellFormedness x = do
   theta <- gets indexContext
-  case ifv x Set.\\ theta of
-    fv | Set.null fv -> return () -- all the free variables in the type are also in the context, good
-    fv -> throwLocalError $ UnboundIndexVariable (Set.findMin fv) -- some free variables are not in scope, bad
+  case ifv x `Set.difference` theta of
+    fv  | Set.null fv -> return () -- all the free variables in the type are also in the context, good
+        | otherwise ->  throwLocalError $ UnboundIndexVariable (head . Set.toList $ fv) -- some free variables are not in scope, bad
 
 -- | @makeFreshVariable prefix@ returns a fresh variable name with the given prefix.
 -- TODO: using 'scopes', this function could also return a variable that is fresh in the current scope.

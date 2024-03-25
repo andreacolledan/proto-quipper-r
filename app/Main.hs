@@ -5,32 +5,50 @@ import Index.Semantics
 import Lang.Type.Semantics (simplifyType)
 import Lang.Unified.Infer
 import qualified Lang.Unified.Parse as U
+import Options.Applicative
 import PrettyPrinter
-import System.Console.ArgParser
-import Text.Parsec
+import Solving.CVC5
 import System.Console.ANSI
 import System.IO.Extra
-import Solving.CVC5
+import Text.Parsec (parse)
 
-data CommandLineArguments = CommandLineArguments
+data Arguments = CommandLineArguments
   { filepath :: String,
-    paper :: Bool,
-    verbose :: Bool
+    verbose :: Bool,
+    debug :: Maybe String
   }
 
-commandLineParser :: ParserSpec CommandLineArguments
-commandLineParser =
-  CommandLineArguments
-    `parsedBy` reqPos "filepath"
-    `Descr` "The file to parse"
-    `andBy` boolFlag "paper"
-    `Descr` "Use the original syntax from the paper"
-    `andBy` boolFlag "verbose"
-    `Descr` "Print verbose output (parser output)"
+interface :: ParserInfo Arguments
+interface =
+  info
+    (arguments <**> helper)
+    ( fullDesc
+        <> progDesc "Type-check and verify a PQR program"
+        <> header "pqr - a type-checker and circuit width verifier for PQR programs"
+    )
+  where
+    arguments :: Parser Arguments
+    arguments =
+      CommandLineArguments
+        <$> strArgument
+          ( metavar "FILE"
+              <> help "The file to type-check"
+          )
+        <*> switch
+          ( long "verbose"
+              <> short 'v'
+              <> help "Print verbose output"
+          )
+        <*> optional (strOption
+          ( long "debug"
+              <> short 'd'
+              <> metavar "DEBUG"
+              <> help "Print SMT queries to file DEBUG"
+          ))
 
 main :: IO ()
-main = withParseResult commandLineParser $ \args -> do
-  let CommandLineArguments {filepath = file, verbose = verb} = args
+main = do
+  CommandLineArguments {filepath = file, verbose = verb, debug = deb} <- execParser interface
   when verb $ putStrLn $ "Parsing " ++ file ++ "..."
   contents <- readFile file
   case parse U.parseProgram "" contents of
@@ -39,7 +57,7 @@ main = withParseResult commandLineParser $ \args -> do
       when verb $ do
         putStrLn $ "Parsed successfully as \n\t" ++ pretty ast
         putStrLn "Inferring type..."
-      withSolver file $ \qfh -> do
+      withSolver deb $ \qfh -> do
         outcome <- runTypeInference ast qfh
         case outcome of
           Left err -> do

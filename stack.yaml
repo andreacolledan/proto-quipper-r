@@ -8,7 +8,7 @@
 # A snapshot resolver dictates the compiler version and the set of packages
 # to be used for project dependencies. For example:
 #
-# resolver: lts-3.5
+resolver: lts-22.13
 # resolver: nightly-2015-09-21
 # resolver: ghc-7.10.2
 #
@@ -17,8 +17,8 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver:
-  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/0.yaml
+# resolver:
+#   url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/22/0.yaml
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -53,7 +53,7 @@ extra-deps:
 #
 # Require a specific version of Stack, using version ranges
 # require-stack-version: -any # Default
-# require-stack-version: ">=2.9"
+require-stack-version: ">=2.9"
 #
 # Override the architecture used by Stack, especially useful on Windows
 # arch: i386

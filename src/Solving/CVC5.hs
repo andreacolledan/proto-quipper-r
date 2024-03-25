@@ -7,13 +7,13 @@ where
 
 import Control.Monad
 import Control.Monad.State (MonadState (..), State, evalState)
-import qualified Data.Set as Set
-import GHC.IO.Handle.Types (Handle (..))
+import qualified Data.HashSet as Set
 import Index.AST
 import PrettyPrinter
 import System.Process as Proc
 import System.IO
-import System.FilePath
+import Control.Concurrent
+import Control.Exception
 
 --- SMT SOLVER (CVC5) MODULE ------------------------------------------------------------
 ---
@@ -21,16 +21,6 @@ import System.FilePath
 --- SMT queries from the same program are all written to the same file, which is then
 --- passed to the solver. The solver's response is then read from the same file.
 -----------------------------------------------------------------------------------------
-
--- | @toSafeString i@ returns a string representation of the index expression @i@ that is safe to use as a file name.
-toSafeString :: Index -> String
-toSafeString (IndexVariable id) = id
-toSafeString (Number n) = show n
-toSafeString (Plus i j) = toSafeString i ++ "PLUS" ++ toSafeString j
-toSafeString (Max i j) = "MAX" ++ toSafeString i ++ "AND" ++ toSafeString j
-toSafeString (Mult i j) = toSafeString i ++ "TIMES" ++ toSafeString j
-toSafeString (Minus i j) = toSafeString i ++ "MINUS" ++ toSafeString j
-toSafeString (Maximum id i j) = "MAX" ++ id ++ "LT" ++ toSafeString i ++ " " ++ toSafeString j
 
 -- | @embedIndex i@ returns a string representing index expression @i@ in SMTLIB format.
 embedIndex :: Index -> String
@@ -151,17 +141,17 @@ querySMTWithContext (sin, sout) c@(Constraint rel i j) = do
 -- The first handle is used to send queries to the solver, the second handle is used to read the solver's responses.
 type SolverHandle = (Handle, Handle)
 
--- | @withSolver filepath action@ initializes a new SMT solver process and runs the action @action@ with the solver handle.
--- The file @filepath@ is used to store the queries and responses of the solver.
-withSolver :: FilePath -> (SolverHandle -> IO r) -> IO r
-withSolver filepath action = do
-  let filename = takeFileName filepath
-  let queryfilename = replaceExtension filename ".smt2"
-  let queryfilepath = "queries" </> queryfilename
-  p@(Just sIn, Just sOut, _, _) <- createProcess $ (shell $ "tee " ++ queryfilepath ++ " | cvc5 -q --incremental --interactive"){
+-- | @withSolver filepath deb action@ initializes a new SMT solver process and runs the action @action@ with the solver handle.
+-- The file @filepath@ is used to store the queries and responses of the solver. If @deb@ is @Just debfile@, the queries are also written to the file @debfile@.
+withSolver :: Maybe FilePath -> (SolverHandle -> IO r) -> IO r
+withSolver deb action = do
+  let teePrefix = maybe "" (\debfile -> " tee " ++ debfile ++ " | ") deb
+  p@(Just sIn, Just sOut, Just sErr, _) <- createProcess $ (shell $ teePrefix ++ "cvc5 -q --incremental --interactive"){
     std_in = CreatePipe,
-    std_out = CreatePipe
+    std_out = CreatePipe,
+    std_err = CreatePipe
   }
+  _ <- forkIO (hGetContents sErr >>= \s -> void (evaluate (length s))) -- drain stderr
   hPutStrLn sIn "(set-logic HO_ALL)" -- TODO this might be made less powerful, check
   hPutStrLn sIn "(define-fun max ((x Int) (y Int)) Int (ite (< x y) y x)) ; max(x,y)" -- define the max function
   hPutStrLn sIn "(define-fun minus ((x Int) (y Int)) Int (ite (< x y) 0 (- x y))) ; minus(x,y)" -- define the minus function
@@ -169,9 +159,3 @@ withSolver filepath action = do
   cleanupProcess p
   return outcome
 
-
--- | @handleName h@ returns the name of the file associated with the handle @h@.
-handleName :: Handle -> String
-handleName (FileHandle file _) = file
-handleName (DuplexHandle file _ _) = file
-  

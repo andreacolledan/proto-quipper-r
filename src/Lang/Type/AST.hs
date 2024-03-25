@@ -11,8 +11,7 @@ module Lang.Type.AST
 where
 
 import Bundle.AST (BundleType (..), Wide (..), WireType)
-import Data.Set
-import qualified Data.Set as Set
+import qualified Data.HashSet as Set
 import Index.AST
 import PrettyPrinter
 
@@ -67,7 +66,7 @@ instance Wide Type where
 
 -- PQR types are amenable to the notion of well-formedness with respect to an index context
 instance HasIndex Type where
-  iv :: Type -> Set IndexVariableId
+  iv :: Type -> Set.HashSet IndexVariableId
   iv TUnit = Set.empty
   iv (TWire _) = Set.empty
   iv (TPair t1 t2) = iv t1 `Set.union` iv t2
@@ -77,7 +76,7 @@ instance HasIndex Type where
   iv (TList i typ) = iv i `Set.union` iv typ
   iv (TVar _) = Set.empty
   iv (TIForall id typ i j) = Set.insert id (iv typ `Set.union` iv i `Set.union` iv j)
-  ifv :: Type -> Set IndexVariableId
+  ifv :: Type -> Set.HashSet IndexVariableId
   ifv TUnit = Set.empty
   ifv (TWire _) = Set.empty
   ifv (TPair t1 t2) = ifv t1 `Set.union` ifv t2

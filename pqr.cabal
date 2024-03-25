@@ -53,15 +53,13 @@ library
       ansi-terminal
     , argparser
     , base >=4.7 && <5
-    , containers
     , extra
     , filepath
     , hspec
     , mtl
+    , optparse-applicative
     , parsec
-    , pipes
     , process
-    , temporary
     , unordered-containers
   default-language: Haskell2010
 
@@ -76,16 +74,14 @@ executable pqr
       ansi-terminal
     , argparser
     , base >=4.7 && <5
-    , containers
     , extra
     , filepath
     , hspec
     , mtl
+    , optparse-applicative
     , parsec
-    , pipes
     , pqr
     , process
-    , temporary
     , unordered-containers
   default-language: Haskell2010
 
@@ -96,6 +92,7 @@ test-suite pqr-test
       Bundle.InferSpec
       Bundle.ParseSpec
       CircuitSpec
+      Index.ASTSpec
       Index.ParseSpec
       Index.SemanticsSpec
       Lang.Type.SemanticsSpec
@@ -109,15 +106,13 @@ test-suite pqr-test
       ansi-terminal
     , argparser
     , base >=4.7 && <5
-    , containers
     , extra
     , filepath
     , hspec
     , mtl
+    , optparse-applicative
     , parsec
-    , pipes
     , pqr
     , process
-    , temporary
     , unordered-containers
   default-language: Haskell2010

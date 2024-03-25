@@ -55,14 +55,15 @@ $ stack install
 ```
 
 ## Usage
-To run the Proto-Quipper-R type checker on a program file at `filepath`, run
+To run the Proto-Quipper-R type checker on program file `FILE`, run
 ```
-$ pqr filepath
+$ pqr FILE
 ```
-General usage is 
+Use option `--debug DEBUG` to dump a copy of all SMT queries performed during typechecking to file `DEBUG`. General usage is thus
 ```
-pqr filepath [--verbose] [--help] [--version]
+pqr FILE [-v | --verbose] [-d | --debug DEBUG]
 ```
+For more information, use `pqr --help`.
 
 ## Paper
 This implementation is based on ["Colledan, A. and Lago, U.D. 2023. Circuit Width Estimation via Effect Typing and Linear Dependency (Long Version). arXiv."](https://doi.org/10.48550/arXiv.2310.19096)

@@ -14,8 +14,7 @@ module Index.AST
   )
 where
 
-import Data.Set (Set)
-import qualified Data.Set as Set
+import qualified Data.HashSet as Set
 import PrettyPrinter
 
 type IndexVariableId = String
@@ -42,7 +41,7 @@ instance Pretty Index where
   pretty (Maximum id i j) = "max[" ++ id ++ " < " ++ pretty i ++ "] " ++ pretty j
 
 -- Corresponds to Θ in the paper
-type IndexContext = Set IndexVariableId
+type IndexContext = Set.HashSet IndexVariableId
 
 -- | The empty index context
 emptyictx :: IndexContext
@@ -51,18 +50,14 @@ emptyictx = Set.empty
 -- | The class of types that contain index variables
 class HasIndex a where
   -- | @iv x@ returns the set of index variables (bound or free) that occur in @x@
-  iv :: a -> Set IndexVariableId
+  iv :: a -> Set.HashSet IndexVariableId
   -- | @ifv x@ returns the set of free index variables that occur in @x@
-  ifv :: a -> Set IndexVariableId
+  ifv :: a -> Set.HashSet IndexVariableId
   -- | @isub i id x@ substitutes the index variable @id@ by the index @i@ in @x@
   isub :: Index -> IndexVariableId -> a -> a
 
--- | @wellFormed theta x@ checks if all free index variables in @x@ are in @theta@
-wellFormed :: (HasIndex a) => IndexContext -> a -> Bool
-wellFormed theta x = ifv x `Set.isSubsetOf` theta
-
 instance HasIndex Index where
-  iv :: Index -> Set IndexVariableId
+  iv :: Index -> Set.HashSet IndexVariableId
   iv (IndexVariable id) = Set.singleton id
   iv (Number _) = Set.empty
   iv (Plus i j) = iv i `Set.union` iv j
@@ -70,7 +65,7 @@ instance HasIndex Index where
   iv (Mult i j) = iv i `Set.union` iv j
   iv (Minus i j) = iv i `Set.union` iv j
   iv (Maximum id i j) = Set.insert id (iv i `Set.union` iv j)
-  ifv :: Index -> Set IndexVariableId
+  ifv :: Index -> Set.HashSet IndexVariableId
   ifv (IndexVariable id) = Set.singleton id
   ifv (Number _) = Set.empty
   ifv (Plus i j) = ifv i `Set.union` ifv j
@@ -86,20 +81,20 @@ instance HasIndex Index where
   isub i id (Mult j k) = Mult (isub i id j) (isub i id k)
   isub i id (Minus j k) = Minus (isub i id j) (isub i id k)
   isub i id (Maximum id' j k) =
-    let id'' = fresh id' [IndexVariable id, i, k]
+    let id'' = fresh id' [IndexVariable id, i, k] -- find an id'', preferably id', that is not id and does not capture anything in i or k
      in Maximum id'' (isub i id j) (isub i id . isub (IndexVariable id'') id' $ k)
 
 -- | @fresh id xs@ returns a fresh index variable name that does not occur in @xs@, @id@ if possible.
 fresh :: (HasIndex a) => IndexVariableId -> [a] -> IndexVariableId
 fresh id xs =
   let toavoid = Set.unions $ iv <$> xs
-   in head $ filter (`Set.notMember` toavoid) $ id : [id ++ show n | n <- [0 ..]]
+   in head $ filter (not . (`Set.member` toavoid)) $ id : [id ++ show n | n <- [0 ..]]
 
 -- Natural lifting of well-formedness to traversable data structures
 instance (Traversable t, HasIndex a) => HasIndex (t a) where
-  iv :: t a -> Set IndexVariableId
+  iv :: t a -> Set.HashSet IndexVariableId
   iv x = let ivets = iv <$> x in foldr Set.union Set.empty ivets
-  ifv :: t a -> Set IndexVariableId
+  ifv :: t a -> Set.HashSet IndexVariableId
   ifv x = let ifvets = ifv <$> x in foldr Set.union Set.empty ifvets
   isub :: Index -> IndexVariableId -> t a -> t a
   isub i id x = isub i id <$> x
