@@ -16,6 +16,7 @@ import Text.Parsec.Language
 import Text.Parsec.Prim ((<?>))
 import Text.Parsec.String
 import Text.Parsec.Token
+import Text.Parsec.Combinator
 
 --- INDEX PARSING MODULE ------------------------------------------------------------
 ---
@@ -71,21 +72,6 @@ parseMax =
     return $ Max i1 i2
     <?> "max expression"
 
--- Parses "max[id < i] j" as Maximum id i j
-parseMaximum :: Parser Index
-parseMaximum =
-  do
-    try $ do
-      m_reserved "max"
-      m_symbol "["
-    ivar <- m_identifier
-    m_reservedOp "<"
-    i <- parseIndex
-    m_symbol "]"
-    j <- parseIndex
-    return $ Maximum ivar i j
-    <?> "maximum expression"
-
 multOp :: Parser (Index -> Index -> Index)
 multOp =
   do
@@ -107,6 +93,23 @@ minusOp =
     return Minus
     <?> "minus"
 
+manyMaximumOp :: Parser (Index -> Index)
+manyMaximumOp = foldr1 (.) <$> many1 maximumOp
+  where
+    maximumOp :: Parser (Index -> Index)
+    maximumOp =
+      do
+        try $ do
+          m_reserved "max"
+          m_symbol "["
+        ivar <- m_identifier
+        m_reservedOp "<"
+        i <- parseIndex
+        m_symbol "]"
+        return $ Maximum ivar i
+  
+    
+
 delimitedIndex :: Parser Index
 delimitedIndex =
   m_parens parseIndex
@@ -121,7 +124,7 @@ parseIndex =
   let -- Usual arithmetic operator associativity and precedence
       indexOperators =
         [ [Infix multOp AssocLeft],
-          [Infix plusOp AssocLeft, Infix minusOp AssocLeft]
+          [Infix plusOp AssocLeft, Infix minusOp AssocLeft],
+          [Prefix manyMaximumOp]
         ]
-      simpleIndex = delimitedIndex <|> parseMaximum
-   in buildExpressionParser indexOperators simpleIndex <?> "index expression"
+   in buildExpressionParser indexOperators delimitedIndex <?> "index expression"

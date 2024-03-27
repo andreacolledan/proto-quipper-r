@@ -10,8 +10,8 @@ in
 
 -- doubleNot applies dumbNot twice to its input qubit
 let doubleNot = \q :: Qubit .
-  let q = (force dumbNot) q in
-  (force dumbNot) q
+  let q = force dumbNot q in
+  force dumbNot q
 in doubleNot
 
 -- expected type : Qubit ->[2,0] Qubit

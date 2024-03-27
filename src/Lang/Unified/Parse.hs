@@ -19,12 +19,15 @@ import Text.Parsec.Expr
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
+import Control.Monad (unless)
 
 --- PAPER LANGUAGE PARSER ---------------------------------------------------------------------------------
 ---
 --- This module defines the parser for the unified, practical syntax of PQR.
 --- This is the main parser used in the application. It is implemented using the Parsec library.
 -----------------------------------------------------------------------------------------------------------
+
+--- LEXER DEFINITION -----------------------------------------------------------------------------------
 
 unifiedLang :: LanguageDef st
 unifiedLang =
@@ -34,10 +37,10 @@ unifiedLang =
       commentEnd = "-}",
       identStart = letter <|> char '_',
       identLetter = alphaNum <|> char '_',
-      reservedNames = ["let", "in", "forall", "Circ", "apply", "fold", "lift", "box", "force", "dest", "let", "in", "[]", "()"],
-      opStart = oneOf "@:\\.=",
+      reservedNames = ["let", "in", "forall", "Circ", "apply", "fold", "lift", "box", "force", "let", "in", "[]", "()"],
+      opStart = oneOf "@:\\.=!$",
       opLetter = char ':',
-      reservedOpNames = ["@", "::", ":", "\\", ".", "=", "|", "->"]
+      reservedOpNames = ["@", "::", "!::", ":", "\\", ".", "=", "$", "->"]
     }
 
 unifiedTokenParser :: TokenParser st
@@ -55,6 +58,8 @@ unifiedTokenParser@TokenParser
     symbol = m_symbol,
     braces = m_braces
   } = makeTokenParser unifiedLang
+
+--- ELEMENTARY PARSERS -----------------------------------------------------------------------------------
 
 -- parse "()" as EUnit
 unitValue :: Parser Expr
@@ -129,7 +134,7 @@ lambdaDest = do
   typ <- parseType
   m_reservedOp "."
   e <- parseExpr
-  let tmpName = "_tmp"
+  let tmpName = "#tmp#"
   case makeDest elems (EVar tmpName) e of
     Just e -> return $ EAbs tmpName typ e
     Nothing -> fail "Destructuring lambda must bind at least two variables"
@@ -138,7 +143,7 @@ makeDest :: [String] -> Expr -> Expr -> Maybe Expr
 makeDest [x, y] e1 e2 = Just $ EDest x y e1 e2
 makeDest (x : y : rest) e1 e2 =
   let (last : midelems) = reverse rest -- this is always non-empty
-      tmpName = "_tmp"
+      tmpName = "#tmp#"
    in Just $ EDest tmpName last e1 (foldl (\binds elem -> EDest tmpName elem (EVar tmpName) binds) (EDest x y (EVar tmpName) e2) midelems)
 makeDest _ _ _ = Nothing
 
@@ -150,34 +155,6 @@ tuple =
     elems <- m_parens $ m_commaSep1 parseExpr
     return $ foldl1 EPair elems
     <?> "tuple"
-
--- parse "lift e" as (ELift e)
-lift :: Parser Expr
-lift =
-  do
-    m_reserved "lift"
-    e <- parseExpr
-    return $ ELift e
-    <?> "lift"
-
--- parse "box[bt] e" as (EBox bt e)
-box :: Parser Expr
-box =
-  do
-    m_reserved "box"
-    bt <- m_brackets parseBundleType
-    e <- parseExpr
-    return $ EBox bt e
-    <?> "box"
-
--- parse "force e" as (EForce e)
-force :: Parser Expr
-force =
-  do
-    m_reserved "force"
-    e <- parseExpr
-    return $ EForce e
-    <?> "force"
 
 -- parse "let (x,y) = e1 in e2" as (EDest x y e1 e2)
 -- Sugar: let (x0,x1,...,xn) = e1 in e2 is desugared into let (tmp,xn) = e1 in let (tmp,xn-1) = tmp in ... let (x0,x1) = tmp in e2
@@ -238,19 +215,6 @@ letCons =
     return $ ELetCons x xs e1 e2
     <?> "let-cons"
 
--- parse ":" as the infix operator Cons
-consOp :: Parser (Expr -> Expr -> Expr)
-consOp = m_reservedOp ":" >> return ECons <?> "cons operator"
-
--- parse ":: t" as the postfix operator (\e -> EAnno e t)
-annOp :: Parser (Expr -> Expr)
-annOp =
-  do
-    m_reservedOp "::"
-    t <- parseType
-    return $ flip EAnno t
-    <?> "type annotation"
-
 -- parse "fold(e1, e2)" as (EFold e1 e2)
 fold :: Parser Expr
 fold =
@@ -279,16 +243,6 @@ apply =
     return $ EApply e1 e2
     <?> "apply"
 
--- parse "@ i" as the postfix operator (\e -> EIApp e i)
-iappOp :: Parser (Expr -> Expr)
-iappOp =
-  do
-    i <- try $ do
-      m_reservedOp "@"
-      delimitedIndex
-    return $ flip EIApp i
-    <?> "index application"
-
 -- parse "@i . e" as (EIAbs i e)
 iabs :: Parser Expr
 iabs =
@@ -302,10 +256,92 @@ iabs =
     return $ EIAbs i e
     <?> "index abstraction"
 
+
+--- OPERATOR PARSERS -----------------------------------------------------------------------------------
+
+manyForceOp :: Parser (Expr -> Expr)
+manyForceOp = foldr1 (.) <$> many1 forceOp
+  where
+    forceOp :: Parser (Expr -> Expr)
+    forceOp = do
+      m_reserved "force"
+      return EForce
+
 -- parse spaces as the infix operator EApp
 appOp :: Parser (Expr -> Expr -> Expr)
 appOp = m_whiteSpace >> return EApp <?> "application"
 
+-- parse "$" as the infix operator EApp (lowest precedence)
+dollarOp :: Parser (Expr -> Expr -> Expr)
+dollarOp = m_reservedOp "$" >> return EApp <?> "application"
+
+-- parse "!:: t" as the postfix operator (\e -> EAssume e t)
+manyAssumeOp :: Parser (Expr -> Expr)
+manyAssumeOp = foldr1 (.) <$> many1 assumeOp
+  where
+    assumeOp :: Parser (Expr -> Expr)
+    assumeOp =
+      do
+        m_reservedOp "!::"
+        t <- parseType
+        return $ flip EAssume t
+        <?> "type assumption"
+
+-- parse "@ i" as the postfix operator (\e -> EIApp e i)
+manyIappOp :: Parser (Expr -> Expr)
+manyIappOp = foldr1 (.) <$> many1 iappOp
+  where
+    iappOp :: Parser (Expr -> Expr)
+    iappOp =
+      do
+        i <- try $ do
+          m_reservedOp "@"
+          parseIndex
+        return $ flip EIApp i
+        <?> "index application"
+
+-- parse ":" as the infix operator Cons
+consOp :: Parser (Expr -> Expr -> Expr)
+consOp = m_reservedOp ":" >> return ECons <?> "cons operator"
+
+-- parse ":: t" as the postfix operator (\e -> EAnno e t)
+manyAnnOp :: Parser (Expr -> Expr)
+manyAnnOp = foldr1 (.) <$> many1 annOp
+  where
+    annOp :: Parser (Expr -> Expr)
+    annOp = do
+      m_reservedOp "::"
+      t <- parseType
+      return $ flip EAnno t
+      <?> "type annotation"
+
+-- parse "lift e" as (ELift e)
+manyLiftOp :: Parser (Expr -> Expr)
+manyLiftOp = foldr1 (.) <$> many1 liftOp
+  where
+    liftOp :: Parser (Expr -> Expr)
+    liftOp = do
+        m_reserved "lift"
+        return ELift
+        <?> "lift"
+
+-- parse "box[bt] e" as (EBox bt e)
+manyBoxOp :: Parser (Expr -> Expr)
+manyBoxOp = foldr1 (.) <$> many1 boxOp
+  where
+    boxOp :: Parser (Expr -> Expr)
+    boxOp =
+      do
+        m_reserved "box"
+        bt <- m_brackets parseBundleType
+        return $ EBox bt
+        <?> "box"
+
+
+
+--- TOP-LEVEL PARSERS -----------------------------------------------------------------------------------
+
+delimitedExpr :: Parser Expr
 delimitedExpr =
   unitValue
     <|> nil
@@ -316,29 +352,29 @@ delimitedExpr =
     <|> fold
     <|> constant
     <|> variable
-    <?> "delimited expression"
 
 -- parse a PQR unified expression
 parseExpr :: Parser Expr
 parseExpr =
   let operatorTable =
-        [ [Infix appOp AssocLeft],
+        [ [Prefix manyForceOp],
+          [Prefix manyBoxOp],
+          [Prefix manyLiftOp],
+          [Infix appOp AssocLeft],
           [Infix consOp AssocRight],
-          [Postfix iappOp],
-          [Postfix annOp]
+          [Postfix manyIappOp],
+          [Postfix manyAnnOp],
+          [Postfix manyAssumeOp],
+          [Infix dollarOp AssocRight]
         ]
       simpleExpr =
         delimitedExpr
           <|> lambda
           <|> lambdaDest
           <|> iabs
-          <|> lift
           <|> dest
           <|> letCons
           <|> letIn
-          <|> box
-          <|> force
-          <?> "simple expression"
    in buildExpressionParser operatorTable simpleExpr <?> "expression"
 
 -- parse a PQR unified program

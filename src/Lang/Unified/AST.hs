@@ -39,11 +39,12 @@ data Expr =
   | EForce Expr                               -- Force                    : force e
   | ELet VariableId Expr Expr                 -- Let                      : let x = e1 in e2
   | EDest VariableId VariableId Expr Expr     -- Dest                     : let (x, y) = e1 in e2
-  | EAnno Expr Type                           -- Annotation               : e :: t
+  | EAnno Expr Type                           -- Type annotation          : e :: t
   | EIAbs IndexVariableId Expr                -- Index Abstraction        : @i . e
   | EIApp Expr Index                          -- Index Application        : e @ i
   | EConst Constant                           -- Constant                 : QInit0, Hadamard, ...
   | ELetCons VariableId VariableId Expr Expr  -- Let Cons                 : let x:xs = e1 in e2
+  | EAssume Expr Type                         -- Type assumption          : assume e :: t
   deriving (Eq, Show)
 
 instance Pretty Expr where
@@ -68,6 +69,7 @@ instance Pretty Expr where
   pretty (EIApp e i) = "(" ++ pretty e ++ " @ " ++ pretty i ++ ")"
   pretty (EConst c) = pretty c
   pretty (ELetCons x y e1 e2) = "(let " ++ x ++ ":" ++ y ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
+  pretty (EAssume e t) = "(" ++ pretty e ++ " !:: " ++ pretty t ++ ")"
 
 instance HasType Expr where
   tfv :: Expr -> Set.HashSet TVarId
@@ -92,6 +94,7 @@ instance HasType Expr where
   tfv (EIApp e _) = tfv e
   tfv (EConst _) = Set.empty
   tfv (ELetCons _ _ e1 e2) = tfv e1 `Set.union` tfv e2
+  tfv (EAssume e t) = tfv e `Set.union` tfv t
   tsub :: TypeSubstitution -> Expr -> Expr
   tsub _ EUnit = EUnit
   tsub _ (ELabel id) = ELabel id
@@ -114,6 +117,7 @@ instance HasType Expr where
   tsub sub (EIApp e i) = EIApp (tsub sub e) i
   tsub _ e@(EConst _) = e
   tsub sub (ELetCons id1 id2 e1 e2) = ELetCons id1 id2 (tsub sub e1) (tsub sub e2)
+  tsub sub (EAssume e t) = EAssume (tsub sub e) (tsub sub t)
   
 
 

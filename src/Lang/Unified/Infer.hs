@@ -13,12 +13,14 @@ import Data.Either.Extra (mapLeft)
 import qualified Data.HashMap.Strict as Map
 import Index.AST
 import Lang.Type.AST
+import Lang.Type.Semantics
 import Lang.Unified.AST
 import Lang.Unified.Constant
 import Lang.Unified.Derivation
 import Lang.Unified.Pre
 import Control.Monad.Except
 import Solving.CVC5 (SolverHandle)
+import Control.Monad.IO.Class (liftIO)
 
 --- TYPE SYNTHESIS MODULE ---------------------------------------------------------------
 ---
@@ -72,7 +74,10 @@ inferWithIndices qfh e@(ELift e1) = withScope e $ do
 inferWithIndices qfh e@(ECons e1 e2) = withScope e $ do
   (typ1, i1) <- inferWithIndices qfh e1
   ((TList j typ1', i2), wc) <- withWireCount $ inferWithIndices qfh e2
-  unlessSubtype qfh (TList j typ1') (TList j typ1) $ throwLocalError $ UnexpectedType e2 (TList j typ1) (TList j typ1')
+  unlessSubtype qfh (TList j typ1') (TList j typ1) $ do
+    expected <- liftIO $ simplifyType qfh (TList j typ1)
+    actual <- liftIO $ simplifyType qfh (TList j typ1')
+    throwLocalError $ UnexpectedType e2 expected actual
   -- max (i1 + wires in e2, i2 + #(typ1), (j+1) * #(typ1)):
   let k = Max (Plus i1 wc) (Max (Plus i2 (wireCount typ1)) (Mult (Plus j (Number 1)) (wireCount typ1)))
   return (TList (Plus j (Number 1)) typ1, k)
@@ -108,7 +113,9 @@ inferWithIndices _ e@(ECirc b1 c b2) = withScope e $ do
 inferWithIndices qfh e@(EApp e1 e2) = withScope e $ do
   (TArrow annotyp typ3 j1 j2, i1) <- inferWithIndices qfh e1
   ((typ2, i2), wc) <- withWireCount $ inferWithIndices qfh e2
-  unlessSubtype qfh typ2 annotyp $ throwLocalError $ UnexpectedType e2 annotyp typ2
+  unlessSubtype qfh typ2 annotyp $ do
+    actual <- liftIO $ simplifyType qfh typ2
+    throwLocalError $ UnexpectedType e2 annotyp actual
   -- max(i1 + wires in e2, i2 + j2, j1):
   let k = Max (Plus i1 wc) (Max (Plus i2 j2) j1)
   return (typ3, k)
@@ -118,7 +125,10 @@ inferWithIndices qfh e@(EApply e1 e2) = withScope e $ do
   ((typ2, i2), wc) <- withWireCount $ inferWithIndices qfh e2
   let intyp = fromBundleType inbt
   let outtyp = fromBundleType outbt
-  unlessSubtype qfh typ2 intyp $ throwLocalError $ UnexpectedType e2 (fromBundleType inbt) typ2
+  unlessSubtype qfh typ2 intyp $ do
+    expected <- liftIO $ simplifyType qfh (fromBundleType inbt)
+    actual <- liftIO $ simplifyType qfh typ2
+    throwLocalError $ UnexpectedType e2 expected actual
   -- max(i1 + wires in e2, i2, j):
   let k = Max (Plus i1 wc) (Max i2 j)
   return (outtyp, k)
@@ -147,7 +157,9 @@ inferWithIndices qfh e@(EDest x y e1 e2) = withScope e $ do
 inferWithIndices qfh e@(EAnno e1 annotyp) = withScope e $ do
   checkWellFormedness annotyp
   (typ, i) <- inferWithIndices qfh e1
-  unlessSubtype qfh typ annotyp $ throwLocalError $ UnexpectedType e1 annotyp typ
+  unlessSubtype qfh typ annotyp $ do
+    actual <- liftIO $ simplifyType qfh typ
+    throwLocalError $ UnexpectedType e1 annotyp actual
   return (annotyp, i)
 -- FORCE
 inferWithIndices qfh e@(EForce e1) = withScope e $ do
@@ -171,6 +183,11 @@ inferWithIndices qfh e@(ELetCons x y e1 e2) = withScope e $ do
   ((typ3, i2), wc) <- withWireCount $ withBoundVariable x typ2 $ withBoundVariable y (TList (Minus j (Number 1)) typ2) $ inferWithIndices qfh e2
   let k = Max (Plus i1 wc) i2
   return (typ3, k)
+-- ASSUMPTION (unsafe)
+inferWithIndices qfh e@(EAssume e1 annotyp) = withScope e $ do
+  checkWellFormedness annotyp
+  (_, i) <- inferWithIndices qfh e1
+  return (annotyp, i)
 
 --- EXPORTED WRAPPER FUNCTIONS ---------------------------------------------------------------
 

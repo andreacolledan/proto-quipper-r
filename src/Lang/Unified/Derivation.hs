@@ -165,7 +165,7 @@ instance Show TypeError where
   show (UnusedLinearVariable id surr) = "* Unused linear variable '" ++ id ++ "'" ++ printSurroundings surr
   show (LiftedLinearVariable id surr) = "* Linear variable '" ++ id ++ "' cannot be consumed in a lifted expression" ++ printSurroundings surr
   show (UnexpectedType exp typ1 typ2 surr) =
-    "* Expected expression '" ++ trnc 80 (pretty exp) ++ "'\n   to have type '" ++ pretty typ1 ++ "',\n   got '" ++ pretty typ2 ++ " instead" ++ printSurroundings surr
+    "* Expected expression '" ++ trnc 80 (pretty exp) ++ "'\n   to have type\n    '" ++ pretty typ1 ++ "',\n   got\n    '" ++ pretty typ2 ++ "'\n   instead" ++ printSurroundings surr
   show (MismatchedInputInterface c q b surr) = "* Bundle '" ++ pretty b ++ "' is not a valid input interface for circuit '" ++ pretty c ++ "', whose input labels are '" ++ pretty q ++ "'" ++ printSurroundings surr
   show (MismatchedOutputInterface c q b surr) = "* Bundle '" ++ pretty b ++ "' is not a valid output interface for circuit '" ++ pretty c ++ "', whose output labels are '" ++ pretty q ++ "'" ++ printSurroundings surr
   show (UnexpectedWidthAnnotation m i j surr) =

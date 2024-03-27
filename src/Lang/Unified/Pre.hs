@@ -15,8 +15,6 @@ import Lang.Unified.AST
 import Lang.Unified.Constant
 import Lang.Unified.Derivation
 import Control.Monad.Error.Class
-import Control.Monad.Except (runExceptT)
-import Control.Monad.Identity (Identity(runIdentity))
 
 --- PREPROCESSING MODULE ------------------------------------------------------------------------------------
 ---
@@ -148,7 +146,7 @@ inferBaseType e@(EFold e1 e2 e3) = withScope e $ do
   elemtyp <- TVar <$> makeFreshVariable "a"
   acctyp <- TVar <$> makeFreshVariable "a"
   let sub = sub3 <> sub2 <> sub1
-  stepsub <- unify e1 (tsub sub typ1) (TBang (TIForall "irr" (TArrow (TPair acctyp elemtyp) acctyp irr irr) irr irr))
+  stepsub <- unify e1 (tsub sub typ1) (TBang (TIForall "_" (TArrow (TPair acctyp elemtyp) acctyp irr irr) irr irr))
   let sub = stepsub <> sub3 <> sub2 <> sub1
   accsub <- unify e2 (tsub sub typ2) (tsub sub acctyp)
   let sub = accsub <> stepsub <> sub3 <> sub2 <> sub1
@@ -178,6 +176,10 @@ inferBaseType e@(EIApp e1 g) = withScope e $ do
   return (tsub sub (EIApp e1' g), tsub sub typ1', sub)
 -- CONSTANTS
 inferBaseType e@(EConst c) = withScope e $ return (EConst c, typeOf c, mempty)
+-- ASSUME
+inferBaseType e@(EAssume e1 annotyp) = withScope e $ do
+  (e1', _, sub1) <- inferBaseType e1
+  return (EAssume e1' annotyp, annotyp, sub1)
 
 --- TOP-LEVEL EXPORTED FUNCTIONS -------------------------------------------------------
 

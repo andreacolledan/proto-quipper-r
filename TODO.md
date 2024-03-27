@@ -68,6 +68,8 @@
   - [x] Type inference
   - [ ] Testing
 
+- [ ] Pattern matching
+
 - [x] Better error messages
 - [x] Better handling of shadowing
 - [x] Better unification
@@ -77,6 +79,8 @@
 - [x] Parsing wire bundles
 - [x] Parsing indices
 - [x] Parsing PQR
+- [ ] Better parser (e.g. solve postfix operators always requiring parentheses)
+- [ ] Top-level definitions
 
 ### Performance
 
@@ -87,5 +91,5 @@
 
 - [x] List functions
 - [x] QFT
-- [x] Arithmetic
+- [x] Arithmetic (adder)
 

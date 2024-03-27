@@ -108,6 +108,7 @@ isLinear (TPair typ1 typ2) = isLinear typ1 && isLinear typ2
 isLinear (TCirc {}) = False
 isLinear (TArrow {}) = True
 isLinear (TBang _) = False
+isLinear (TList (Number 0) _) = False  -- Empty lists can be discarded
 isLinear (TList _ typ) = isLinear typ
 isLinear (TVar _) = False -- Variables are only used in the pre-processing stage, so we are permissive here
 isLinear (TIForall _ typ _ _) = isLinear typ

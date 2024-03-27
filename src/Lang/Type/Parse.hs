@@ -14,6 +14,7 @@ import Text.Parsec.Expr
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
+import Control.Monad (unless)
 
 --- TYPE PARSER MODULE -------------------------------------------
 ---
@@ -84,14 +85,16 @@ qubit = m_reserved "Qubit" >> return (TWire Qubit)
 
 -- Parses "()" as TUnit
 unitType :: Parser Type
-unitType = m_reserved "()" >> return TUnit
+unitType = try (m_reserved "()") >> return TUnit
 
 -- Parses "(t1, t2, ..., tn)" as (TPair (TPair ... (TPair t1 t2) ... tn))
 -- Sugar: n-tensors are desugared left-associatively
 tensor :: Parser Type
 tensor = do
-  elems <- m_parens $ m_commaSep1 parseType
-  return $ foldl1 TPair elems
+  try $ do
+    elems <- m_parens $ m_commaSep1 parseType
+    unless (length elems >= 2) $ fail "Tensors must have at least two elements"
+    return $ foldl1 TPair elems
 
 -- Parses "List[i]" as a prefix operator t |-> TList i t
 listOperator :: Parser (Type -> Type)
@@ -104,6 +107,16 @@ listOperator = do
 bangOperator :: Parser (Type -> Type)
 bangOperator = m_reservedOp "!" >> return TBang
 
+delimitedType :: Parser Type
+delimitedType =
+  unitType
+  <|> bit
+  <|> qubit
+  <|> tensor
+  <|> m_parens parseType
+  <|> circ
+  <?> "type"
+
 -- Parses a type
 parseType :: Parser Type
 parseType =
@@ -112,5 +125,4 @@ parseType =
           [Infix arrowOperator AssocRight], -- arrows have lower precedence than bangs and list constructors
           [Prefix forallOperator]
         ]
-      baseType = try unitType <|> bit <|> qubit <|> tensor <|> circ <?> "type"
-   in buildExpressionParser table baseType <?> "type"
+   in buildExpressionParser table delimitedType <?> "type"
