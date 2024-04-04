@@ -21,11 +21,11 @@ spec = do
     it "parses an uppercase identifier as a constant" $ do
       parse parseProgram "" "Hadamard" `shouldBe` Right (EConst Hadamard)
     it "parses '\\x :: () . (x,x)' as an abstraction" $ do
-      parse parseProgram "" "\\x :: () . (x,x)" `shouldBe` Right (EAbs "x" TUnit (EPair (EVar "x") (EVar "x")))
+      parse parseProgram "" "\\x :: () . (x,x)" `shouldBe` Right (EAbs "x" TUnit (ETuple [EVar "x", EVar "x"]))
     it "parses 'let x = () in x' as a let binding" $ do
       parse parseProgram "" "let x = () in x" `shouldBe` Right (ELet "x" EUnit (EVar "x"))
     it "parses 'let (x,y) = ((),[]) in ([],())' as a destructuring let" $ do
-      parse parseProgram "" "let (x,y) = ((),[]) in ([],())" `shouldBe` Right (EDest "x" "y" (EPair EUnit (ENil Nothing)) (EPair (ENil Nothing) EUnit))
+      parse parseProgram "" "let (x,y) = ((),[]) in ([],())" `shouldBe` Right (EDest ["x", "y"] (ETuple [EUnit, ENil Nothing]) (ETuple [ENil Nothing, EUnit]))
     it "parses 'apply(c,l)' as circuit application" $ do
       parse parseProgram "" "apply(c,l)" `shouldBe` Right (EApply (EVar "c") (EVar "l"))
     it "parses 'lift e' as lifting" $ do
@@ -47,8 +47,6 @@ spec = do
     it "parses 'e @i' as index application" $ do
       parse parseProgram "" "e @i" `shouldBe` Right (EIApp (EVar "e") (IndexVariable "i"))
   describe "desugaring" $ do
-    it "parses '(x,y,z,w)' as (((x,y),z),w)" $ do
-      parse parseProgram "" "(x,y,z,w)" `shouldBe` Right (EPair (EPair (EPair (EVar "x") (EVar "y")) (EVar "z")) (EVar "w"))
     it "parses '[x,y,z,q]' as x:(y:(z:(q:[])))" $ do
       parse parseProgram "" "[x,y,z,q]" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ECons (EVar "z") (ECons (EVar "q") (ENil Nothing)))))
   describe "associativity" $ do

@@ -77,9 +77,9 @@ sig PauliX = (BTWire Qubit, BTWire Qubit)
 sig PauliY = (BTWire Qubit, BTWire Qubit)
 sig PauliZ = (BTWire Qubit, BTWire Qubit)
 sig Phase = (BTWire Qubit, BTWire Qubit)
-sig Toffoli = (BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit), BTPair (BTPair (BTWire Qubit) (BTWire Qubit)) (BTWire Qubit))
+sig Toffoli = (BTTensor [BTWire Qubit, BTWire Qubit, BTWire Qubit], BTTensor [BTWire Qubit, BTWire Qubit, BTWire Qubit])
 sig (R _) = (BTWire Qubit, BTWire Qubit)
-sig CNot = (BTPair (BTWire Qubit) (BTWire Qubit), BTPair (BTWire Qubit) (BTWire Qubit))
+sig CNot = (BTTensor [BTWire Qubit, BTWire Qubit], BTTensor [BTWire Qubit, BTWire Qubit])
 
 -- | @net qop@ returns the net change in the number of wires in the circuit due to quantum operation @qop@.
 -- E.g. if a quantum operation consumes 2 qubits and produces 1 qubit, then the net change is -1
@@ -142,10 +142,10 @@ measure :: Circuit
 measure = Seq (Id (Map.fromList [("a", Qubit)])) Measure (Label "a") (Label "b")
 
 cnot :: Circuit
-cnot = Seq (Id (Map.fromList [("a", Qubit), ("b", Qubit)])) CNot (Pair (Label "a") (Label "b")) (Pair (Label "c") (Label "d"))
+cnot = Seq (Id (Map.fromList [("a", Qubit), ("b", Qubit)])) CNot (Tuple [Label "a", Label "b"]) (Tuple [Label "c", Label "d"])
 
 toffoli :: Circuit
-toffoli = Seq (Id (Map.fromList [("a", Qubit), ("b", Qubit), ("c", Qubit)])) Toffoli (Pair (Pair (Label "a") (Label "b")) (Label "c")) (Pair (Pair (Label "d") (Label "e")) (Label "f"))
+toffoli = Seq (Id (Map.fromList [("a", Qubit), ("b", Qubit), ("c", Qubit)])) Toffoli (Tuple [Label "a", Label "b", Label "c"]) (Tuple [Label "d", Label "e", Label "f"])
 
 hadamard :: Circuit
 hadamard = Seq (Id (Map.fromList [("a", Qubit)])) Hadamard (Label "a") (Label "b")

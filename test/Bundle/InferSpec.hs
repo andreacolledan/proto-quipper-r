@@ -46,7 +46,7 @@ spec = do
       -- a:Qubit ⊢ a <=/= Bit
       runBundleTypeChecking (Map.fromList [("a", Qubit)]) (Label "a") (BTWire Bit) `shouldSatisfy` isLeft
       -- a:Qubit,b:Bit ⊢ (a,b) <=/= Qubit ⊗ Qubit
-      runBundleTypeChecking (Map.fromList [("a", Qubit), ("b", Bit)]) (Pair (Label "a") (Label "b")) (BTPair (BTWire Qubit) (BTWire Qubit)) `shouldSatisfy` isLeft
+      runBundleTypeChecking (Map.fromList [("a", Qubit), ("b", Bit)]) (Tuple [Label "a", Label "b"]) (BTTensor [BTWire Qubit,BTWire Qubit]) `shouldSatisfy` isLeft
   describe "context synthesis" $ do
     it "succeeds when a wire bundle and a wire type have the same shape" $ do
       -- ∅ <== * : Unit
@@ -54,24 +54,24 @@ spec = do
       -- a:Qubit <== a : Qubit
       synthesizeLabelContext (Label "a") (BTWire Qubit) `shouldBe` Right (Map.fromList [("a", Qubit)])
       -- a:Qubit,b:Bit <== (a,b) : Qubit ⊗ Bit
-      synthesizeLabelContext (Pair (Label "a") (Label "b")) (BTPair (BTWire Qubit) (BTWire Bit))
+      synthesizeLabelContext (Tuple [Label "a", Label "b"]) (BTTensor [BTWire Qubit, BTWire Bit])
         `shouldBe` Right (Map.fromList [("a", Qubit), ("b", Bit)])
       -- a:Qubit,b:Bit,c:Qubit <== ((*,a),(b,c)) : (Unit ⊗ Qubit) ⊗ (Bit ⊗ Qubit)
       synthesizeLabelContext
-        (Pair (Pair UnitValue (Label "a")) (Pair (Label "b") (Label "c")))
-        (BTPair (BTPair BTUnit (BTWire Qubit)) (BTPair (BTWire Bit) (BTWire Qubit)))
+        (Tuple [Tuple [UnitValue, Label "a"], Tuple [Label "b", Label "c"]])
+        (BTTensor [BTTensor [BTUnit, BTWire Qubit], BTTensor [BTWire Bit, BTWire Qubit]])
         `shouldBe` Right (Map.fromList [("a", Qubit), ("b", Bit), ("c", Qubit)])
     it "fails when a bundle and a bundle type do not have the same shape" $ do
       -- <=/= * : Qubit
       synthesizeLabelContext UnitValue (BTWire Qubit) `shouldSatisfy` isLeft
       -- <=/= a : Qubit ⊗ Bit
-      synthesizeLabelContext (Label "a") (BTPair (BTWire Qubit) (BTWire Bit)) `shouldSatisfy` isLeft
+      synthesizeLabelContext (Label "a") (BTTensor [BTWire Qubit, BTWire Bit]) `shouldSatisfy` isLeft
       -- <=/= (a,b) : Qubit
-      synthesizeLabelContext (Pair (Label "a") (Label "b")) (BTWire Qubit) `shouldSatisfy` isLeft
+      synthesizeLabelContext (Tuple [Label "a", Label "b"]) (BTWire Qubit) `shouldSatisfy` isLeft
       -- <=/= ((*,a),(b,c)) : (Unit ⊗ Qubit) ⊗ Bit
       synthesizeLabelContext
-        (Pair (Pair UnitValue (Label "a")) (Pair (Label "b") (Label "c")))
-        (BTPair (BTPair BTUnit (BTWire Qubit)) (BTWire Bit))
+        (Tuple [Tuple [UnitValue, Label "a"], Tuple [Label "b", Label "c"]])
+        (BTTensor [BTTensor [BTUnit, BTWire Qubit], BTWire Bit])
         `shouldSatisfy` isLeft
     it "fails when a type variable occurs in the bundle type" $ do
       -- <=/= a : ⍺

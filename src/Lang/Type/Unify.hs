@@ -10,6 +10,9 @@ import Lang.Type.AST
 import qualified Data.HashSet as Set
 import qualified Data.HashMap.Strict as Map
 import qualified Bundle.AST as B
+import Control.Monad (zipWithM)
+import Data.Foldable
+import Control.Monad.Extra (when)
 
 --- TYPE UNIFICATION MODULE ---------------------------------------------------------------------------------
 ---
@@ -43,7 +46,7 @@ class HasType a where
 instance HasType Type where
   tfv TUnit = Set.empty
   tfv (TWire _) = Set.empty
-  tfv (TPair t1 t2) = tfv t1 `Set.union` tfv t2
+  tfv (TTensor ts) = foldr (Set.union . tfv) Set.empty ts
   tfv (TCirc {}) = Set.empty
   tfv (TArrow t1 t2 _ _) = tfv t1 `Set.union` tfv t2
   tfv (TBang t) = tfv t
@@ -52,7 +55,7 @@ instance HasType Type where
   tfv (TIForall _ t _ _) = tfv t
   tsub _ TUnit = TUnit
   tsub _ typ@(TWire _) = typ
-  tsub sub (TPair t1 t2) = TPair (tsub sub t1) (tsub sub t2)
+  tsub sub (TTensor ts) = TTensor (map (tsub sub) ts)
   tsub _ typ@(TCirc {}) = typ
   tsub sub (TArrow typ1 typ2 i j) = TArrow (tsub sub typ1) (tsub sub typ2) i j
   tsub sub (TBang typ) = TBang (tsub sub typ)
@@ -88,10 +91,12 @@ mgtu (TVar id) t = assignTVar id t
 mgtu t (TVar id) = assignTVar id t
 mgtu TUnit TUnit = return mempty
 mgtu (TWire wt1) (TWire wt2) | wt1 == wt2 = return mempty
-mgtu (TPair t1 t2) (TPair t1' t2') = do
-  sub1 <- mgtu t1 t1'
-  sub2 <- mgtu (tsub sub1 t2) (tsub sub1 t2')
-  return $ compose sub2 sub1
+mgtu (TTensor ts) (TTensor ts')
+  | length ts == length ts' = do
+    when (length ts < 2) $ error "Internal error: Tensors must have at least two elements"
+    subs <- zipWithM mgtu ts ts'
+    return $ fold subs
+  | otherwise = Nothing
 mgtu (TCirc _ inBtype outBtype) (TCirc _ inBtype' outBtype') = do
   sub1 <- mgtu (fromBundleType inBtype) (fromBundleType inBtype')
   sub2 <- mgtu (fromBundleType outBtype) (fromBundleType outBtype')

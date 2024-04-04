@@ -88,18 +88,18 @@ spec = around (withSolver Nothing) $ do
       context "when typing pairs" $ do
         it "produces the correct tensor type and the sum of the wirecounts of the elements" $ \qfh -> do
           -- ∅;∅;∅ ⊢ ((),()) ==> ((),()) ; 0
-          let expr = EPair EUnit EUnit
-          let expected = (TPair TUnit TUnit, Number 0)
+          let expr = ETuple [EUnit, EUnit]
+          let expected = (TTensor [TUnit, TUnit], Number 0)
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
           -- ∅;x:Qubit,y:Bit;∅ ⊢ (x,y) ==> (Qubit,Bit) ; 2
           let gamma = [("x", TWire Qubit), ("y", TWire Bit)]
-          let expr = EPair (EVar "x") (EVar "y")
-          let expected = (TPair (TWire Qubit) (TWire Bit), Number 2)
+          let expr = ETuple [(EVar "x"), (EVar "y")]
+          let expected = (TTensor [(TWire Qubit), (TWire Bit)], Number 2)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
           -- ∅;x:Qubit,y:Bit,z:Qubit;∅ ⊢ (x,(y,z)) ==> (Qubit,(Bit,Qubit)) ; 3
           let gamma = [("x", TWire Qubit), ("y", TWire Bit), ("z", TWire Qubit)]
-          let expr = EPair (EVar "x") (EPair (EVar "y") (EVar "z"))
-          let expected = (TPair (TWire Qubit) (TPair (TWire Bit) (TWire Qubit)), Number 3)
+          let expr = ETuple [(EVar "x"), (ETuple [(EVar "y"), (EVar "z")])]
+          let expected = (TTensor [(TWire Qubit), (TTensor [(TWire Bit), (TWire Qubit)])], Number 3)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
       context "when typing the empty list" $ do
         it "produces an empty list type and wirecount zero if the context is empty" $ \qfh -> do
@@ -132,9 +132,9 @@ spec = around (withSolver Nothing) $ do
           let expected = (TList (Number 2) (TWire Qubit), Number 2)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
           -- ∅;x:(Bit,Bit),xs:List[100] (Bit,Bit) ⊢ x:xs ==> List[101] (Bit,Bit) ; 202
-          let gamma = [("x", TPair (TWire Bit) (TWire Bit)), ("xs", TList (Number 100) (TPair (TWire Bit) (TWire Bit)))]
+          let gamma = [("x", TTensor [(TWire Bit), (TWire Bit)]), ("xs", TList (Number 100) (TTensor [(TWire Bit), (TWire Bit)]))]
           let expr = ECons (EVar "x") (EVar "xs")
-          let expected = (TList (Number 101) (TPair (TWire Bit) (TWire Bit)), Number 202)
+          let expected = (TList (Number 101) (TTensor [(TWire Bit), (TWire Bit)]), Number 202)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "fails when the head is of a different type than the rest of the list" $ \qfh -> do
           -- ∅;x:Qubit,y:Bit;∅ ⊢ x:y:[] =/=> 
@@ -149,8 +149,8 @@ spec = around (withSolver Nothing) $ do
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
           -- ∅;x:Qubit;∅ ⊢ \y :: Bit . (x,y) ==> Bit ->[2,1] (Qubit,Bit) ; 1
           let gamma = [("x", TWire Qubit)]
-          let expr = EAbs "y" (TWire Bit) (EPair (EVar "x") (EVar "y"))
-          let expected = (TArrow (TWire Bit) (TPair (TWire Qubit) (TWire Bit)) (Number 2) (Number 1), Number 1)
+          let expr = EAbs "y" (TWire Bit) (ETuple [(EVar "x"), (EVar "y")])
+          let expected = (TArrow (TWire Bit) (TTensor [(TWire Qubit), (TWire Bit)]) (Number 2) (Number 1), Number 1)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
           -- i;x:Qubit;∅ ⊢ \y :: List[i] Qubit . x:y => List[i] Qubit ->[i+1,1] List[i+1] Qubit ; 1
           let gamma = [("x", TWire Qubit)]
@@ -160,8 +160,8 @@ spec = around (withSolver Nothing) $ do
           runInferenceForTesting  (makeEnvForall theta gamma []) expr qfh `shouldReturn` Right expected
         it "succeeds if the argument is of parameter type and is used more than once" $ \qfh -> do
           -- ∅;∅;∅ ⊢ \x :: () . (x,x) ==> () ->[0,0] ((),()) ; 0
-          let expr = EAbs "x" TUnit (EPair (EVar "x") (EVar "x"))
-          let expected = (TArrow TUnit (TPair TUnit TUnit) (Number 0) (Number 0), Number 0)
+          let expr = EAbs "x" TUnit (ETuple [(EVar "x"), (EVar "x")])
+          let expected = (TArrow TUnit (TTensor [TUnit, TUnit]) (Number 0) (Number 0), Number 0)
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
         it "succeeds if the argument is of parameter type and is not used" $ \qfh -> do
           -- ∅;∅;∅ ⊢ \x :: () . () ==> () ->[0,0] () ; 0
@@ -170,7 +170,7 @@ spec = around (withSolver Nothing) $ do
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
         it "fails when the body uses the argument more than once" $ \qfh -> do
           -- ∅;∅;∅ ⊢ \x :: Qubit . (x,x) =/=>
-          let expr = EAbs "x" (TWire Qubit) (EPair (EVar "x") (EVar "x"))
+          let expr = EAbs "x" (TWire Qubit) (ETuple [(EVar "x"), (EVar "x")])
           runInferenceForTesting emptyEnv expr qfh `shouldSatisfyIO` isLeft
         it "fails when the body does not use the argument" $ \qfh -> do
           -- ∅;∅;∅ ⊢ \x :: Qubit . () =/=>
@@ -213,12 +213,12 @@ spec = around (withSolver Nothing) $ do
           let expected = (TCirc (Number 1) BTUnit (BTWire Qubit), Number 0)
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
           -- ∅;∅;∅ ⊢ ((a,b),cnot,(c,d)) ==> Circ[2]((Qubit,Qubit),(Qubit,Qubit)) ; 0
-          let expr = ECirc (Pair (Label "a") (Label "b")) Circuit.cnot (Pair (Label "c") (Label "d"))
-          let expected = (TCirc (Number 2) (BTPair (BTWire Qubit) (BTWire Qubit)) (BTPair (BTWire Qubit) (BTWire Qubit)), Number 0)
+          let expr = ECirc (Tuple [(Label "a"), (Label "b")]) Circuit.cnot (Tuple [(Label "c"), (Label "d")])
+          let expected = (TCirc (Number 2) (BTTensor [(BTWire Qubit), (BTWire Qubit)]) (BTTensor [(BTWire Qubit), (BTWire Qubit)]), Number 0)
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
         it "fails if the input interface is not adequate for the circuit object" $ \qfh -> do
           -- ∅;∅;∅ ⊢ ((),cnot,(c,d) =/=>
-          let expr = ECirc UnitValue Circuit.cnot (Pair (Label "c") (Label "d"))
+          let expr = ECirc UnitValue Circuit.cnot (Tuple [(Label "c"), (Label "d")])
           runInferenceForTesting emptyEnv expr qfh `shouldSatisfyIO` isLeft
         it "fails if the output interface is not adequate for the circuit object" $ \qfh -> do
           -- ∅;∅;∅ ⊢ (a,hadamard,()) =/=>
@@ -252,8 +252,8 @@ spec = around (withSolver Nothing) $ do
           let gamma = [
                 ("f", TArrow (TWire Qubit) (TWire Bit) (Number 2) (Number 0)),
                 ("x", TWire Qubit), ("y", TWire Bit)]
-          let expr = EPair (EApp (EVar "f") (EVar "x")) (EVar "y")
-          let expected = (TPair (TWire Bit) (TWire Bit), Number 3)
+          let expr = ETuple [(EApp (EVar "f") (EVar "x")), (EVar "y")]
+          let expected = (TTensor [(TWire Bit), (TWire Bit)], Number 3)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "produces the correct tensor type and upper bound when the second element computes" $ \qfh -> do
           -- ∅;x:Qubit,y:Qubit,g:Qubit ->[2,0] Bit;∅ ⊢ (x, g y) ==> (Qubit,Bit) ; 3
@@ -261,8 +261,8 @@ spec = around (withSolver Nothing) $ do
           let gamma = [
                 ("x", TWire Qubit), ("y", TWire Qubit),
                 ("g", TArrow (TWire Qubit) (TWire Bit) (Number 2) (Number 0))]
-          let expr = EPair (EVar "x") (EApp (EVar "g") (EVar "y"))
-          let expected = (TPair (TWire Qubit) (TWire Bit), Number 3)
+          let expr = ETuple [(EVar "x"), (EApp (EVar "g") (EVar "y"))]
+          let expected = (TTensor [(TWire Qubit), (TWire Bit)], Number 3)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
       context "when typing cons" $ do
         it "produces the correct list type and upper bound when the head computes" $ \qfh -> do
@@ -409,13 +409,13 @@ spec = around (withSolver Nothing) $ do
       context "when typing let-in" $ do
         it "produces the right type and wirecount when both the bound expression and the body are values" $ \qfh -> do
           -- ∅;∅;∅ ⊢ let x = () in (x,x) ==> ((),()) ; 0
-          let expr = ELet "x" EUnit (EPair (EVar "x") (EVar "x"))
-          let expected = (TPair TUnit TUnit, Number 0)
+          let expr = ELet "x" EUnit (ETuple [(EVar "x"), (EVar "x")])
+          let expected = (TTensor [TUnit, TUnit], Number 0)
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
         it "produces the right type and wirecount when the bound expression computes" $ \qfh -> do
           -- ∅;∅;∅ ⊢ let x = apply(QInit0,()) in (x,()) ==> (Qubit,()) ; 1
-          let expr = ELet "x" (EApply (EConst QInit0) EUnit) (EPair (EVar "x") EUnit)
-          let expected = (TPair (TWire Qubit) TUnit, Number 1)
+          let expr = ELet "x" (EApply (EConst QInit0) EUnit) (ETuple [(EVar "x"), EUnit])
+          let expected = (TTensor [(TWire Qubit), TUnit], Number 1)
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
         it "produces the right type and wirecount when the body computes" $ \qfh -> do
           -- ∅;∅;∅ ⊢ let x = () in apply(QInit0,x) ==> Qubit ; 1
@@ -430,30 +430,30 @@ spec = around (withSolver Nothing) $ do
       context "when typing the destructuring let-in" $ do
         it "produces the right type and wirecount when both the bound expression and the body are values" $ \qfh -> do
           -- ∅;∅;∅ ⊢ let (x,y) = ((),()) in (y,x) ==> ((),()) ; 0
-          let expr = EDest "x" "y" (EPair EUnit EUnit) (EPair (EVar "y") (EVar "x"))
-          let expected = (TPair TUnit TUnit, Number 0)
+          let expr = EDest ["x", "y"] (ETuple [EUnit, EUnit]) (ETuple [(EVar "y"), (EVar "x")])
+          let expected = (TTensor [TUnit, TUnit], Number 0)
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
         it "produces the right type and wirecount when the bound expression computes" $ \qfh -> do
           -- ∅;initTwo:() -o[2,0] (Qubit,Qubit);∅ ⊢ let (x,y) = initTwo () in (y,x) ==> (Qubit,Qubit) ; 2
-          let gamma = [("initTwo", TArrow TUnit (TPair (TWire Qubit) (TWire Qubit)) (Number 2) (Number 0))]
-          let expr = EDest "x" "y" (EApp (EVar "initTwo") EUnit) (EPair (EVar "y") (EVar "x"))
-          let expected = (TPair (TWire Qubit) (TWire Qubit), Number 2)
+          let gamma = [("initTwo", TArrow TUnit (TTensor [(TWire Qubit), (TWire Qubit)]) (Number 2) (Number 0))]
+          let expr = EDest ["x", "y"] (EApp (EVar "initTwo") EUnit) (ETuple [(EVar "y"), (EVar "x")])
+          let expected = (TTensor [(TWire Qubit), (TWire Qubit)], Number 2)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "produces the right type and wirecount when the body computes" $ \qfh -> do
           -- ∅;initTwo:() -o[2,0] (Qubit,Qubit);∅ ⊢ let (x,y) = ((),()) in initTwo y ==> (Qubit,Qubit) ; 2
-          let gamma = [("initTwo", TArrow TUnit (TPair (TWire Qubit) (TWire Qubit)) (Number 2) (Number 0))]
-          let expr = EDest "x" "y" (EPair EUnit EUnit) (EApp (EVar "initTwo") (EVar "y"))
-          let expected = (TPair (TWire Qubit) (TWire Qubit), Number 2)  
+          let gamma = [("initTwo", TArrow TUnit (TTensor [(TWire Qubit), (TWire Qubit)]) (Number 2) (Number 0))]
+          let expr = EDest ["x", "y"] (ETuple [EUnit, EUnit]) (EApp (EVar "initTwo") (EVar "y"))
+          let expected = (TTensor [(TWire Qubit), (TWire Qubit)], Number 2)  
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "produces the right type and wirecount when both the bound expression and the body compute" $ \qfh -> do
           -- ∅;initTwo:() -o[2,0] (Qubit,Qubit);∅ ⊢ let (x,y) = initTwo () in apply(CNot,(y,x)) ==> (Qubit,Qubit) ; 2
-          let gamma = [("initTwo", TArrow TUnit (TPair (TWire Qubit) (TWire Qubit)) (Number 2) (Number 0))]
-          let expr = EDest "x" "y" (EApp (EVar "initTwo") EUnit) (EApply (EConst CNot) (EPair (EVar "y") (EVar "x")))
-          let expected = (TPair (TWire Qubit) (TWire Qubit), Number 2)
+          let gamma = [("initTwo", TArrow TUnit (TTensor [(TWire Qubit), (TWire Qubit)]) (Number 2) (Number 0))]
+          let expr = EDest ["x", "y"] (EApp (EVar "initTwo") EUnit) (EApply (EConst CNot) (ETuple [(EVar "y"), (EVar "x")]))
+          let expected = (TTensor [(TWire Qubit), (TWire Qubit)], Number 2)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "fails when the bound expression is not of tensor type" $ \qfh -> do
           -- ∅;∅;∅ ⊢ let (x,y) = apply(QInit0,()) in (y,x) =/=>
-          let expr = EDest "x" "y" (EApply (EConst QInit0) EUnit) (EPair (EVar "y") (EVar "x"))
+          let expr = EDest ["x", "y"] (EApply (EConst QInit0) EUnit) (ETuple [(EVar "y"), (EVar "x")])
           runInferenceForTesting emptyEnv expr qfh `shouldSatisfyIO` isLeft
       context "when typing force" $ do
         it "produces the right type and wirecount when the argument is a value" $ \qfh -> do
@@ -475,7 +475,7 @@ spec = around (withSolver Nothing) $ do
         it "produces the right type and wirecount when all the arguments are values" $ \qfh -> do
           -- ∅;step:!(i ->[0,0] (List[i] Qubit, Qubit) -o[1,0] List[i+1] Qubit); l:Qubit,k:Qubit ⊢ fold (step, [], [l,k]) ==> List[2] Qubit ; 2
           let gamma = [
-                ("step", TBang (TIForall "i" (TArrow (TPair (TList (IndexVariable "i") (TWire Qubit)) (TWire Qubit)) (TList (Plus (IndexVariable "i") (Number 1)) (TWire Qubit)) (Number 1) (Number 0)) (Number 0) (Number 0)))]
+                ("step", TBang (TIForall "i" (TArrow (TTensor [(TList (IndexVariable "i") (TWire Qubit)), (TWire Qubit)]) (TList (Plus (IndexVariable "i") (Number 1)) (TWire Qubit)) (Number 1) (Number 0)) (Number 0) (Number 0)))]
           let q = [("l", Qubit), ("k", Qubit)]
           let expr = EFold (EVar "step") (ENil Nothing) (ECons (ELabel "l") (ECons (ELabel "k") (ENil Nothing)))
           let expected = (TList (Number 2) (TWire Qubit), Number 2)
@@ -484,7 +484,7 @@ spec = around (withSolver Nothing) $ do
           -- ∅;pstep:j ->[2*j,0] !(i ->[0,0] (List[i] Qubit, Qubit) -o[1,0] List[i+1] Qubit), l:Qubit,k:Qubit;∅ ⊢ fold (pstep @2, [], [l,k]) ==> List[2] Qubit ; 6
           -- while pstep @ 2 is building a circuit of width 4, l and k pass besides it: total width is 6
           let gamma = [
-                ("pstep", TIForall "j" (TBang (TIForall "i" (TArrow (TPair (TList (IndexVariable "i") (TWire Qubit)) (TWire Qubit)) (TList (Plus (IndexVariable "i") (Number 1)) (TWire Qubit)) (Number 1) (Number 0)) (Number 0) (Number 0))) (Mult (Number 2) (IndexVariable "j")) (Number 0))]
+                ("pstep", TIForall "j" (TBang (TIForall "i" (TArrow (TTensor [(TList (IndexVariable "i") (TWire Qubit)), (TWire Qubit)]) (TList (Plus (IndexVariable "i") (Number 1)) (TWire Qubit)) (Number 1) (Number 0)) (Number 0) (Number 0))) (Mult (Number 2) (IndexVariable "j")) (Number 0))]
           let q = [("l", Qubit), ("k", Qubit)]
           let expr = EFold (EIApp (EVar "pstep") (Number 2)) (ENil Nothing) (ECons (ELabel "l") (ECons (ELabel "k") (ENil Nothing)))
           let expected = (TList (Number 2) (TWire Qubit), Number 6)
@@ -493,7 +493,7 @@ spec = around (withSolver Nothing) $ do
           -- ∅;step:!(i ->[0,0] (List[1+2*i] Qubit, Qubit) -o[1+2*(i+1),0] List[1+2*(i+1)] Qubit), inc: j ->[0,0] List[j] Qubit -o[j+1,0] List[j+1] Qubit;∅
           -- ⊢ fold (step, (inc @0) [], [l,k]) ==> List[5] Qubit ; 5
           let gamma = [
-                ("step", TBang (TIForall "i" (TArrow (TPair (TList (Plus (Number 1) (Mult (Number 2) (IndexVariable "i"))) (TWire Qubit)) (TWire Qubit)) (TList (Plus (Number 1) (Mult (Number 2) (Plus (IndexVariable "i") (Number 1)))) (TWire Qubit)) (Plus (Number 1) (Mult (Number 2) (Plus (IndexVariable "i") (Number 1)))) (Number 0)) (Number 0) (Number 0))),
+                ("step", TBang (TIForall "i" (TArrow (TTensor [(TList (Plus (Number 1) (Mult (Number 2) (IndexVariable "i"))) (TWire Qubit)), (TWire Qubit)]) (TList (Plus (Number 1) (Mult (Number 2) (Plus (IndexVariable "i") (Number 1)))) (TWire Qubit)) (Plus (Number 1) (Mult (Number 2) (Plus (IndexVariable "i") (Number 1)))) (Number 0)) (Number 0) (Number 0))),
                 ("inc", TIForall "j" (TArrow (TList (IndexVariable "j") (TWire Qubit)) (TList (Plus (IndexVariable "j") (Number 1)) (TWire Qubit)) (Plus (IndexVariable "j") (Number 1)) (Number 0)) (Number 0) (Number 0))]
           let q = [("l", Qubit), ("k", Qubit)]
           let expr = EFold (EVar "step") (EApp (EIApp (EVar "inc") (Number 0)) (ENil Nothing)) (ECons (ELabel "l") (ECons (ELabel "k") (ENil Nothing)))

@@ -19,7 +19,7 @@ import Text.Parsec.Expr
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
-import Control.Monad (unless)
+import Control.Monad
 
 --- PAPER LANGUAGE PARSER ---------------------------------------------------------------------------------
 ---
@@ -130,30 +130,25 @@ lambdaDest = do
     m_symbol "("
   elems <- m_commaSep1 m_identifier
   m_symbol ")"
+  when (length elems < 2) $ fail "Destructuring lambda must bind at least two variables"
   m_reservedOp "::"
   typ <- parseType
   m_reservedOp "."
   e <- parseExpr
-  let tmpName = "#tmp#"
-  case makeDest elems (EVar tmpName) e of
-    Just e -> return $ EAbs tmpName typ e
-    Nothing -> fail "Destructuring lambda must bind at least two variables"
+  return $ EAbs "#tmp#" typ $ EDest elems (EVar "#tmp#") e
+  
 
-makeDest :: [String] -> Expr -> Expr -> Maybe Expr
-makeDest [x, y] e1 e2 = Just $ EDest x y e1 e2
-makeDest (x : y : rest) e1 e2 =
-  let (last : midelems) = reverse rest -- this is always non-empty
-      tmpName = "#tmp#"
-   in Just $ EDest tmpName last e1 (foldl (\binds elem -> EDest tmpName elem (EVar tmpName) binds) (EDest x y (EVar tmpName) e2) midelems)
-makeDest _ _ _ = Nothing
 
 -- parse "(e1, e2, ..., en)" as (EPair (EPair ... (EPair e1 e2) ... en)
 -- Sugar: n-tuples are desugared left-associatively into nested pairs
 tuple :: Parser Expr
 tuple =
   do
-    elems <- m_parens $ m_commaSep1 parseExpr
-    return $ foldl1 EPair elems
+    elems <- try $ do
+      elems <- m_parens $ m_commaSep1 parseExpr
+      when (length elems < 2) $ fail "Tuples must have at least two elements"
+      return elems
+    return $ ETuple elems
     <?> "tuple"
 
 -- parse "let (x,y) = e1 in e2" as (EDest x y e1 e2)
@@ -165,15 +160,13 @@ dest =
       m_reserved "let"
       m_symbol "("
     elems <- m_commaSep1 m_identifier
+    when (length elems < 2) $ fail "Destructuring let must bind at least two variables"
     m_symbol ")"
     m_reservedOp "="
     e1 <- parseExpr
     m_reserved "in"
     e2 <- parseExpr
-    case makeDest elems e1 e2 of
-      Just e -> return e
-      Nothing -> fail "Destructuring let-in must bind at least two variables"
-    <?> "destructuring let-in"
+    return $ EDest elems e1 e2
 
 -- parse "let x = e1 in e2" as (ELet x e1 e2)
 letIn :: Parser Expr

@@ -17,6 +17,7 @@ import Control.Monad.Except
 import Control.Monad.State.Lazy
 import qualified Data.HashMap.Strict as Map
 import PrettyPrinter
+import Control.Monad.Extra (zipWithM)
 
 -- Corresponds to Q in the paper
 type LabelContext = Map.HashMap LabelId WireType
@@ -39,8 +40,8 @@ instance Show WireTypingError where
 printConstructor :: BundleType -> String
 printConstructor BTUnit = "unit type"
 printConstructor (BTWire _) = "wire type"
-printConstructor (BTPair _ _) = "BTPair type"
-printConstructor (BTList _ _) = "BTList type"
+printConstructor (BTTensor _) = "Tensor type"
+printConstructor (BTList _ _) = "List type"
 printConstructor (BTVar _) = "type variable"
 
 
@@ -82,10 +83,9 @@ inferBundleType UnitValue = return BTUnit
 inferBundleType (Label id) = do
   btype <- labelContextLookup id
   return (BTWire btype)
-inferBundleType (Pair b1 b2) = do
-  btype1 <- inferBundleType b1
-  btype2 <- inferBundleType b2
-  return (BTPair btype1 btype2)
+inferBundleType (Tuple bs) = do
+  btypes <- mapM inferBundleType bs
+  return $ BTTensor btypes
 inferBundleType Nil = BTList (Number 0) . BTVar <$> freshBTVarName
 inferBundleType (Cons b1 b2) = do
   btype1 <- inferBundleType b1
@@ -102,10 +102,9 @@ inferBundleType (Cons b1 b2) = do
 synthesizeLabelContext :: Bundle -> BundleType -> Either WireTypingError LabelContext
 synthesizeLabelContext UnitValue BTUnit = Right Map.empty
 synthesizeLabelContext (Label id) (BTWire wtype) = Right $ Map.fromList [(id, wtype)]
-synthesizeLabelContext (Pair b1 b2) (BTPair btype1 btype2) = do
-  q1 <- synthesizeLabelContext b1 btype1
-  q2 <- synthesizeLabelContext b2 btype2
-  return $ Map.union q1 q2
+synthesizeLabelContext (Tuple bs) (BTTensor bts) = do
+  qs <- zipWithM synthesizeLabelContext bs bts
+  return $ foldl Map.union Map.empty qs
 synthesizeLabelContext b btype = throwError $ ContextSynthesisMismatch b btype
 
 

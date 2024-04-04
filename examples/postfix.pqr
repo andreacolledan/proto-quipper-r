@@ -1,4 +1,0 @@
-let f = @i. @j. \x :: () . x
-in
-
-force lift f @1 @2 x

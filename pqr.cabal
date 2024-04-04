@@ -95,7 +95,6 @@ test-suite pqr-test
       Index.ASTSpec
       Index.ParseSpec
       Index.SemanticsSpec
-      Lang.Type.SemanticsSpec
       Lang.Unified.InferSpec
       Lang.Unified.ParseSpec
       Paths_pqr

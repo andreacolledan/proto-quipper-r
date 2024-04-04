@@ -45,7 +45,7 @@ lab = do
 tuple :: Parser Bundle
 tuple = do
   elements <- m_parens $ m_commaSep1 parseBundle
-  return $ foldl1 Pair elements
+  return $ Tuple elements
   <?> "tuple"
 
 -- Parses "()" as UnitValue
@@ -88,7 +88,7 @@ tensor :: Parser BundleType
 tensor =
   do
     elems <- m_parens $ m_commaSep1 parseBundleType
-    return $ foldl1 BTPair elems
+    return $ BTTensor elems
     <?> "tensor type"
 
 -- Parses "List[i] bt" as (BTList i bt)

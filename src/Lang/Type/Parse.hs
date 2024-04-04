@@ -94,7 +94,7 @@ tensor = do
   try $ do
     elems <- m_parens $ m_commaSep1 parseType
     unless (length elems >= 2) $ fail "Tensors must have at least two elements"
-    return $ foldl1 TPair elems
+    return $ TTensor elems
 
 -- Parses "List[i]" as a prefix operator t |-> TList i t
 listOperator :: Parser (Type -> Type)

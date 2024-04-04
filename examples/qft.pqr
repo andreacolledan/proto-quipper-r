@@ -7,7 +7,7 @@ in
 
 -- rotate @n @m (q,cs,c) applies a controlled rotation gate to q with control
 -- the magnitude of the rotation depends on n (the iteration of the qft) and m (the qubit being rotated)
-let rotate = @n. lift @m.\arg :: (Qubit, List[m] Qubit, Qubit).
+let rotate = @n. lift @m.\arg :: ((Qubit, List[m] Qubit), Qubit).
     let (qcs, c) = arg in
     let (q, cs) = qcs in
     let rotation = MakeCRGate @(n+1-m) in 

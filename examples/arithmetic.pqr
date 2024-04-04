@@ -21,7 +21,8 @@ in
 
 -- zips two lists of i qubits
 let qzip = lift @i . \(a,b) :: (List[i+1] Qubit, List[i+1] Qubit).
-  let qzipStep = lift @j . \(llist,reslist,relem) :: (List[i+1-j] Qubit, List[j] (Qubit,Qubit), Qubit).
+  let qzipStep = lift @j . \(acc,relem) :: ((List[i+1-j] Qubit, List[j] (Qubit,Qubit)), Qubit).
+    let (llist,reslist) = acc in
     let lelem:ls = (llist !:: List[i-j+1] Qubit) in -- we can assume this because zipstep is only called by fold, where j < i+1
     let reslist = (lelem, relem) : reslist in
     (ls, reslist)
@@ -31,7 +32,8 @@ in
 
 -- unzips a list of i pairs of qubits
 let qunzip = lift @i . \a :: List[i] (Qubit,Qubit).
-  let qunzipStep = lift @j . \(leftList, rightList, pair) :: ((List[j] Qubit, List[j] Qubit), (Qubit,Qubit)).
+  let qunzipStep = lift @j . \(acc, pair) :: ((List[j] Qubit, List[j] Qubit), (Qubit,Qubit)).
+    let (leftList, rightList) = acc in
     let (a,b) = pair in
     (a:leftList, b:rightList)
   in fold(qunzipStep, ([],[]), ((force revpair) @i) a)
@@ -73,19 +75,20 @@ let adderFirstPhase = ((lift @i . \(a,b) :: (List[i+1] Qubit, List[i+1] Qubit).
   let ab = ((force qzip) @i) (a,b) in
   let abc = ((force interleave) @ (i+1)) ab in --every first position is a, every second is b, every third is c
   let initialAcc = apply(QInit0,()) in
-  let step = lift @j . \(acc, elem) :: ((List[j] (Qubit,Qubit,Qubit), Qubit), (Qubit,Qubit,Qubit)) .
-    let (a,b,cnext) = elem in
+  let step = lift @j . \(acc, elem) :: ((List[j] ((Qubit,Qubit),Qubit), Qubit), ((Qubit,Qubit),Qubit)) .
+    let (ab,cnext) = elem in
+    let (a,b) = ab in
     let (reslist, c) = acc in
     let (c, a, b, cnext) = (force carry) (c, a, b, cnext) in
-    ((c, a, b) : reslist, cnext) in
+    (((c, a), b) : reslist, cnext) in
   let (reslist,clast) = fold(step, ([], initialAcc), abc) in
   (reslist,clast)) -- note that the output triples are reversed
-  :: !(i ->[0, 0] (List[i+1] Qubit, List[i+1] Qubit) -o[3*i+4,0] (List[i+1] (Qubit, Qubit, Qubit), Qubit))
+  :: !(i ->[0, 0] (List[i+1] Qubit, List[i+1] Qubit) -o[3*i+4,0] (List[i+1] ((Qubit, Qubit), Qubit), Qubit))
   ) 
 in
 --adderFirstPhase
 
-let adderSecondPhase = (lift @i . \(cfirst, abc) :: (Qubit,List[i] (Qubit,Qubit,Qubit)).
+let adderSecondPhase = (lift @i . \(cfirst, abc) :: (Qubit,List[i] ((Qubit,Qubit),Qubit)).
   --subcircuit used in the second phase: carry followed by sum, carry discarded:
   let sum = lift \(c,a,b,cnext) :: (Qubit,Qubit,Qubit,Qubit). 
       let (c,a,b,cnext) = (force carry) (c,a,b,cnext) in
@@ -94,13 +97,14 @@ let adderSecondPhase = (lift @i . \(cfirst, abc) :: (Qubit,List[i] (Qubit,Qubit,
       (c,a,b) in
   let csum = box[(Qubit,Qubit,Qubit,Qubit)] sum in
   --step function:
-  let step = lift @j. \(acc,elem) :: ((Qubit, (List[j] (Qubit,Qubit))),(Qubit,Qubit,Qubit)).
-    let (c,a,b) = elem in
+  let step = lift @j. \(acc,elem) :: ((Qubit, (List[j] (Qubit,Qubit))),((Qubit,Qubit),Qubit)).
+    let (ca,b) = elem in
+    let (c,a) = ca in
     let (cnext, reslist) = acc in
     let (c,a,b) = apply(csum, (c,a,b,cnext)) in
     (c, (a,b):reslist)
   in fold(step, (cfirst,[]), abc))
-  :: !(i ->[0, 0] (Qubit, List[i] (Qubit, Qubit, Qubit)) -o[3*i+1,0] (Qubit, List[i] (Qubit, Qubit)))
+  :: !(i ->[0, 0] (Qubit, List[i] ((Qubit, Qubit), Qubit)) -o[3*i+1,0] (Qubit, List[i] (Qubit, Qubit)))
 in
 --adderSecondPhase
 
@@ -108,7 +112,8 @@ in
 let adder = (lift @i . \(a,b) :: (List[i+1] Qubit, List[i+1] Qubit).
   let (intermediate,lsb) = ((force adderFirstPhase) @i) (a,b) in
   let lastblock:rest = intermediate in
-  let (c,a,b) = lastblock in
+  let (ca,b) = lastblock in
+  let (c,a) = ca in
   let (a,b) = (force cnot) a b in
   let (c,a,b) = (force sum) (c,a,b) in
   let (lastc, final) = (force adderSecondPhase @i) (c, rest) in

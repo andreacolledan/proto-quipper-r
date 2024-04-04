@@ -24,6 +24,9 @@ import qualified Data.HashSet as Set
 import PrettyPrinter
 import Index.Semantics
 import Control.Exception (assert)
+import Data.List (intercalate)
+import Control.Monad
+import Data.Foldable
 
 --- LANGUAGE ---------------------------------------------------------------------------------
 
@@ -43,7 +46,7 @@ instance Pretty WireType where
 data Bundle
   = UnitValue                   -- Unit value       : ()
   | Label LabelId               -- Label            : l, k, t, ...
-  | Pair Bundle Bundle          -- Pair             : (b1, b2)
+  | Tuple [Bundle]              -- Tuple             : (b1, b2, ...)
   | Nil                         -- Empty list       : []
   | Cons Bundle Bundle          -- Cons             : b1:b2
   deriving (Eq, Show)
@@ -51,7 +54,7 @@ data Bundle
 instance Pretty Bundle where
   pretty UnitValue = "()"
   pretty (Label id) = id
-  pretty (Pair b1 b2) = "(" ++ pretty b1 ++ ", " ++ pretty b2 ++ ")"
+  pretty (Tuple bs) = "(" ++ intercalate ", " (map pretty bs) ++ ")"
   pretty Nil = "[]"
   pretty (Cons b1 b2) = "(" ++ pretty b1 ++ ":" ++ pretty b2 ++ ")"
 
@@ -65,7 +68,7 @@ type BTVarId = String
 data BundleType
   = BTUnit
   | BTWire WireType
-  | BTPair BundleType BundleType
+  | BTTensor [BundleType]
   | BTList Index BundleType
   | BTVar BTVarId
   deriving (Eq, Show)
@@ -74,7 +77,7 @@ instance Pretty BundleType where
   pretty BTUnit = "()"
   pretty (BTWire Bit) = "Bit"
   pretty (BTWire Qubit) = "Qubit"
-  pretty (BTPair b1 b2) = "(" ++ pretty b1 ++ ", " ++ pretty b2 ++ ")"
+  pretty (BTTensor bs) = "(" ++ intercalate ", " (map pretty bs) ++ ")"
   pretty (BTList i b) = "List[" ++ pretty i ++ "] " ++ pretty b
   pretty (BTVar id) = id
 
@@ -83,13 +86,13 @@ instance HasIndex BundleType where
   iv :: BundleType -> Set.HashSet IndexVariableId
   iv BTUnit = Set.empty
   iv (BTWire _) = Set.empty
-  iv (BTPair b1 b2) = iv b1 `Set.union` iv b2
+  iv (BTTensor bs) = foldr (Set.union . iv) Set.empty bs
   iv (BTList i b) = assert (null (iv i)) $ iv i `Set.union` iv b
   iv (BTVar _) = Set.empty
   ifv :: BundleType -> Set.HashSet IndexVariableId
   ifv BTUnit = Set.empty
   ifv (BTWire _) = Set.empty
-  ifv (BTPair b1 b2) = ifv b1 `Set.union` ifv b2
+  ifv (BTTensor bs) = foldr (Set.union . ifv) Set.empty bs
   ifv (BTList i b) = assert (null (ifv i)) $ ifv i `Set.union` ifv b
   ifv (BTVar _) = Set.empty
   isub :: Index -> IndexVariableId -> BundleType -> BundleType
@@ -105,7 +108,7 @@ type BundleTypeSubstitution = Map.HashMap BTVarId BundleType
 btfv :: BundleType -> Set.HashSet BTVarId
 btfv BTUnit = Set.empty
 btfv (BTWire _) = Set.empty
-btfv (BTPair b1 b2) = btfv b1 `Set.union` btfv b2
+btfv (BTTensor bs) = foldr (Set.union . btfv) Set.empty bs
 btfv (BTList _ b) = btfv b
 btfv (BTVar id) = Set.singleton id
 
@@ -113,7 +116,7 @@ btfv (BTVar id) = Set.singleton id
 btsub :: BundleTypeSubstitution -> BundleType -> BundleType
 btsub _ BTUnit = BTUnit
 btsub _ (BTWire wt) = BTWire wt
-btsub sub (BTPair b1 b2) = BTPair (btsub sub b1) (btsub sub b2)
+btsub sub (BTTensor bs) = BTTensor (map (btsub sub) bs)
 btsub sub (BTList i b) = BTList i (btsub sub b)
 btsub sub bt@(BTVar id) = Map.findWithDefault bt id sub
 
@@ -124,10 +127,12 @@ mgbtu (BTVar id) b = assignVar id b
 mgbtu b (BTVar id) = assignVar id b
 mgbtu BTUnit BTUnit = return Map.empty
 mgbtu (BTWire wt1) (BTWire wt2) | wt1 == wt2 = return Map.empty
-mgbtu (BTPair b1 b2) (BTPair b1' b2') = do
-    sub1 <- mgbtu b1 b1'
-    sub2 <- mgbtu (btsub sub1 b2) (btsub sub1 b2')
-    return $ compose sub2 sub1
+mgbtu (BTTensor bts) (BTTensor bts')
+  | length bts == length bts' = do
+    when (length bts < 2) $ error "Internal error: Tensors must have at least two elements"
+    subs <- zipWithM mgbtu bts bts'
+    return $ fold subs
+  | otherwise = Nothing
 mgbtu (BTList _ b) (BTList _ b') = mgbtu b b'
 mgbtu _ _ = Nothing
 
@@ -160,7 +165,7 @@ instance Wide WireType where
 instance Wide BundleType where
   wireCount BTUnit = Number 0
   wireCount (BTWire wtype) = wireCount wtype
-  wireCount (BTPair b1 b2) = Plus (wireCount b1) (wireCount b2)
+  wireCount (BTTensor bs) = foldl Plus (Number 0) (wireCount <$> bs)
   wireCount (BTList i b) = Mult i (wireCount b)
   wireCount (BTVar _) = error "wireCount: encountered type variable"
 
@@ -178,6 +183,8 @@ instance (Traversable t, Wide a) => Wide (t a) where
 isBundleSubtype :: BundleType -> BundleType -> Bool
 isBundleSubtype BTUnit BTUnit = True
 isBundleSubtype (BTWire wtype1) (BTWire wtype2) = wtype1 == wtype2
-isBundleSubtype (BTPair b1 b2) (BTPair b1' b2') = isBundleSubtype b1 b1' && isBundleSubtype b2 b2'
+isBundleSubtype (BTTensor bs) (BTTensor bs')
+  | length bs == length bs' = and $ zipWith isBundleSubtype bs bs'
+  | otherwise = False
 isBundleSubtype (BTList i b) (BTList i' b') = checkClosedEq i i' && isBundleSubtype b' b
 isBundleSubtype _ _ = False

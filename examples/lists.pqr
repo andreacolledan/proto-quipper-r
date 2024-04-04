@@ -19,7 +19,8 @@ in
 
 -- zips two non-empty lists of i+1 qubits
 let qzip = lift @i . \(a,b) :: (List[i+1] Qubit, List[i+1] Qubit).
-  let zipStep = lift @j . \(llist,reslist,relem) :: (List[i+1-j] Qubit, List[j] (Qubit,Qubit), Qubit).
+  let zipStep = lift @j . \(acc,relem) :: ((List[i+1-j] Qubit, List[j] (Qubit,Qubit)), Qubit).
+    let (llist,reslist) = acc in
     let lelem:ls = llist !:: List[i-j+1] Qubit in -- we can assume this because zipstep is only called by fold, where j < i+1
     let reslist = (lelem, relem) : reslist in
     (ls, reslist)

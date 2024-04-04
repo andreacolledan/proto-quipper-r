@@ -21,6 +21,9 @@ import Lang.Unified.Pre
 import Control.Monad.Except
 import Solving.CVC5 (SolverHandle)
 import Control.Monad.IO.Class (liftIO)
+import PrettyPrinter
+import Data.List (intercalate)
+import Debug.Trace
 
 --- TYPE SYNTHESIS MODULE ---------------------------------------------------------------
 ---
@@ -46,13 +49,17 @@ inferWithIndices _ e@(ELabel id) = withScope e $ do
 inferWithIndices _ e@(EVar id) = withScope e $ do
   typ <- typingContextLookup id
   return (typ, wireCount typ)
--- PAIR
-inferWithIndices qfh e@(EPair e1 e2) = withScope e $ do
-  (typ1, i1) <- inferWithIndices qfh e1
-  ((typ2, i2), wc) <- withWireCount $ inferWithIndices qfh e2
-  -- max(i1 + wires in e2, i2 + #(typ1), #(typ1) + #(typ2)):
-  let k = Max (Plus i1 wc) (Max (Plus i2 (wireCount typ1)) (Plus (wireCount typ1) (wireCount typ2)))
-  return (TPair typ1 typ2, k)
+-- TUPLE
+inferWithIndices qfh e@(ETuple es) = withScope e $ do
+  when (length es < 2) $ error "Internal error: tuple with less than 2 elements escaped parser."
+  ress <- mapM (withWireCount . inferWithIndices qfh) es
+  let (infrs, wcs) = unzip ress
+  let (typs, is) = unzip infrs
+  let k = foldl1 Max [i `Plus` subsequentwc step wcs `Plus` previouswc step typs | (i, step) <- zip is [0 ..]]
+  return (TTensor typs, k)
+    where
+      subsequentwc step wcs = foldl Plus (Number 0) $ drop (step+1) wcs
+      previouswc step typs = foldl Plus (Number 0) $ take step $ map wireCount typs
 -- NIL
 inferWithIndices _ e@(ENil anno) = withScope e $ case anno of
   Just (TVar _) -> throwLocalError $ CannotSynthesizeType e
@@ -63,7 +70,7 @@ inferWithIndices _ e@(ENil anno) = withScope e $ case anno of
 -- ABSTRACTION
 inferWithIndices qfh e@(EAbs x annotyp e1) = withScope e $ do
   checkWellFormedness annotyp
-  ((typ, i), wc) <- withWireCount $ withBoundVariable x annotyp $ inferWithIndices qfh e1
+  ((typ, i), wc) <- withWireCount $ withBoundVariables [x] [annotyp] $ inferWithIndices qfh e1
   return (TArrow annotyp typ i wc, wc)
 -- LIFT
 inferWithIndices qfh e@(ELift e1) = withScope e $ do
@@ -84,7 +91,7 @@ inferWithIndices qfh e@(ECons e1 e2) = withScope e $ do
 -- FOLD
 inferWithIndices qfh e@(EFold e1 e2 e3) = withScope e $ do
   -- naming conventions are not satisfied here because the rule is HARD to parse
-  (steptyp@(TBang (TIForall id (TArrow (TPair acctyp elemtyp) acctyp' stepwidth o1) o2 o3)), i1) <- inferWithIndices qfh e1
+  (steptyp@(TBang (TIForall id (TArrow (TTensor [acctyp, elemtyp]) acctyp' stepwidth o1) o2 o3)), i1) <- inferWithIndices qfh e1
   unlessZero qfh o1 $ throwLocalError $ UnexpectedIndex (Number 0) o1
   unlessZero qfh o2 $ throwLocalError $ UnexpectedIndex (Number 0) o2
   unlessZero qfh o3 $ throwLocalError $ UnexpectedIndex (Number 0) o3
@@ -143,16 +150,18 @@ inferWithIndices qfh e@(EBox bt e1) = withScope e $ do
 -- LET-IN
 inferWithIndices qfh e@(ELet x e1 e2) = withScope e $ do
   (typ1, i1) <- inferWithIndices qfh e1
-  ((typ2, i2), wc) <- withWireCount $ withBoundVariable x typ1 $ inferWithIndices qfh e2
+  ((typ2, i2), wc) <- withWireCount $ withBoundVariables [x] [typ1] $ inferWithIndices qfh e2
   -- max(i1 + wires in e2, i2):
   let k = Max (Plus i1 wc) i2
   return (typ2, k)
 -- DESTRUCTURING LET-IN
-inferWithIndices qfh e@(EDest x y e1 e2) = withScope e $ do
-  (TPair typ2 typ3, i1) <- inferWithIndices qfh e1
-  ((typ4, i2), wc) <- withWireCount $ withBoundVariable x typ2 $ withBoundVariable y typ3 $ inferWithIndices qfh e2
+inferWithIndices qfh e@(EDest ids e1 e2) = withScope e $ do
+  (TTensor typs, i1) <- inferWithIndices qfh e1
+  -- traceM $ "INF ids:" ++ show ids ++ " typ1:" ++ pretty (TTensor typs) -- DEBUG
+  unless (length ids == length typs) $ error $ "Internal error: preprocessing stage should have ensured the same number of variables and types: '" ++ intercalate ", " ids ++ "' vs '" ++ intercalate ", " (pretty <$> typs) ++ "'"
+  ((typ, i2), wc) <- withWireCount $ withBoundVariables ids typs $ inferWithIndices qfh e2
   let k = Max (Plus i1 wc) i2
-  return (typ4, k)
+  return (typ, k)
 -- ANNOTATION
 inferWithIndices qfh e@(EAnno e1 annotyp) = withScope e $ do
   checkWellFormedness annotyp
@@ -180,7 +189,7 @@ inferWithIndices _ e@(EConst c) = withScope e $ return (typeOf c, Number 0)
 inferWithIndices qfh e@(ELetCons x y e1 e2) = withScope e $ do
   (typ1@(TList j typ2), i1) <- inferWithIndices qfh e1
   unlessLeq qfh (Number 1) j $ throwLocalError $ UnexpectedEmptyList e1 typ1
-  ((typ3, i2), wc) <- withWireCount $ withBoundVariable x typ2 $ withBoundVariable y (TList (Minus j (Number 1)) typ2) $ inferWithIndices qfh e2
+  ((typ3, i2), wc) <- withWireCount $ withBoundVariables [x,y] [typ2, TList (Minus j (Number 1)) typ2] $ inferWithIndices qfh e2
   let k = Max (Plus i1 wc) i2
   return (typ3, k)
 -- ASSUMPTION (unsafe)

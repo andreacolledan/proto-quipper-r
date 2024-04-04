@@ -4,13 +4,14 @@ import Index.AST
 import Index.Semantics
 import Lang.Type.AST
 import Solving.CVC5 (SolverHandle)
+import Control.Monad (zipWithM)
 
 
 -- | @simplifyType t@ returns type @t@ in which all index annotations have been simplified
 -- to a normal form according to 'simplifyIndex'.
 -- SolverHandle @qfh@ is used to interact with the SMT solver.
 simplifyType :: SolverHandle -> Type -> IO Type
-simplifyType qfh (TPair t1 t2) = TPair <$> simplifyType qfh t1 <*> simplifyType qfh t2
+simplifyType qfh (TTensor ts) = TTensor <$> mapM (simplifyType qfh) ts
 simplifyType qfh (TArrow t1 t2 i j) = TArrow <$> simplifyType qfh t1 <*> simplifyType qfh t2 <*> simplifyIndexStrong qfh i <*> simplifyIndexStrong qfh j
 simplifyType qfh (TBang t) = TBang <$> simplifyType qfh t
 simplifyType qfh (TList i t) = TList <$> simplifyIndexStrong qfh i <*> simplifyType qfh t
@@ -25,10 +26,11 @@ checkSubtype :: SolverHandle -> Type -> Type -> IO Bool
 checkSubtype _ TUnit TUnit = return True
 checkSubtype _ (TWire wtype1) (TWire wtype2) = return $ wtype1 == wtype2
 checkSubtype qfh (TBang t) (TBang t') = checkSubtype qfh t t'
-checkSubtype qfh (TPair t1 t2) (TPair t1' t2') = do
-  c1 <- checkSubtype qfh t1 t1'
-  c2 <- checkSubtype qfh t2 t2'
-  return $ c1 && c2
+checkSubtype qfh (TTensor ts) (TTensor ts')
+  | length ts == length ts' = do
+    cs <- zipWithM (checkSubtype qfh) ts ts'
+    return $ and cs
+  | otherwise = return False
 checkSubtype qfh (TArrow t1 t2 i j) (TArrow t1' t2' i' j') = do
   c1 <- checkSubtype qfh t1' t1
   c2 <- checkSubtype qfh t2 t2'

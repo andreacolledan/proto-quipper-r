@@ -12,6 +12,7 @@ import PrettyPrinter (Pretty(..))
 import Lang.Unified.Constant
 import Lang.Type.Unify (HasType (..), TypeSubstitution, toBundleTypeSubstitution)
 import qualified Data.HashSet as Set
+import Data.List (intercalate)
 
 --- PQR SYNTAX MODULE ---------------------------------------------------------------------------------------
 ---
@@ -26,7 +27,7 @@ data Expr =
   EUnit                                       -- Unit value               : ()
   | ELabel LabelId                            -- Label (internal)         :
   | EVar VariableId                           -- Variable                 : x, y, z, ...          
-  | EPair Expr Expr                           -- Pair                     : (e1, e2)
+  | ETuple [Expr]                             -- Pair                     : (e1, e2)
   | EAbs VariableId Type Expr                 -- Abstraction              : \x :: t . e
   | ELift Expr                                -- Lift                     : lift e
   | ENil (Maybe Type)                         -- Nil                      : []
@@ -38,7 +39,7 @@ data Expr =
   | EBox BundleType Expr                      -- Box                      : box :: bt e
   | EForce Expr                               -- Force                    : force e
   | ELet VariableId Expr Expr                 -- Let                      : let x = e1 in e2
-  | EDest VariableId VariableId Expr Expr     -- Dest                     : let (x, y) = e1 in e2
+  | EDest [VariableId] Expr Expr              -- Dest                     : let (x, y, ...) = e1 in e2
   | EAnno Expr Type                           -- Type annotation          : e :: t
   | EIAbs IndexVariableId Expr                -- Index Abstraction        : @i . e
   | EIApp Expr Index                          -- Index Application        : e @ i
@@ -51,7 +52,7 @@ instance Pretty Expr where
   pretty EUnit = "()"
   pretty (ELabel id) = id
   pretty (EVar id) = id
-  pretty (EPair e1 e2) = "(" ++ pretty e1 ++ ", " ++ pretty e2 ++ ")"
+  pretty (ETuple es) = "(" ++ intercalate ", " (map pretty es) ++ ")"
   pretty (ECirc {}) = "[Boxed Circuit]"
   pretty (EAbs x t e) = "(\\" ++ x ++ " :: " ++ pretty t ++ " . " ++ pretty e ++ ")" 
   pretty (EApp e1 e2) = "(" ++ pretty e1 ++ " " ++ pretty e2 ++ ")"
@@ -64,7 +65,7 @@ instance Pretty Expr where
   pretty (EApply e1 e2) = "apply(" ++ pretty e1 ++ ", " ++ pretty e2 ++ ")"
   pretty (EBox bt e) = "(box ::" ++ pretty bt ++ " " ++ pretty e ++ ")"
   pretty (ELet x e1 e2) = "(let " ++ x ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
-  pretty (EDest x y e1 e2) = "(let (" ++ x ++ ", " ++ y ++ ") = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
+  pretty (EDest xs e1 e2) = "(let (" ++ intercalate ", " xs ++ ") = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
   pretty (EIAbs id e) = "(@" ++ id ++ " . " ++ pretty e ++ ")"
   pretty (EIApp e i) = "(" ++ pretty e ++ " @ " ++ pretty i ++ ")"
   pretty (EConst c) = pretty c
@@ -76,7 +77,7 @@ instance HasType Expr where
   tfv EUnit = Set.empty
   tfv (ELabel _) = Set.empty
   tfv (EVar _) = Set.empty
-  tfv (EPair e1 e2) = tfv e1 `Set.union` tfv e2
+  tfv (ETuple es) = foldr (Set.union . tfv) Set.empty es
   tfv (ECirc {}) = Set.empty
   tfv (EAbs _ t e) = tfv t `Set.union` tfv e
   tfv (EApp e1 e2) = tfv e1 `Set.union` tfv e2
@@ -89,7 +90,7 @@ instance HasType Expr where
   tfv (EApply e1 e2) = tfv e1 `Set.union` tfv e2
   tfv (EBox bt e) = btfv bt `Set.union` tfv e
   tfv (ELet _ e1 e2) = tfv e1 `Set.union` tfv e2
-  tfv (EDest _ _ e1 e2) = tfv e1 `Set.union` tfv e2
+  tfv (EDest _ e1 e2) = tfv e1 `Set.union` tfv e2
   tfv (EIAbs _ e) = tfv e
   tfv (EIApp e _) = tfv e
   tfv (EConst _) = Set.empty
@@ -99,7 +100,7 @@ instance HasType Expr where
   tsub _ EUnit = EUnit
   tsub _ (ELabel id) = ELabel id
   tsub _ (EVar id) = EVar id
-  tsub sub (EPair e1 e2) = EPair (tsub sub e1) (tsub sub e2)
+  tsub sub (ETuple es) = ETuple (map (tsub sub) es)
   tsub _ e@(ECirc {}) = e -- bundle types do not contain type variables
   tsub sub (EAbs id t e) = EAbs id (tsub sub t) (tsub sub e)
   tsub sub (EApp e1 e2) = EApp (tsub sub e1) (tsub sub e2)
@@ -112,7 +113,7 @@ instance HasType Expr where
   tsub sub (EApply e1 e2) = EApply (tsub sub e1) (tsub sub e2)
   tsub sub (EBox bt e) = let sub' = toBundleTypeSubstitution sub in EBox (btsub sub' bt) (tsub sub e)
   tsub sub (ELet id e1 e2) = ELet id (tsub sub e1) (tsub sub e2)
-  tsub sub (EDest id1 id2 e1 e2) = EDest id1 id2 (tsub sub e1) (tsub sub e2)
+  tsub sub (EDest ids e1 e2) = EDest ids (tsub sub e1) (tsub sub e2)
   tsub sub (EIAbs id e) = EIAbs id (tsub sub e)
   tsub sub (EIApp e i) = EIApp (tsub sub e) i
   tsub _ e@(EConst _) = e

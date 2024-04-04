@@ -21,7 +21,7 @@ module Lang.Unified.Derivation
     checkWellFormedness,
     makeFreshVariable,
     unify,
-    withBoundVariable,
+    withBoundVariables,
     withWireCount,
     withNonLinearContext,
     withBoundIndexVariable,
@@ -51,6 +51,7 @@ import Control.Monad.Identity
 import Lang.Type.Semantics (checkSubtype)
 import Index.Semantics
 import Solving.CVC5 (SolverHandle)
+import Control.Monad.Extra (zipWithM_)
 
 --- TYPE DERIVATIONS MODULE --------------------------------------------------------------
 ---
@@ -196,7 +197,7 @@ printSurroundings (e : es) = "\n* While typing " ++ pretty e ++ go es 3
 printConstructor :: Type -> String
 printConstructor TUnit = "unit type"
 printConstructor (TWire {}) = "wire type"
-printConstructor (TPair {}) = "tensor type"
+printConstructor (TTensor {}) = "tensor type"
 printConstructor (TCirc {}) = "circuit type"
 printConstructor (TArrow {}) = "arrow type"
 printConstructor (TBang {}) = "bang type"
@@ -294,12 +295,11 @@ unify e t1 t2 = case mgtu t1 t2 of
 
 --- DERIVATION COMBINATORS ------------------------------------------------------
 
--- | @withBoundVariable x typ der@ is derivation @der@ in which variable @x@ is bound to type @typ@.
-withBoundVariable :: VariableId -> Type -> TypeDerivation a -> TypeDerivation a
-withBoundVariable x typ der = do
-  bindVariable x typ
+withBoundVariables :: [VariableId] -> [Type] -> TypeDerivation a -> TypeDerivation a
+withBoundVariables ids typs der = do
+  zipWithM_ bindVariable ids typs
   outcome <- der
-  unbindVariable x -- this throws an error if x is linear and der does not consume it
+  mapM_ unbindVariable (reverse ids) -- this throws an error if x is linear and der does not consume it
   return outcome
   where
     bindVariable :: VariableId -> Type -> TypeDerivation ()
