@@ -4,7 +4,7 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
 module Lang.Unified.Parse
-  ( parseProgram,
+  ( parseProgram
   )
 where
 
@@ -20,6 +20,10 @@ import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
 import Control.Monad
+import Lang.Unified.Pattern
+import PrettyPrinter
+import Data.List (intercalate)
+import Lang.Type.AST
 
 --- PAPER LANGUAGE PARSER ---------------------------------------------------------------------------------
 ---
@@ -59,7 +63,7 @@ unifiedTokenParser@TokenParser
     braces = m_braces
   } = makeTokenParser unifiedLang
 
---- ELEMENTARY PARSERS -----------------------------------------------------------------------------------
+--- ELEMENTARY EXPRESSION PARSERS -----------------------------------------------------------------------------------
 
 -- parse "()" as EUnit
 unitValue :: Parser Expr
@@ -81,7 +85,7 @@ nil =
 variable :: Parser Expr
 variable = try $ do
   name@(first : _) <- m_identifier
-  if isLower first
+  if not (isUpper first) -- accepts "_", unlike isLower
     then return $ EVar name
     else
       fail "Variable names must start with a lowercase letter"
@@ -109,38 +113,22 @@ constant = try $ do
     _ -> fail $ "Unrecognized constant \"" ++ name ++ "\""
     <?> "constant"
 
--- parse "\x :: t . e" as the (EAbs x t e)
+-- parse "\p :: t . e" as the (EAbs p t e)
 lambda :: Parser Expr
 lambda =
   do
-    name <- try $ do
+    p <- try $ do
       m_reservedOp "\\"
-      m_identifier
+      parsePattern
     m_reservedOp "::"
     typ <- parseType
     m_reservedOp "."
     e <- parseExpr
-    return $ EAbs name typ e
+    return $ EAbs p typ e
     <?> "abstraction"
 
-lambdaDest :: Parser Expr
-lambdaDest = do
-  try $ do
-    m_reservedOp "\\"
-    m_symbol "("
-  elems <- m_commaSep1 m_identifier
-  m_symbol ")"
-  when (length elems < 2) $ fail "Destructuring lambda must bind at least two variables"
-  m_reservedOp "::"
-  typ <- parseType
-  m_reservedOp "."
-  e <- parseExpr
-  return $ EAbs "#tmp#" typ $ EDest elems (EVar "#tmp#") e
-  
 
-
--- parse "(e1, e2, ..., en)" as (EPair (EPair ... (EPair e1 e2) ... en)
--- Sugar: n-tuples are desugared left-associatively into nested pairs
+-- parse "(e1, e2, ..., en)" as (ETuple [e1, e2, ..., en])
 tuple :: Parser Expr
 tuple =
   do
@@ -151,35 +139,18 @@ tuple =
     return $ ETuple elems
     <?> "tuple"
 
--- parse "let (x,y) = e1 in e2" as (EDest x y e1 e2)
--- Sugar: let (x0,x1,...,xn) = e1 in e2 is desugared into let (tmp,xn) = e1 in let (tmp,xn-1) = tmp in ... let (x0,x1) = tmp in e2
-dest :: Parser Expr
-dest =
-  do
-    try $ do
-      m_reserved "let"
-      m_symbol "("
-    elems <- m_commaSep1 m_identifier
-    when (length elems < 2) $ fail "Destructuring let must bind at least two variables"
-    m_symbol ")"
-    m_reservedOp "="
-    e1 <- parseExpr
-    m_reserved "in"
-    e2 <- parseExpr
-    return $ EDest elems e1 e2
-
--- parse "let x = e1 in e2" as (ELet x e1 e2)
+-- parse "let p = e1 in e2" as (ELet p e1 e2)
 letIn :: Parser Expr
 letIn =
   do
-    x <- try $ do
+    p <- try $ do
       m_reserved "let"
-      m_identifier
+      parsePattern
     m_reservedOp "="
     e1 <- parseExpr
     m_reserved "in"
     e2 <- parseExpr
-    return $ ELet x e1 e2
+    return $ ELet p e1 e2
     <?> "let-in"
 
 -- parse "[e1, e2, ..., en]" as (ECons e1 (ECons ... (ECons en ENil) ...))
@@ -191,24 +162,7 @@ list =
     return $ foldr ECons (ENil Nothing) elems
     <?> "list literal"
 
--- parse "let x:xs = e1 in e2" as (ELetCons x xs e1 e2)
-letCons :: Parser Expr
-letCons =
-  do
-    x <- try $ do
-      m_reserved "let"
-      x <- m_identifier
-      m_reservedOp ":"
-      return x
-    xs <- m_identifier
-    m_reservedOp "="
-    e1 <- parseExpr
-    m_reserved "in"
-    e2 <- parseExpr
-    return $ ELetCons x xs e1 e2
-    <?> "let-cons"
-
--- parse "fold(e1, e2)" as (EFold e1 e2)
+-- parse "fold(e1, e2, e3)" as (EFold e1 e2 e3)
 fold :: Parser Expr
 fold =
   do
@@ -223,7 +177,7 @@ fold =
     return $ EFold e1 e2 e3
     <?> "fold"
 
--- parse "apply(e1,e2)" as (EApply e1 e2)
+-- parse "apply(e1, e2)" as (EApply e1 e2)
 apply :: Parser Expr
 apply =
   do
@@ -249,9 +203,33 @@ iabs =
     return $ EIAbs i e
     <?> "index abstraction"
 
+--- TOP-LEVEL DECLARATION PARSERS -----------------------------------------------------------------------------------
 
---- OPERATOR PARSERS -----------------------------------------------------------------------------------
+-- parse "f :: A1 -o A2 -o ... -o An -o B \n f p1 p2 ... pn = e"
+-- as ELet (PVar f) (EAnno (EAbs p1 A1 (EAbs p2 A2 ... (EAbs pn An e))) (TArrow A1 (TArrow A2 ... (TArrow An B) ...))
+tld :: Parser (Expr -> Expr)
+tld = do
+  decName <- m_identifier
+  m_reservedOp "::"
+  decType <- parseType
+  -- endOfLine
+  defName <- m_identifier
+  unless (decName == defName) $ fail $ "Declaration name '" ++ decName ++ "' does not match definition name '" ++ defName ++ "'"
+  args <- manyTill parsePattern (m_reservedOp "=")
+  let argTypes = stripTypes decType
+  unless (length args <= length argTypes) $ fail $ "Too many arguments in the definition of '" ++ defName ++ "': " ++ intercalate ", " (map pretty $ drop (length argTypes) args)
+  body <- parseExpr
+  -- endOfLine
+  let abstractions = zipWith EAbs args argTypes
+  let function = foldr ($) body abstractions
+  return $ ELet (PVar defName) (EAnno function decType)
+  <?> "top-level declaration"
+  where stripTypes (TArrow int outt _ _) = int : stripTypes outt
+        stripTypes _ = []
 
+--- EXPRESSION OPERATOR PARSERS -----------------------------------------------------------------------------------
+
+-- parse "force" as the prefix operator EForce, possibly applied multiple times
 manyForceOp :: Parser (Expr -> Expr)
 manyForceOp = foldr1 (.) <$> many1 forceOp
   where
@@ -268,7 +246,18 @@ appOp = m_whiteSpace >> return EApp <?> "application"
 dollarOp :: Parser (Expr -> Expr -> Expr)
 dollarOp = m_reservedOp "$" >> return EApp <?> "application"
 
--- parse "!:: t" as the postfix operator (\e -> EAssume e t)
+-- parse ":: t" as the postfix operator (\e -> EAnno e t), possibly applied multiple times
+manyAnnOp :: Parser (Expr -> Expr)
+manyAnnOp = foldr1 (.) <$> many1 annOp
+  where
+    annOp :: Parser (Expr -> Expr)
+    annOp = do
+      m_reservedOp "::"
+      t <- parseType
+      return $ flip EAnno t
+      <?> "type annotation"
+
+-- parse "!:: t" as the postfix operator (\e -> EAssume e t), possibly applied multiple times
 manyAssumeOp :: Parser (Expr -> Expr)
 manyAssumeOp = foldr1 (.) <$> many1 assumeOp
   where
@@ -280,7 +269,7 @@ manyAssumeOp = foldr1 (.) <$> many1 assumeOp
         return $ flip EAssume t
         <?> "type assumption"
 
--- parse "@ i" as the postfix operator (\e -> EIApp e i)
+-- parse "@ i" as the postfix operator (\e -> EIApp e i), possibly applied multiple times
 manyIappOp :: Parser (Expr -> Expr)
 manyIappOp = foldr1 (.) <$> many1 iappOp
   where
@@ -297,18 +286,7 @@ manyIappOp = foldr1 (.) <$> many1 iappOp
 consOp :: Parser (Expr -> Expr -> Expr)
 consOp = m_reservedOp ":" >> return ECons <?> "cons operator"
 
--- parse ":: t" as the postfix operator (\e -> EAnno e t)
-manyAnnOp :: Parser (Expr -> Expr)
-manyAnnOp = foldr1 (.) <$> many1 annOp
-  where
-    annOp :: Parser (Expr -> Expr)
-    annOp = do
-      m_reservedOp "::"
-      t <- parseType
-      return $ flip EAnno t
-      <?> "type annotation"
-
--- parse "lift e" as (ELift e)
+-- parse "lift" as the prefix operator ELift, possibly applied multiple times
 manyLiftOp :: Parser (Expr -> Expr)
 manyLiftOp = foldr1 (.) <$> many1 liftOp
   where
@@ -318,7 +296,7 @@ manyLiftOp = foldr1 (.) <$> many1 liftOp
         return ELift
         <?> "lift"
 
--- parse "box[bt] e" as (EBox bt e)
+-- parse "box[bt]" as the prefix operator (EBox bt), possibly applied multiple times
 manyBoxOp :: Parser (Expr -> Expr)
 manyBoxOp = foldr1 (.) <$> many1 boxOp
   where
@@ -331,9 +309,48 @@ manyBoxOp = foldr1 (.) <$> many1 boxOp
         <?> "box"
 
 
+--- PATTERN AND PATTERN OPERATOR PARSERS -----------------------------------------------------------------------------------
+
+-- parse a lowercase identifier as a variable pattern
+pvariable :: Parser Pattern
+pvariable = try $ do
+  name@(first : _) <- m_identifier
+  if not (isUpper first) -- accepts "_", unlike isLower
+    then return $ PVar name
+    else
+      fail "Variable names must start with a lowercase letter"
+        <?> "variable pattern"
+
+-- parse (p1, p2, ..., pn) as a pattern (PTuple [p1, p2, ..., pn])
+ptuple :: Parser Pattern
+ptuple =
+  do
+    elems <- try $ do
+      elems <- m_parens $ m_commaSep1 parsePattern
+      when (length elems < 2) $ fail "Tuple patterns must have at least two elements"
+      return elems
+    return $ PTuple elems
+    <?> "tuple pattern"
+
+-- parse ":" as the infix operator PCons
+pconsOp :: Parser (Pattern -> Pattern -> Pattern)
+pconsOp = m_reservedOp ":" >> return PCons <?> "cons operator"
 
 --- TOP-LEVEL PARSERS -----------------------------------------------------------------------------------
 
+-- parse a destructuring pattern
+parsePattern :: Parser Pattern
+parsePattern = let
+  operatorTable =
+    [ [Infix pconsOp AssocRight]
+    ]
+  simplePattern =
+    pvariable
+    <|> ptuple
+    <|> m_parens parsePattern
+  in buildExpressionParser operatorTable simplePattern <?> "pattern"
+      
+-- parse a PQR expression whose syntactic bounds are unambiguous
 delimitedExpr :: Parser Expr
 delimitedExpr =
   unitValue
@@ -346,7 +363,7 @@ delimitedExpr =
     <|> constant
     <|> variable
 
--- parse a PQR unified expression
+-- parse a PQR expression
 parseExpr :: Parser Expr
 parseExpr =
   let operatorTable =
@@ -363,14 +380,11 @@ parseExpr =
       simpleExpr =
         delimitedExpr
           <|> lambda
-          <|> lambdaDest
           <|> iabs
-          <|> dest
-          <|> letCons
           <|> letIn
    in buildExpressionParser operatorTable simpleExpr <?> "expression"
 
--- parse a PQR unified program
+-- parse a PQR program: an expression between optional leading whitespace and EOF
 parseProgram :: Parser Expr
 parseProgram =
   do

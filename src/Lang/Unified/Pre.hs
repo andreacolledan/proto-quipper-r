@@ -16,9 +16,6 @@ import Lang.Unified.Derivation
 import Control.Monad.Error.Class
 import Data.Foldable
 import Control.Monad.Extra
-import Debug.Trace (traceShowId, traceShowM, traceM)
-import Data.List (intercalate)
-import PrettyPrinter
 
 --- PREPROCESSING MODULE ------------------------------------------------------------------------------------
 ---
@@ -58,9 +55,10 @@ inferBaseType e@(ENil _) = withScope e $ do
   typ <- TVar <$> makeFreshVariable "a"
   return (ENil (Just typ), TList irr typ, mempty)
 -- ABSTRACTION
-inferBaseType e@(EAbs x annotyp e1) = withScope e $ do
-  (e1', typ1, sub1) <- withBoundVariables [x] [annotyp] $ inferBaseType e1
-  return (EAbs x (tsub sub1 annotyp) e1', tsub sub1 (TArrow annotyp typ1 irr irr), sub1)
+inferBaseType e@(EAbs p annotyp e1) = withScope e $ do
+  (ids, annotyps) <- makePatternBindings Nothing p annotyp
+  (e1', typ1, sub1) <- withBoundVariables ids annotyps $ inferBaseType e1
+  return (EAbs p (tsub sub1 annotyp) e1', tsub sub1 (TArrow annotyp typ1 irr irr), sub1)
 -- LIFT
 inferBaseType e@(ELift e1) = withScope e $ do
   (e1', typ1, sub1) <- withNonLinearContext $ inferBaseType e1
@@ -73,21 +71,22 @@ inferBaseType e@(ECons e1 e2) = withScope e $ do
   let sub = sub3 <> sub2 <> sub1
   return (tsub sub (ECons e1' e2'), TList irr (tsub sub typ1), sub)
 -- LET-IN
-inferBaseType e@(ELet x e1 e2) = withScope e $ do
+inferBaseType e@(ELet p e1 e2) = withScope e $ do
   (e1', typ1, sub1) <- inferBaseType e1
-  (e2', typ2, sub2) <- withBoundVariables [x] [typ1] $ inferBaseType e2
+  (ids, typs) <- makePatternBindings Nothing p typ1
+  (e2', typ2, sub2) <- withBoundVariables ids typs $ inferBaseType e2
   let sub = sub2 <> sub1
-  return (tsub sub (ELet x e1' e2'), tsub sub typ2, sub)
+  return (tsub sub (ELet p e1' e2'), tsub sub typ2, sub)
 -- DESTRUCTURING LET-IN
-inferBaseType e@(EDest ids e1 e2) = withScope e $ do
-  (e1', typ1, sub1) <- inferBaseType e1
-  typs <- replicateM (length ids) $ TVar <$> makeFreshVariable "a"
-  sub2 <- unify e1 typ1 (TTensor typs)
-  let sub = sub2 <> sub1
-  -- traceM $ "PRE ids:" ++ show ids ++ " typ1:" ++ pretty (tsub sub typ1) -- DEBUG
-  (e2', typ2, sub3) <- withBoundVariables ids (tsub sub <$> typs) $ inferBaseType e2
-  let sub = sub3 <> sub2 <> sub1
-  return (tsub sub (EDest ids e1' e2'), tsub sub typ2, sub)
+-- inferBaseType e@(EDest ids e1 e2) = withScope e $ do
+--   (e1', typ1, sub1) <- inferBaseType e1
+--   typs <- replicateM (length ids) $ TVar <$> makeFreshVariable "a"
+--   sub2 <- unify e1 typ1 (TTensor typs)
+--   let sub = sub2 <> sub1
+--   -- traceM $ "PRE ids:" ++ show ids ++ " typ1:" ++ pretty (tsub sub typ1) -- DEBUG
+--   (e2', typ2, sub3) <- withBoundVariables ids (tsub sub <$> typs) $ inferBaseType e2
+--   let sub = sub3 <> sub2 <> sub1
+--   return (tsub sub (EDest ids e1' e2'), tsub sub typ2, sub)
 -- ANNOTATION
 inferBaseType e@(EAnno e1 annotyp) = withScope e $ do
   (e1', typ1, sub1) <- inferBaseType e1
@@ -132,17 +131,17 @@ inferBaseType e@(EBox annobt e1) = withScope e $ do
     Just btc -> return (tsub sub (EBox annobt e1'), tsub sub (TCirc irr annobt btc), sub)
     _ -> throwLocalError $ UnboxableType e1 (tsub sub typ1')
 -- LET-CONS
-inferBaseType e@(ELetCons x y e1 e2) = withScope e $ do
-  (e1', typ1, sub1) <- inferBaseType e1
-  typ1' <- TVar <$> makeFreshVariable "a"
-  sub2 <- unify e1 typ1 (TList irr typ1')
-  let sub = sub2 <> sub1
-  -- traceM $ "PRE ids:" ++ show [x,y] ++ " typ1:" ++ pretty (tsub sub typ1) --DEBUG
-  (e2', typ2, sub3) <-
-    withBoundVariables [x,y] [tsub sub typ1',tsub sub (TList irr typ1')] $
-        inferBaseType (tsub sub2 e2)
-  let sub = sub3 <> sub2 <> sub1
-  return (tsub sub (ELetCons x y e1' e2'), tsub sub typ2, sub)
+-- inferBaseType e@(ELetCons x y e1 e2) = withScope e $ do
+--   (e1', typ1, sub1) <- inferBaseType e1
+--   typ1' <- TVar <$> makeFreshVariable "a"
+--   sub2 <- unify e1 typ1 (TList irr typ1')
+--   let sub = sub2 <> sub1
+--   -- traceM $ "PRE ids:" ++ show [x,y] ++ " typ1:" ++ pretty (tsub sub typ1) --DEBUG
+--   (e2', typ2, sub3) <-
+--     withBoundVariables [x,y] [tsub sub typ1',tsub sub (TList irr typ1')] $
+--         inferBaseType (tsub sub2 e2)
+--   let sub = sub3 <> sub2 <> sub1
+--   return (tsub sub (ELetCons x y e1' e2'), tsub sub typ2, sub)
 -- FOLD
 inferBaseType e@(EFold e1 e2 e3) = withScope e $ do
   (e1', typ1, sub1) <- inferBaseType e1

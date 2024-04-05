@@ -1,29 +1,24 @@
 -- rev @i list reverses a list of qubits of length i
-let rev = lift @i.\list::List[i] Qubit.
+let rev = lift @i. \list::List[i] Qubit.
   let revStep = lift @j.\acc::(List[j] Qubit, Qubit).
     let (qs, q) = acc in q:qs
   in fold(revStep, [], list)
 in
 
--- rotate @n @m (q,cs,c) applies a controlled rotation gate to q with control
+-- rotate @n @m ((q, cs), c) applies a controlled rotation gate to q with control
 -- the magnitude of the rotation depends on n (the iteration of the qft) and m (the qubit being rotated)
-let rotate = @n. lift @m.\arg :: ((Qubit, List[m] Qubit), Qubit).
-    let (qcs, c) = arg in
-    let (q, cs) = qcs in
+let rotate = @n. lift @m.\((q, cs), c) :: ((Qubit, List[m] Qubit), Qubit).
     let rotation = MakeCRGate @(n+1-m) in 
-    let qc = apply(rotation, (q,c)) in
-    let (q, c) = qc in
+    let (q, c) = apply(rotation, (q,c)) in
     (q, c:cs)
 in
 
 -- qftStep @j (qs, q) applies the j-th iteration of the qft algorithm to the qubit q
 -- which consists of j rotations with target j and control each of the quibits in qs
 -- followed by a hadamard gate on j
-let qftStep = lift @j.\arg :: (List[j] Qubit, Qubit).
-    let (qs, q) = arg in
+let qftStep = lift @j.\(qs, q) :: (List[j] Qubit, Qubit).
     let revqs = ((force rev) @j) qs in
-    let qqs = fold(rotate @j, (q, []), revqs) in
-    let (q, qs) = qqs in
+    let (q, qs) = fold(rotate @j, (q, []), revqs) in
     let q = apply(Hadamard,q) in
     q:qs
 in

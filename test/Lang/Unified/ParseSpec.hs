@@ -8,6 +8,7 @@ import Lang.Unified.Parse
 import Test.Hspec
 import Text.Parsec
 import Lang.Unified.Constant
+import Lang.Unified.Pattern
 
 spec :: Spec
 spec = do
@@ -21,11 +22,11 @@ spec = do
     it "parses an uppercase identifier as a constant" $ do
       parse parseProgram "" "Hadamard" `shouldBe` Right (EConst Hadamard)
     it "parses '\\x :: () . (x,x)' as an abstraction" $ do
-      parse parseProgram "" "\\x :: () . (x,x)" `shouldBe` Right (EAbs "x" TUnit (ETuple [EVar "x", EVar "x"]))
+      parse parseProgram "" "\\x :: () . (x,x)" `shouldBe` Right (EAbs (PVar "x") TUnit (ETuple [EVar "x", EVar "x"]))
     it "parses 'let x = () in x' as a let binding" $ do
-      parse parseProgram "" "let x = () in x" `shouldBe` Right (ELet "x" EUnit (EVar "x"))
+      parse parseProgram "" "let x = () in x" `shouldBe` Right (ELet (PVar "x") EUnit (EVar "x"))
     it "parses 'let (x,y) = ((),[]) in ([],())' as a destructuring let" $ do
-      parse parseProgram "" "let (x,y) = ((),[]) in ([],())" `shouldBe` Right (EDest ["x", "y"] (ETuple [EUnit, ENil Nothing]) (ETuple [ENil Nothing, EUnit]))
+      parse parseProgram "" "let (x,y) = ((),[]) in ([],())" `shouldBe` Right (ELet (PTuple [PVar "x", PVar "y"]) (ETuple [EUnit, ENil Nothing]) (ETuple [ENil Nothing, EUnit]))
     it "parses 'apply(c,l)' as circuit application" $ do
       parse parseProgram "" "apply(c,l)" `shouldBe` Right (EApply (EVar "c") (EVar "l"))
     it "parses 'lift e' as lifting" $ do
@@ -55,18 +56,18 @@ spec = do
     it "cons'ing is right associative" $ do
       parse parseProgram "" "x:y:z:[]" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ECons (EVar "z") (ENil Nothing))))
     it "nested built-in operators are right associative" $ do
-      parse parseProgram "" "box[Qubit] let f = force x in lift f" `shouldBe` Right (EBox (BTWire Qubit) (ELet "f" (EForce (EVar "x")) (ELift (EVar "f"))))
+      parse parseProgram "" "box[Qubit] let f = force x in lift f" `shouldBe` Right (EBox (BTWire Qubit) (ELet (PVar "f") (EForce (EVar "x")) (ELift (EVar "f"))))
   describe "precedence" $ do
     it "application has precedence over abstraction" $ do
-      parse parseProgram "" "\\x :: () . x y" `shouldBe` Right (EAbs "x" TUnit (EApp (EVar "x") (EVar "y")))
+      parse parseProgram "" "\\x :: () . x y" `shouldBe` Right (EAbs (PVar "x") TUnit (EApp (EVar "x") (EVar "y")))
     it "cons'ing has precedence over abstraction" $ do
-      parse parseProgram "" "\\x :: () . x:y:[]" `shouldBe` Right (EAbs "x" TUnit (ECons (EVar "x") (ECons (EVar "y") (ENil Nothing))))
+      parse parseProgram "" "\\x :: () . x:y:[]" `shouldBe` Right (EAbs (PVar "x") TUnit (ECons (EVar "x") (ECons (EVar "y") (ENil Nothing))))
     it "application has precedence over cons'ing" $ do
       parse parseProgram "" "f x:y:[]" `shouldBe` Right (ECons (EApp (EVar "f") (EVar "x")) (ECons (EVar "y") (ENil Nothing)))
     it "annotation has precedence over abstraction" $ do
-      parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () -o[1,0] Qubit" `shouldBe` Right (EAbs "x" TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
+      parse parseProgram "" "\\x :: () . apply(QInit0,x) :: () -o[1,0] Qubit" `shouldBe` Right (EAbs (PVar "x") TUnit (EAnno (EApply (EConst QInit0) (EVar "x")) (TArrow TUnit (TWire Qubit) (Number 1) (Number 0))))
     it "annotation has precedence over let" $ do
-      parse parseProgram "" "let x = () in x :: ()" `shouldBe` Right (ELet "x" EUnit (EAnno (EVar "x") TUnit))
+      parse parseProgram "" "let x = () in x :: ()" `shouldBe` Right (ELet (PVar "x") EUnit (EAnno (EVar "x") TUnit))
     it "application has precedence over annotation" $ do
       parse parseProgram "" "f x :: ()" `shouldBe` Right (EAnno (EApp (EVar "f") (EVar "x")) TUnit)
     it "cons has precedence over annotation" $ do
@@ -77,3 +78,6 @@ spec = do
       parse parseProgram "" "(f x @i) y" `shouldBe` Right (EApp (EIApp (EApp (EVar "f") (EVar "x")) (IndexVariable "i")) (EVar "y"))
     it "cons has precedence over index application" $ do
       parse parseProgram "" "x:y:xs @i" `shouldBe` Right (EIApp (ECons (EVar "x") (ECons (EVar "y") (EVar "xs"))) (IndexVariable "i"))
+  -- describe "top level declarations" $ do
+  --   it "parses 'f :: Qubit -o[1,0] Qubit \nf q = q \n***\nf' correctly" $ do
+  --     parse parseProgram "" "f :: Qubit -o[1,0] Qubit \nf q = q \n***\nf" `shouldBe` Right (ELet (PVar "f") (EAnno (EAbs (PVar "q") (TWire Qubit) (EVar "q")) (TArrow (TWire Qubit) (TWire Qubit) (Number 1) (Number 0))) (EVar "f"))

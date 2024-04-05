@@ -29,11 +29,12 @@ module Lang.Unified.Derivation
     unlessSubtype,
     unlessEq,
     unlessLeq,
-    unlessZero
+    unlessZero,
+    makePatternBindings
   )
 where
 
-import Bundle.AST
+import Bundle.AST ( Wide(..), Bundle, WireType, LabelId )
 import Bundle.Infer
 import Circuit
 import Control.Monad (unless, when)
@@ -52,6 +53,8 @@ import Lang.Type.Semantics (checkSubtype)
 import Index.Semantics
 import Solving.CVC5 (SolverHandle)
 import Control.Monad.Extra (zipWithM_)
+import Lang.Unified.Pattern
+import Control.Monad (zipWithM)
 
 --- TYPE DERIVATIONS MODULE --------------------------------------------------------------
 ---
@@ -142,6 +145,9 @@ data TypeError
   | UnexpectedWidthAnnotation Expr Index Index [Expr]
   | ExpectedBundleType Expr Type [Expr]
   | CannotSynthesizeType Expr [Expr]
+  | -- Pattern errors
+    PatternMismatch Pattern Type [Expr]
+  | ConsEmptyList Pattern Type [Expr]
   | -- Linearity errors
     UnusedLinearVariable VariableId [Expr]
   | OverusedLinearVariable VariableId [Expr]
@@ -292,6 +298,28 @@ unify e t1 t2 = case mgtu t1 t2 of
     substituteInEnvironment sub
     return sub
   Nothing -> throwLocalError $ UnexpectedType e t2 t1
+
+makePatternBindings :: Maybe SolverHandle -> Pattern -> Type -> TypeDerivation ([VariableId], [Type])
+makePatternBindings mqfh pat typ = unzip <$> go mqfh pat typ
+  where
+    go :: Maybe SolverHandle -> Pattern -> Type -> TypeDerivation [(VariableId, Type)]
+    go _ (PVar id) typ = return [(id, typ)]
+    go mqfh (PTuple ps) (TTensor ts) = concat <$> zipWithM (go mqfh) ps ts
+    go (Just qfh) p@(PCons p1 p2) typ@(TList i typ1) = do
+      -- used during inference with indices, check that list is not empty
+      unlessLeq qfh (Number 1) i $ throwLocalError $ ConsEmptyList p typ
+      bindings1 <- go mqfh p1 typ1
+      bindings2 <- go mqfh p2 (TList (Minus i (Number 1)) typ1)
+      return $ bindings1 ++ bindings2
+    go Nothing (PCons p1 p2) (TList i typ1) = do
+      -- used during base inference without indices, ignore list length
+      bindings1 <- go mqfh p1 typ1
+      bindings2 <- go mqfh p2 (TList i typ1)
+      return $ bindings1 ++ bindings2
+        
+    go _ p t = throwLocalError $ PatternMismatch p t
+
+
 
 --- DERIVATION COMBINATORS ------------------------------------------------------
 

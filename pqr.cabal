@@ -41,6 +41,7 @@ library
       Lang.Unified.Derivation
       Lang.Unified.Infer
       Lang.Unified.Parse
+      Lang.Unified.Pattern
       Lang.Unified.Pre
       PrettyPrinter
       Solving.CVC5

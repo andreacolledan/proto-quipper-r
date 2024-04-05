@@ -21,9 +21,6 @@ import Lang.Unified.Pre
 import Control.Monad.Except
 import Solving.CVC5 (SolverHandle)
 import Control.Monad.IO.Class (liftIO)
-import PrettyPrinter
-import Data.List (intercalate)
-import Debug.Trace
 
 --- TYPE SYNTHESIS MODULE ---------------------------------------------------------------
 ---
@@ -68,9 +65,10 @@ inferWithIndices _ e@(ENil anno) = withScope e $ case anno of
     return (TList (Number 0) typ, Number 0)
   Nothing -> error "Internal error: nil without type annotation"
 -- ABSTRACTION
-inferWithIndices qfh e@(EAbs x annotyp e1) = withScope e $ do
+inferWithIndices qfh e@(EAbs p annotyp e1) = withScope e $ do
   checkWellFormedness annotyp
-  ((typ, i), wc) <- withWireCount $ withBoundVariables [x] [annotyp] $ inferWithIndices qfh e1
+  (ids, annotyps) <- makePatternBindings (Just qfh) p annotyp
+  ((typ, i), wc) <- withWireCount $ withBoundVariables ids annotyps $ inferWithIndices qfh e1
   return (TArrow annotyp typ i wc, wc)
 -- LIFT
 inferWithIndices qfh e@(ELift e1) = withScope e $ do
@@ -148,20 +146,21 @@ inferWithIndices qfh e@(EBox bt e1) = withScope e $ do
     Just outbt -> return (TCirc j1 bt outbt, i)
     _ -> throwLocalError $ UnboxableType e1 typ1
 -- LET-IN
-inferWithIndices qfh e@(ELet x e1 e2) = withScope e $ do
+inferWithIndices qfh e@(ELet p e1 e2) = withScope e $ do
   (typ1, i1) <- inferWithIndices qfh e1
-  ((typ2, i2), wc) <- withWireCount $ withBoundVariables [x] [typ1] $ inferWithIndices qfh e2
+  (ids, typs) <- makePatternBindings (Just qfh) p typ1
+  ((typ2, i2), wc) <- withWireCount $ withBoundVariables ids typs $ inferWithIndices qfh e2
   -- max(i1 + wires in e2, i2):
   let k = Max (Plus i1 wc) i2
   return (typ2, k)
 -- DESTRUCTURING LET-IN
-inferWithIndices qfh e@(EDest ids e1 e2) = withScope e $ do
-  (TTensor typs, i1) <- inferWithIndices qfh e1
-  -- traceM $ "INF ids:" ++ show ids ++ " typ1:" ++ pretty (TTensor typs) -- DEBUG
-  unless (length ids == length typs) $ error $ "Internal error: preprocessing stage should have ensured the same number of variables and types: '" ++ intercalate ", " ids ++ "' vs '" ++ intercalate ", " (pretty <$> typs) ++ "'"
-  ((typ, i2), wc) <- withWireCount $ withBoundVariables ids typs $ inferWithIndices qfh e2
-  let k = Max (Plus i1 wc) i2
-  return (typ, k)
+-- inferWithIndices qfh e@(EDest ids e1 e2) = withScope e $ do
+--   (TTensor typs, i1) <- inferWithIndices qfh e1
+--   -- traceM $ "INF ids:" ++ show ids ++ " typ1:" ++ pretty (TTensor typs) -- DEBUG
+--   unless (length ids == length typs) $ error $ "Internal error: preprocessing stage should have ensured the same number of variables and types: '" ++ intercalate ", " ids ++ "' vs '" ++ intercalate ", " (pretty <$> typs) ++ "'"
+--   ((typ, i2), wc) <- withWireCount $ withBoundVariables ids typs $ inferWithIndices qfh e2
+--   let k = Max (Plus i1 wc) i2
+--   return (typ, k)
 -- ANNOTATION
 inferWithIndices qfh e@(EAnno e1 annotyp) = withScope e $ do
   checkWellFormedness annotyp
@@ -186,12 +185,12 @@ inferWithIndices qfh e@(EIApp e1 g) = withScope e $ do
 -- CONSTANTS
 inferWithIndices _ e@(EConst c) = withScope e $ return (typeOf c, Number 0)
 -- LET-CONS
-inferWithIndices qfh e@(ELetCons x y e1 e2) = withScope e $ do
-  (typ1@(TList j typ2), i1) <- inferWithIndices qfh e1
-  unlessLeq qfh (Number 1) j $ throwLocalError $ UnexpectedEmptyList e1 typ1
-  ((typ3, i2), wc) <- withWireCount $ withBoundVariables [x,y] [typ2, TList (Minus j (Number 1)) typ2] $ inferWithIndices qfh e2
-  let k = Max (Plus i1 wc) i2
-  return (typ3, k)
+-- inferWithIndices qfh e@(ELetCons x y e1 e2) = withScope e $ do
+--   (typ1@(TList j typ2), i1) <- inferWithIndices qfh e1
+--   unlessLeq qfh (Number 1) j $ throwLocalError $ UnexpectedEmptyList e1 typ1
+--   ((typ3, i2), wc) <- withWireCount $ withBoundVariables [x,y] [typ2, TList (Minus j (Number 1)) typ2] $ inferWithIndices qfh e2
+--   let k = Max (Plus i1 wc) i2
+--   return (typ3, k)
 -- ASSUMPTION (unsafe)
 inferWithIndices qfh e@(EAssume e1 annotyp) = withScope e $ do
   checkWellFormedness annotyp
