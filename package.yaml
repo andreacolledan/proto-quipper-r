@@ -1,6 +1,6 @@
-name:                pqr
+name:                qura
 version:             0.1.0.0
-github:              "andcol/proto-quipper-r"
+github:              "andreacolledan/qura"
 license:             MIT
 author:              "Andrea Colledan"
 maintainer:          "andrea.colledan@unibo.it"
@@ -17,7 +17,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/githubuser/pqr#readme>
+description:         Please see the README on GitHub at <https://github.com/andreacolledan/qura#readme>
 
 dependencies:
 - base >= 4.7 && < 5
@@ -50,7 +50,7 @@ library:
   source-dirs: src
 
 executables:
-  pqr:
+  qura:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -58,10 +58,10 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - pqr
+    - qura
 
 tests:
-  pqr-test:
+  qura-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
@@ -69,4 +69,4 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - pqr
+    - qura

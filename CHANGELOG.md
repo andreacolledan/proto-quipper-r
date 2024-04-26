@@ -1,4 +1,4 @@
-# Changelog for `pqr`
+# Changelog for `qura`
 
 All notable changes to this project will be documented in this file.
 

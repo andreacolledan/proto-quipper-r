@@ -4,11 +4,11 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 
-name:           pqr
+name:           qura
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/pqr#readme>
-homepage:       https://github.com/andcol/proto-quipper-r#readme
-bug-reports:    https://github.com/andcol/proto-quipper-r/issues
+description:    Please see the README on GitHub at <https://github.com/andreacolledan/qura#readme>
+homepage:       https://github.com/andreacolledan/qura#readme
+bug-reports:    https://github.com/andreacolledan/qura/issues
 author:         Andrea Colledan
 maintainer:     andrea.colledan@unibo.it
 copyright:      2024 Andrea Colledan
@@ -21,7 +21,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/andcol/proto-quipper-r
+  location: https://github.com/andreacolledan/qura
 
 library
   exposed-modules:
@@ -46,7 +46,7 @@ library
       PrettyPrinter
       Solving.CVC5
   other-modules:
-      Paths_pqr
+      Paths_qura
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing
@@ -64,10 +64,10 @@ library
     , unordered-containers
   default-language: Haskell2010
 
-executable pqr
+executable qura
   main-is: Main.hs
   other-modules:
-      Paths_pqr
+      Paths_qura
   hs-source-dirs:
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
@@ -81,12 +81,12 @@ executable pqr
     , mtl
     , optparse-applicative
     , parsec
-    , pqr
     , process
+    , qura
     , unordered-containers
   default-language: Haskell2010
 
-test-suite pqr-test
+test-suite qura-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
@@ -98,7 +98,7 @@ test-suite pqr-test
       Index.SemanticsSpec
       Lang.Unified.InferSpec
       Lang.Unified.ParseSpec
-      Paths_pqr
+      Paths_qura
   hs-source-dirs:
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wno-unused-top-binds -Wincomplete-patterns -Wno-name-shadowing -threaded -rtsopts -with-rtsopts=-N
@@ -112,7 +112,7 @@ test-suite pqr-test
     , mtl
     , optparse-applicative
     , parsec
-    , pqr
     , process
+    , qura
     , unordered-containers
   default-language: Haskell2010
