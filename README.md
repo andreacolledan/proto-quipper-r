@@ -11,7 +11,7 @@ Consider a function `dumbNot` defined as:
   let _ = apply(QDiscard,a)         -- discard temporary qubit
   in q                              -- return input qubit
 ```
-This function describes a very basic quantum computation in the form of a quantum circuit: the fundamental units of data are `Qubit`s and `Bit`s and operations on these data are carried out by applying elementary operations on them. These operations are either quantum gates (e.g. `CNot`, `Hadamard`, etc.) or other operations on bits and qubits (e.g.`QInit1`, `QDiscard`, `Measure`, etc.).
+This function describes a very basic quantum computation in the form of a quantum circuit: the fundamental units of data are `Qubit`s and `Bit`s and computations on these data are carried out by applying elementary operations on them. These operations are either quantum gates (e.g. `CNot`, `Hadamard`, etc.) or other operations on bits and qubits (e.g.`QInit1`, `QDiscard`, `Measure`, etc.).
 
 As the name suggests, `dumbNot` implements the negation of a qubit in a dumb, unnecessarily expensive way. But let's forget about the semantics of this function and let's focus instead on the circuit it builds. Applying `dumbNot` to an input qubit `q` produces the following circuit of width 2:
 
@@ -40,9 +40,9 @@ Abstractions over index variables is achieved through the `@` binder. Indices ar
 ```
 i ->[0,0] List[i] Qubit -o[i,0] List[i] Qubit
 ```
-meaning that for every natural-valued expression `e`, `qft @e` takes as input a list of `e` qubits and builds a circuit of width `e` that outputs a list of `e` qubits.
+meaning that for every `i`, `qft` takes as input `i` qubits and builds a circuit of width at most `i` that outputs a list of `i` qubits.
 
-The whole code for `qft`, as well as other examples, can be found in the `examples/unified` directory. 
+The whole code for `qft`, as well as other examples, can be found in the `examples` directory. 
 
 ## Installing
 Note: Proto-Quipper-R requires [cvc5](https://cvc5.github.io) to be installed and present in your `PATH`.
@@ -63,7 +63,7 @@ Use option `--debug DEBUG` to dump a copy of all SMT queries performed during ty
 ```
 pqr FILE [-v | --verbose] [-d | --debug DEBUG]
 ```
-For more information, use `pqr --help`.
+For more information, refer to `pqr --help`.
 
 ## Paper
 This implementation is based on ["Colledan, A. and Lago, U.D. 2023. Circuit Width Estimation via Effect Typing and Linear Dependency (Long Version). arXiv."](https://doi.org/10.48550/arXiv.2310.19096)

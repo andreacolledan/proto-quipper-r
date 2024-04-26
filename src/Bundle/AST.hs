@@ -96,7 +96,9 @@ instance HasIndex BundleType where
   ifv (BTList i b) = assert (null (ifv i)) $ ifv i `Set.union` ifv b
   ifv (BTVar _) = Set.empty
   isub :: Index -> IndexVariableId -> BundleType -> BundleType
-  isub _ _ = id -- No index variables in bundle types
+  isub i id (BTList j b) = BTList (isub i id j) (isub i id b)
+  isub i id (BTTensor bs) = BTTensor (map (isub i id) bs)
+  isub _ _ b = b
 
 
 

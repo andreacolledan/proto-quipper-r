@@ -8,10 +8,11 @@ let dumbNot = lift \q :: Qubit .
   q
 in
 
--- doubleNot applies dumbNot twice to its input qubit
-let doubleNot = \q :: Qubit .
-  let q = force dumbNot q in
-  force dumbNot q
-in doubleNot
+-- iter @n f q applies f to q n times in sequence
+let iter = lift @n. \f :: !(Qubit -o[2,0] Qubit). \q :: Qubit.
+  let iterStep = lift @i. \(q,_) :: (Qubit,()). ((force f) q)
+  in fold(iterStep, q, MakeUnitList @n)
+in 
 
--- expected type : Qubit ->[2,0] Qubit
+let q = apply(QInit0,()) in
+(force iter @3) dumbNot q -- iterate dumbNot 3 times on q

@@ -25,7 +25,7 @@ import PrettyPrinter
 import Data.List (intercalate)
 import Lang.Type.AST
 
---- PAPER LANGUAGE PARSER ---------------------------------------------------------------------------------
+--- UNIFIED LANGUAGE PARSER ---------------------------------------------------------------------------------
 ---
 --- This module defines the parser for the unified, practical syntax of PQR.
 --- This is the main parser used in the application. It is implemented using the Parsec library.
@@ -110,6 +110,9 @@ constant = try $ do
     "CNot" -> return $ EConst CNot
     "Toffoli" -> return $ EConst Toffoli
     "MakeCRGate" -> return $ EConst MakeCRGate
+    "MakeNToffoli" -> return $ EConst MakeNToffoli
+    "MakeNCZ" -> return $ EConst MakeNCZ
+    "MakeUnitList" -> return $ EConst MakeUnitList
     _ -> fail $ "Unrecognized constant \"" ++ name ++ "\""
     <?> "constant"
 

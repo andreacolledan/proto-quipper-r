@@ -34,6 +34,9 @@ data Constant
   | Toffoli
   -- Functions
   | MakeCRGate
+  | MakeNToffoli
+  | MakeNCZ
+  | MakeUnitList
   deriving (Eq, Show)
 
 instance Pretty Constant where
@@ -51,6 +54,9 @@ instance Pretty Constant where
   pretty CNot = "CNot"
   pretty Toffoli = "Toffoli"
   pretty MakeCRGate = "MakeCRGate"
+  pretty MakeNToffoli = "MakeNToffoli"
+  pretty MakeNCZ = "MakeNCZ"
+  pretty MakeUnitList = "MakeUnitList"
 
 -- | @typeOf c@ returns the type of constant @c@
 typeOf :: Constant -> Type
@@ -68,3 +74,6 @@ typeOf PauliZ = TCirc (Number 1) (BTWire Qubit) (BTWire Qubit)
 typeOf CNot = TCirc (Number 2) (BTTensor [BTWire Qubit, BTWire Qubit]) (BTTensor [BTWire Qubit, BTWire Qubit])
 typeOf Toffoli = TCirc (Number 3) (BTTensor [BTWire Qubit, BTWire Qubit, BTWire Qubit]) (BTTensor [BTWire Qubit, BTWire Qubit, BTWire Qubit])
 typeOf MakeCRGate = TIForall "i" (TCirc (Number 2) (BTTensor [BTWire Qubit, BTWire Qubit]) (BTTensor [BTWire Qubit, BTWire Qubit])) (Number 0) (Number 0)
+typeOf MakeNToffoli = TIForall "i" (TCirc (Plus (IndexVariable "i") (Number 1)) (BTTensor [BTList (IndexVariable "i") (BTWire Qubit), BTWire Qubit]) (BTTensor [BTList (IndexVariable "i") (BTWire Qubit), BTWire Qubit])) (Number 0) (Number 0)
+typeOf MakeNCZ = TIForall "i" (TCirc (Plus (IndexVariable "i") (Number 1)) (BTTensor [BTList (IndexVariable "i") (BTWire Qubit), BTWire Qubit]) (BTTensor [BTList (IndexVariable "i") (BTWire Qubit), BTWire Qubit])) (Number 0) (Number 0)
+typeOf MakeUnitList = TIForall "i" (TList (IndexVariable "i") TUnit) (Number 0) (Number 0)

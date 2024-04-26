@@ -1,8 +1,0 @@
--- the function that applies the hadamard gate to a list of qubits
-let hadamardN = @i . \x :: List[i] Qubit .
-  let hadamardStep = lift @j . \(qs,q) :: (List[j] Qubit, Qubit).
-    let q = apply(Hadamard,q) in
-    q:qs
-  in fold(hadamardStep, [], x)
-in
-hadamardN

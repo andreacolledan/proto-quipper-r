@@ -91,7 +91,7 @@ instance HasIndex Type where
   isub _ _ TUnit = TUnit
   isub _ _ (TWire wtype) = TWire wtype
   isub i id (TTensor ts) = TTensor (map (isub i id) ts)
-  isub i id (TCirc j inBtype outBtype) = TCirc (isub i id j) inBtype outBtype -- Bundle types have no free variables
+  isub i id (TCirc j inBtype outBtype) = TCirc (isub i id j) (isub i id inBtype) (isub i id outBtype) -- Bundle types have no free variables
   isub i id (TArrow typ1 typ2 j k) = TArrow (isub i id typ1) (isub i id typ2) (isub i id j) (isub i id k)
   isub i id (TBang typ) = TBang (isub i id typ)
   isub i id (TList j typ) = TList (isub i id j) (isub i id typ)

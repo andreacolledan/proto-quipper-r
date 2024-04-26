@@ -176,7 +176,7 @@ inferWithIndices qfh e@(EForce e1) = withScope e $ do
 -- INDEX ABSTRACTION
 inferWithIndices qfh e@(EIAbs id e1) = withScope e $ do
   ((typ, i), wc) <- withWireCount $ withBoundIndexVariable id $ inferWithIndices qfh e1
-  return (TIForall id typ i wc, i)
+  return (TIForall id typ i wc, wc)
 -- INDEX APPLICATION
 inferWithIndices qfh e@(EIApp e1 g) = withScope e $ do
   (TIForall id typ2 j1 _, i) <- inferWithIndices qfh e1
