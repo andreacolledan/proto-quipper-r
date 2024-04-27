@@ -1,6 +1,6 @@
-## Language Documentation (WIP)
+## Proto-Quipper-R Documentation (WIP)
 
-As a language, Proto-Quipper-R is based on the Proto-Quipper family of theoretical programming languages. As such, Proto-Quipper-R is, at its core, a lambda calculus with bespoke constructs to describe and manipulate quantum circuits.
+QuRA takes as input programs written in a variant of Quipper called Proto-Quipper-R. This language is based on the Proto-Quipper family of theoretical programming languages. As such, Proto-Quipper-R is, at its core, a lambda calculus with bespoke constructs to describe and manipulate quantum circuits.
 
 ## Basics
 
@@ -78,4 +78,9 @@ At the time of writing, the following are the primitive operations that can be u
 
 - `CNot` takes as input a pair of `Qubit`s and negates the second (the *target*) if the first (the *control*) is $|1\rangle$. The control qubit is returned unchanged.
 - `Toffoli` takes as input three `Qubit`s and negates the third (the *target*) if the first two (the *controls*) are $|1\rangle$. The control qubits are returned unchanged.
+- `MakeNToffoli @n`, where `n` is a natural number, takes as input a list of `n` control `Qubit`s and a target `Qubit` and applies the `n`-controlled Toffoli gate to them.
+- `MakeNCZ @n`, where `n` is a natural number, takes as input a list of `n` control `Qubit`s and a target `Qubit` and applies the `n`-controlled Pauli-Z gate to them.
 - `MakeCRGate @i`, where `i` is a natural number, takes as input a pair of `Qubit`s and shifts the phase of the second (the *target*) by $2π/2^i$ radians if the first (the *control*) is $|1\rangle$. The control qubit is returned unchanged.
+
+### Other primitives
+- `MakeUnitList @n`, where `n` is a natural number, retuns a list of `()` of length `n`. Useful to simulate iteration using fold.
