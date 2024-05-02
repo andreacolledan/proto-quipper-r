@@ -10,7 +10,7 @@ in
 
 -- iter @n f q applies f to q n times in sequence
 let iter = lift @n. \f :: !(Qubit -o[2,0] Qubit). \q :: Qubit.
-  let iterStep = lift @i. \(q,_) :: (Qubit,()). ((force f) q)
+  let iterStep = lift @i. \(q,_) :: (Qubit,()). (force f q)
   in fold(iterStep, q, MakeUnitList @n)
 in 
 

@@ -249,7 +249,7 @@ dollarOp = m_reservedOp "$" >> return makeApp <?> "application"
 
 -- parse ":: t" as the postfix operator (\e -> EAnno e t), possibly applied multiple times
 manyAnnOp :: Parser (Expr -> Expr)
-manyAnnOp = foldr1 (.) <$> many1 annOp
+manyAnnOp = foldr1 (flip (.)) <$> many1 annOp
   where
     annOp :: Parser (Expr -> Expr)
     annOp = do
@@ -260,7 +260,7 @@ manyAnnOp = foldr1 (.) <$> many1 annOp
 
 -- parse "!:: t" as the postfix operator (\e -> EAssume e t), possibly applied multiple times
 manyAssumeOp :: Parser (Expr -> Expr)
-manyAssumeOp = foldr1 (.) <$> many1 assumeOp
+manyAssumeOp = foldr1 (flip (.)) <$> many1 assumeOp
   where
     assumeOp :: Parser (Expr -> Expr)
     assumeOp =
@@ -272,7 +272,7 @@ manyAssumeOp = foldr1 (.) <$> many1 assumeOp
 
 -- parse "@ i" as the postfix operator (\e -> EIApp e i), possibly applied multiple times
 manyIappOp :: Parser (Expr -> Expr)
-manyIappOp = foldr1 (.) <$> many1 iappOp
+manyIappOp = foldr1 (flip (.)) <$> many1 iappOp
   where
     iappOp :: Parser (Expr -> Expr)
     iappOp =

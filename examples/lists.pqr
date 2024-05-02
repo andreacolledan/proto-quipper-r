@@ -32,7 +32,7 @@ let hadamard = lift \q::Qubit. apply(Hadamard, q)
 in
 
 -- applies the hadamard gate to a list of qubits
-let hadamardN = lift ((force qmap @1) hadamard)
+let hadamardN = lift $ (force qmap @1) hadamard
 in
 
 -- negates a single qubit in a dumb way, using an ancilla
@@ -44,7 +44,7 @@ let dumbNot = lift \q :: Qubit .
 in
 
 -- negates a list of qubits in a dumb way, using an ancilla
-let dumbNotN = lift ((force qmap @2) dumbNot)
+let dumbNotN = lift $ (force qmap @2) dumbNot
 in
 
-(force dumbNotN @4) [apply(QInit0,()),apply(QInit1,()),apply(QInit0,()),apply(QInit1,())]
+force dumbNotN @ 4 [apply(QInit0,()),apply(QInit1,()),apply(QInit0,()),apply(QInit1,())]

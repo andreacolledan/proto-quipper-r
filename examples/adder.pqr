@@ -34,13 +34,13 @@ let qunzip = lift @i . \a :: List[i] (Qubit,Qubit).
   let qunzipStep = lift @j . \((leftList, rightList), pair) :: ((List[j] Qubit, List[j] Qubit), (Qubit,Qubit)).
     let (a,b) = pair in
     (a:leftList, b:rightList)
-  in fold(qunzipStep, ([],[]), ((force revpair) @i) a)
+  in fold(qunzipStep, ([],[]), (force revpair @i) a)
 in  
 
 let interleave = lift @i . \a :: List[i] (Qubit,Qubit). 
   let interleaveStep = lift @j . \(reslist, pair) :: (List[j] ((Qubit,Qubit),Qubit), (Qubit,Qubit)).
     let c = apply(QInit0,()) in (pair,c):reslist
-  in fold(interleaveStep, [], ((force revpair) @i) a)
+  in fold(interleaveStep, [], (force revpair @i) a)
 in 
 
 --- short-hands ---
@@ -54,27 +54,27 @@ let toffoli = lift \a :: Qubit.\b :: Qubit.\c :: Qubit. apply(Toffoli, (a,b,c)) 
 
 -- CARRY (Fig. 3.i)
 let carry = lift \(c, a, b, cnext) :: (Qubit, Qubit, Qubit, Qubit).
-  let (a, b, cnext) = (force toffoli) a b cnext in
-  let (a,b) = (force cnot) a b in
-  let (c, b, cnext) = (force toffoli) c b cnext in
+  let (a, b, cnext) = force toffoli a b cnext in
+  let (a,b) = force cnot a b in
+  let (c, b, cnext) = force toffoli c b cnext in
   (c, a, b, cnext)
 in
 
 -- SUM (Fig. 3.ii)
 let sum = lift \(c, a, b) :: (Qubit, Qubit, Qubit).
-  let (a,b) = (force cnot) a b in
-  let (c, b) = (force cnot) c b in
+  let (a,b) = force cnot a b in
+  let (c, b) = force cnot c b in
   (c, a, b)
 in
 
 -- ADDER
 -- (Fig. 2, first half)
 let adderFirstPhase = ((lift @i . \(a,b) :: (List[i+1] Qubit, List[i+1] Qubit).
-  let ab = ((force qzip) @i) (a,b) in
-  let abc = ((force interleave) @ (i+1)) ab in --every first position is a, every second is b, every third is c
+  let ab = (force qzip @i) (a,b) in
+  let abc = (force interleave @ i+1) ab in --every first position is a, every second is b, every third is c
   let initialAcc = apply(QInit0,()) in
   let step = lift @j . \((reslist, c), ((a,b),cnext)) :: ((List[j] ((Qubit,Qubit),Qubit), Qubit), ((Qubit,Qubit),Qubit)) .
-    let (c, a, b, cnext) = (force carry) (c, a, b, cnext) in
+    let (c, a, b, cnext) = force carry (c, a, b, cnext) in
     (((c, a), b) : reslist, cnext) in
   let (reslist,clast) = fold(step, ([], initialAcc), abc) in
   (reslist,clast)) -- note that the output triples are reversed
@@ -86,8 +86,8 @@ in
 let adderSecondPhase = (lift @i . \(cfirst, abc) :: (Qubit,List[i] ((Qubit,Qubit),Qubit)).
   --subcircuit used in the second phase: carry followed by sum, carry discarded:
   let sum = lift \(c,a,b,cnext) :: (Qubit,Qubit,Qubit,Qubit). 
-      let (c,a,b,cnext) = (force carry) (c,a,b,cnext) in
-      let (c,a,b) = (force sum) (c,a,b) in
+      let (c,a,b,cnext) = force carry (c,a,b,cnext) in
+      let (c,a,b) = force sum (c,a,b) in
       let _ = apply(QDiscard,cnext) in
       (c,a,b) in
   let csum = box sum in
@@ -102,15 +102,15 @@ in
 
 --whole adder circuit:
 let adder = (lift @i . \(a,b) :: (List[i+1] Qubit, List[i+1] Qubit).
-  let (((c,a),b):rest,lsb) = ((force adderFirstPhase) @i) (a,b) in
-  let (a,b) = (force cnot) a b in
-  let (c,a,b) = (force sum) (c,a,b) in
+  let (((c,a),b):rest,lsb) = (force adderFirstPhase @i) (a,b) in
+  let (a,b) = force cnot a b in
+  let (c,a,b) = force sum (c,a,b) in
   let (lastc, final) = (force adderSecondPhase @i) (c, rest) in
   let _ = apply(QDiscard,lastc) in
   let complete = ((a,b) : (force revpair @i) final) in --add the first block back in
-  let (ares,b) = (force qunzip @(i+1)) complete in --separate a and b
+  let (ares,b) = (force qunzip @ i+1) complete in --separate a and b
   let bres = lsb : b in -- add the lsb back in b
-  ((force rev @(i+1)) ares, (force rev @(i+2)) bres)) --rearrange the bits in the right order
+  ((force rev @ i+1) ares, (force rev @ i+2) bres)) --rearrange the bits in the right order
   :: !(i ->[0, 0] (List[i+1] Qubit, List[i+1] Qubit) -o[3*i+4,0] (List[i+1] Qubit, List[i+2] Qubit))
 in
 

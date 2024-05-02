@@ -62,7 +62,7 @@ instance Pretty Expr where
   pretty (EFold e1 e2 e3) = "fold (" ++ pretty e1 ++ ", " ++ pretty e2 ++ ", " ++ pretty e3 ++ ")"
   pretty (EAnno e t) = "(" ++ pretty e ++ " :: " ++ pretty t ++ ")"
   pretty (EApply e1 e2) = "apply(" ++ pretty e1 ++ ", " ++ pretty e2 ++ ")"
-  pretty (EBox bt e) = "(box ::" ++ pretty bt ++ " " ++ pretty e ++ ")"
+  pretty (EBox _ e) = "(box" ++ " " ++ pretty e ++ ")"
   pretty (ELet p e1 e2) = "(let " ++ pretty p ++ " = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
   -- pretty (EDest xs e1 e2) = "(let (" ++ intercalate ", " xs ++ ") = " ++ pretty e1 ++ " in " ++ pretty e2 ++ ")"
   pretty (EIAbs id e) = "(@" ++ id ++ " . " ++ pretty e ++ ")"
