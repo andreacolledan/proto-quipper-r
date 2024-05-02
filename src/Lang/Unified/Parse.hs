@@ -144,11 +144,9 @@ tuple =
 
 -- parse "let p = e1 in e2" as (ELet p e1 e2)
 letIn :: Parser Expr
-letIn =
-  do
-    p <- try $ do
-      m_reserved "let"
-      parsePattern
+letIn = do
+    m_reserved "let"
+    p <- parsePattern
     m_reservedOp "="
     e1 <- parseExpr
     m_reserved "in"
@@ -286,6 +284,7 @@ manyIappOp = foldr1 (flip (.)) <$> many1 iappOp
 -- parse ":" as the infix operator Cons
 consOp :: Parser (Expr -> Expr -> Expr)
 consOp = m_reservedOp ":" >> return ECons <?> "cons operator"
+
 
 --- PATTERN AND PATTERN OPERATOR PARSERS -----------------------------------------------------------------------------------
 
