@@ -340,11 +340,11 @@ spec = around (withSolver Nothing) $ do
           let expected = (TWire Qubit, Number 1)
           runInferenceForTesting  emptyEnv expr qfh `shouldReturn` Right expected
         it "produces the correct type and wirecount when the applied circuit term computes" $ \qfh -> do
-          -- ∅;f:!(Qubit -o[2,0] Qubit);q:Qubit;∅ ⊢ apply(box::Qubit f, q) ==> Qubit ; 2
+          -- ∅;f:!(Qubit -o[2,0] Qubit);q:Qubit;∅ ⊢ apply(box f, q) ==> Qubit ; 2
           let gamma = [
                 ("f", TBang (TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0))),
                 ("q", TWire Qubit)]
-          let expr = EApply (EBox (BTWire Qubit) (EVar "f")) (EVar "q")
+          let expr = EApply (EBox (Just $ BTWire Qubit) (EVar "f")) (EVar "q")
           let expected = (TWire Qubit, Number 2)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "produces the correct type and wirecount when the circuit application argument computes" $ \qfh -> do
@@ -357,12 +357,12 @@ spec = around (withSolver Nothing) $ do
           let expected = (TList (Number 8) (TWire Qubit), Number 16)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "produces the correct type and wirecount when both circuit term and argument compute" $ \qfh -> do
-          -- ∅;f:!(Qubit -o[2,0] Qubit),q:Qubit,g:Qubit ->[2,0] Qubit;∅ ⊢ apply(box::Qubit f, g q) ==> Qubit ; 2
+          -- ∅;f:!(Qubit -o[2,0] Qubit),q:Qubit,g:Qubit ->[2,0] Qubit;∅ ⊢ apply(box f, g q) ==> Qubit ; 2
           let gamma = [
                 ("f", TBang (TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0))),
                 ("q", TWire Qubit),
                 ("g", TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0))]
-          let expr = EApply (EBox (BTWire Qubit) (EVar "f")) (EApp (EVar "g") (EVar "q"))
+          let expr = EApply (EBox (Just $ BTWire Qubit) (EVar "f")) (EApp (EVar "g") (EVar "q"))
           let expected = (TWire Qubit, Number 2)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "fails if the applied term is not a circuit term" $ \qfh -> do
@@ -379,26 +379,26 @@ spec = around (withSolver Nothing) $ do
           runInferenceForTesting (makeEnv gamma []) expr qfh `shouldSatisfyIO` isLeft
       context "when typing box" $ do
         it "produces the correct type and wirecount when the argument is a value" $ \qfh -> do
-          -- ∅;f:!(Qubit -o[2,0] Qubit);∅ ⊢ box::Qubit f ==> Circ[2](Qubit,Qubit) ; 0
+          -- ∅;f:!(Qubit -o[2,0] Qubit);∅ ⊢ box f ==> Circ[2](Qubit,Qubit) ; 0
           let gamma = [("f", TBang (TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0)))]
-          let expr = EBox (BTWire Qubit) (EVar "f")
+          let expr = EBox (Just $ BTWire Qubit) (EVar "f")
           let expected = (TCirc (Number 2) (BTWire Qubit) (BTWire Qubit), Number 0)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "produces the correct type and wirecount when the argument computes" $ \qfh -> do
-          -- ∅;f:() -o[3,0] !(Qubit -o[2,0] Bit);∅ ⊢ box::Qubit (f ()) ==> Circ[2](Qubit,Bit) ; 3
+          -- ∅;f:() -o[3,0] !(Qubit -o[2,0] Bit);∅ ⊢ box (f ()) ==> Circ[2](Qubit,Bit) ; 3
           let gamma = [("f", TArrow TUnit (TBang (TArrow (TWire Qubit) (TWire Bit) (Number 2) (Number 0))) (Number 3) (Number 0))]
-          let expr = EBox (BTWire Qubit) (EApp (EVar "f") EUnit)
+          let expr = EBox (Just $ BTWire Qubit) (EApp (EVar "f") EUnit)
           let expected = (TCirc (Number 2) (BTWire Qubit) (BTWire Bit), Number 3)
           runInferenceForTesting  (makeEnv gamma []) expr qfh `shouldReturn` Right expected
         it "fails if the argument is not a duplicable function" $ \qfh -> do
-          -- ∅;f:Qubit ->[2,0] Qubit;∅ ⊢ box::Qubit f =/=>
+          -- ∅;f:Qubit ->[2,0] Qubit;∅ ⊢ box f =/=>
           let gamma = [("f", TArrow (TWire Qubit) (TWire Qubit) (Number 2) (Number 0))]
-          let expr = EBox (BTWire Qubit) (EVar "f")
+          let expr = EBox (Just $ BTWire Qubit) (EVar "f")
           runInferenceForTesting (makeEnv gamma []) expr qfh `shouldSatisfyIO` isLeft
         it "fails if the argument is not a circuit building function" $ \qfh -> do
-          -- ∅;f:!(Qubit -o[2,0] Circ[2](Qubit,Qubit));∅ ⊢ box::Qubit f =/=>
+          -- ∅;f:!(Qubit -o[2,0] Circ[2](Qubit,Qubit));∅ ⊢ box f =/=>
           let gamma = [("f", TBang (TArrow (TWire Qubit) (TCirc (Number 2) (BTWire Qubit) (BTWire Qubit)) (Number 2) (Number 0)))]
-          let expr = EBox (BTWire Qubit) (EVar "f")
+          let expr = EBox (Just $ BTWire Qubit) (EVar "f")
           runInferenceForTesting (makeEnv gamma []) expr qfh `shouldSatisfyIO` isLeft
       context "when typing index application" $ it "produces the instantiated type of body expression and its wirecount" $ \qfh -> do
         -- ∅;∅;∅ ⊢ (@i . \x :: List[i] Qubit . x) @100 ==> List[100] Qubit -o[100,0] List[100] Qubit ; 0

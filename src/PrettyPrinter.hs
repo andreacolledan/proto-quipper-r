@@ -27,3 +27,7 @@ instance (Pretty a) => Pretty (Set.HashSet a) where
 instance (Pretty a, Pretty b) => Pretty (Either a b) where
   pretty (Left a) = pretty a
   pretty (Right b) = pretty b
+
+instance Pretty a => Pretty (Maybe a) where
+  pretty Nothing = "_"
+  pretty (Just a) = pretty a

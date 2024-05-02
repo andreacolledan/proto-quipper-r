@@ -33,8 +33,8 @@ spec = do
       parse parseProgram "" "lift e" `shouldBe` Right (ELift (EVar "e"))
     it "parses 'force e' as forcing" $ do
       parse parseProgram "" "force e" `shouldBe` Right (EForce (EVar "e"))
-    it "parses 'box[Qubit] f' as boxing" $ do
-      parse parseProgram "" "box[Qubit] f" `shouldBe` Right (EBox (BTWire Qubit) (EVar "f"))
+    it "parses 'box f' as boxing" $ do
+      parse parseProgram "" "box f" `shouldBe` Right (EBox Nothing (EVar "f"))
     it "parses 'f x' as function application" $ do
       parse parseProgram "" "f x" `shouldBe` Right (EApp (EVar "f") (EVar "x"))
     it "parses 'x:xs' as list cons" $ do
@@ -56,7 +56,7 @@ spec = do
     it "cons'ing is right associative" $ do
       parse parseProgram "" "x:y:z:[]" `shouldBe` Right (ECons (EVar "x") (ECons (EVar "y") (ECons (EVar "z") (ENil Nothing))))
     it "nested built-in operators are right associative" $ do
-      parse parseProgram "" "box[Qubit] let f = force x in lift f" `shouldBe` Right (EBox (BTWire Qubit) (ELet (PVar "f") (EForce (EVar "x")) (ELift (EVar "f"))))
+      parse parseProgram "" "box let f = force x in lift f" `shouldBe` Right (EBox Nothing (ELet (PVar "f") (EForce (EVar "x")) (ELift (EVar "f"))))
   describe "precedence" $ do
     it "application has precedence over abstraction" $ do
       parse parseProgram "" "\\x :: () . x y" `shouldBe` Right (EAbs (PVar "x") TUnit (EApp (EVar "x") (EVar "y")))

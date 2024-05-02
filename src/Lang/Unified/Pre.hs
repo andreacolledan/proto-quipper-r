@@ -121,14 +121,14 @@ inferBaseType e@(EApply e1 e2) = withScope e $ do
       return (tsub sub (EApply e1' e2'), tsub sub (fromBundleType btc), sub)
     _ -> throwLocalError $ ExpectedBundleType e2 typ2
 -- BOX
-inferBaseType e@(EBox annobt e1) = withScope e $ do
+inferBaseType e@(EBox _ e1) = withScope e $ do
   (e1', typ1, sub1) <- inferBaseType e1
-  let annotyp = fromBundleType annobt
   typ1' <- TVar <$> makeFreshVariable "a"
-  sub2 <- unify e1 typ1 (TBang (TArrow annotyp typ1' irr irr))
+  typ1'' <- TVar <$> makeFreshVariable "a"
+  sub2 <- unify e1 typ1 (TBang (TArrow typ1' typ1'' irr irr))
   let sub = sub2 <> sub1
-  case toBundleType (tsub sub typ1') of
-    Just btc -> return (tsub sub (EBox annobt e1'), tsub sub (TCirc irr annobt btc), sub)
+  case (toBundleType (tsub sub typ1'), toBundleType (tsub sub typ1'')) of
+    (Just btc', Just btc'') -> return (tsub sub (EBox (Just btc') e1'), tsub sub (TCirc irr btc' btc''), sub)
     _ -> throwLocalError $ UnboxableType e1 (tsub sub typ1')
 -- LET-CONS
 -- inferBaseType e@(ELetCons x y e1 e2) = withScope e $ do

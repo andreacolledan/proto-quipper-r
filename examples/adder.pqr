@@ -90,7 +90,7 @@ let adderSecondPhase = (lift @i . \(cfirst, abc) :: (Qubit,List[i] ((Qubit,Qubit
       let (c,a,b) = (force sum) (c,a,b) in
       let _ = apply(QDiscard,cnext) in
       (c,a,b) in
-  let csum = box[(Qubit,Qubit,Qubit,Qubit)] sum in
+  let csum = box sum in
   --step function:
   let step = lift @j. \((cnext, reslist),((c,a),b)) :: ((Qubit, (List[j] (Qubit,Qubit))),((Qubit,Qubit),Qubit)).
     let (c,a,b) = apply(csum, (c,a,b,cnext)) in

@@ -138,13 +138,15 @@ inferWithIndices qfh e@(EApply e1 e2) = withScope e $ do
   let k = Max (Plus i1 wc) (Max i2 j)
   return (outtyp, k)
 -- BOX
-inferWithIndices qfh e@(EBox bt e1) = withScope e $ do
-  (typ1@(TBang (TArrow typ2 typ3 j1 _)), i) <- inferWithIndices qfh e1
-  let annotyp = fromBundleType bt
-  unlessSubtype qfh annotyp typ2 $ throwLocalError $ UnboxableType e1 typ1
-  case toBundleType typ3 of
-    Just outbt -> return (TCirc j1 bt outbt, i)
-    _ -> throwLocalError $ UnboxableType e1 typ1
+inferWithIndices qfh e@(EBox anno e1) = withScope e $ case anno of
+  Just bt -> do
+    (typ1@(TBang (TArrow typ2 typ3 j1 _)), i) <- inferWithIndices qfh e1
+    let annotyp = fromBundleType bt
+    unlessSubtype qfh annotyp typ2 $ throwLocalError $ UnboxableType e1 typ1
+    case toBundleType typ3 of
+      Just outbt -> return (TCirc j1 bt outbt, i)
+      _ -> throwLocalError $ UnboxableType e1 typ1
+  Nothing -> error "Internal error: box without type annotation"
 -- LET-IN
 inferWithIndices qfh e@(ELet p e1 e2) = withScope e $ do
   (typ1, i1) <- inferWithIndices qfh e1

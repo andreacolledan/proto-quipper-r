@@ -41,7 +41,7 @@ unifiedLang =
       commentEnd = "-}",
       identStart = letter <|> char '_',
       identLetter = alphaNum <|> char '_',
-      reservedNames = ["let", "in", "forall", "Circ", "apply", "fold", "lift", "box", "force", "let", "in", "[]", "()"],
+      reservedNames = ["let", "in", "Circ", "apply", "fold", "let", "in", "[]", "()"],
       opStart = oneOf "@:\\.=!$",
       opLetter = char ':',
       reservedOpNames = ["@", "::", "!::", ":", "\\", ".", "=", "$", "->"]
@@ -232,22 +232,20 @@ tld = do
 
 --- EXPRESSION OPERATOR PARSERS -----------------------------------------------------------------------------------
 
--- parse "force" as the prefix operator EForce, possibly applied multiple times
-manyForceOp :: Parser (Expr -> Expr)
-manyForceOp = foldr1 (.) <$> many1 forceOp
-  where
-    forceOp :: Parser (Expr -> Expr)
-    forceOp = do
-      m_reserved "force"
-      return EForce
+-- intercept "lift" and "force" as special cases of EApp
+makeApp :: Expr -> Expr -> Expr
+makeApp (EVar "lift") = ELift
+makeApp (EVar "force") = EForce
+makeApp (EVar "box") = EBox Nothing
+makeApp e = EApp e
 
 -- parse spaces as the infix operator EApp
 appOp :: Parser (Expr -> Expr -> Expr)
-appOp = m_whiteSpace >> return EApp <?> "application"
+appOp = m_whiteSpace >> return makeApp <?> "application"
 
 -- parse "$" as the infix operator EApp (lowest precedence)
 dollarOp :: Parser (Expr -> Expr -> Expr)
-dollarOp = m_reservedOp "$" >> return EApp <?> "application"
+dollarOp = m_reservedOp "$" >> return makeApp <?> "application"
 
 -- parse ":: t" as the postfix operator (\e -> EAnno e t), possibly applied multiple times
 manyAnnOp :: Parser (Expr -> Expr)
@@ -288,29 +286,6 @@ manyIappOp = foldr1 (.) <$> many1 iappOp
 -- parse ":" as the infix operator Cons
 consOp :: Parser (Expr -> Expr -> Expr)
 consOp = m_reservedOp ":" >> return ECons <?> "cons operator"
-
--- parse "lift" as the prefix operator ELift, possibly applied multiple times
-manyLiftOp :: Parser (Expr -> Expr)
-manyLiftOp = foldr1 (.) <$> many1 liftOp
-  where
-    liftOp :: Parser (Expr -> Expr)
-    liftOp = do
-        m_reserved "lift"
-        return ELift
-        <?> "lift"
-
--- parse "box[bt]" as the prefix operator (EBox bt), possibly applied multiple times
-manyBoxOp :: Parser (Expr -> Expr)
-manyBoxOp = foldr1 (.) <$> many1 boxOp
-  where
-    boxOp :: Parser (Expr -> Expr)
-    boxOp =
-      do
-        m_reserved "box"
-        bt <- m_brackets parseBundleType
-        return $ EBox bt
-        <?> "box"
-
 
 --- PATTERN AND PATTERN OPERATOR PARSERS -----------------------------------------------------------------------------------
 
@@ -370,10 +345,7 @@ delimitedExpr =
 parseExpr :: Parser Expr
 parseExpr =
   let operatorTable =
-        [ [Prefix manyForceOp],
-          [Prefix manyBoxOp],
-          [Prefix manyLiftOp],
-          [Infix appOp AssocLeft],
+        [ [Infix appOp AssocLeft],
           [Infix consOp AssocRight],
           [Postfix manyIappOp],
           [Postfix manyAnnOp],
