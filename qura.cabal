@@ -32,17 +32,17 @@ library
       Index.AST
       Index.Parse
       Index.Semantics
+      Lang.Analysis.Derivation
+      Lang.Analysis.Infer
+      Lang.Analysis.Pre
+      Lang.Expr.AST
+      Lang.Expr.Constant
+      Lang.Expr.Parse
+      Lang.Expr.Pattern
       Lang.Type.AST
       Lang.Type.Parse
       Lang.Type.Semantics
       Lang.Type.Unify
-      Lang.Unified.AST
-      Lang.Unified.Constant
-      Lang.Unified.Derivation
-      Lang.Unified.Infer
-      Lang.Unified.Parse
-      Lang.Unified.Pattern
-      Lang.Unified.Pre
       PrettyPrinter
       Solving.CVC5
   other-modules:
@@ -96,8 +96,8 @@ test-suite qura-test
       Index.ASTSpec
       Index.ParseSpec
       Index.SemanticsSpec
-      Lang.Unified.InferSpec
-      Lang.Unified.ParseSpec
+      Lang.Analysis.InferSpec
+      Lang.Expr.ParseSpec
       Paths_qura
   hs-source-dirs:
       test
