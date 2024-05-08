@@ -1,4 +1,4 @@
-module Lang.Unified.InferSpec (spec) where
+module Lang.Analysis.InferSpec (spec) where
 
 import Bundle.AST (BundleType (..), WireType (..),Bundle(..))
 import Data.Either
@@ -6,15 +6,15 @@ import Index.AST
 import Index.Semantics
 import Lang.Type.AST
 import Lang.Type.Semantics
-import Lang.Unified.AST
-import Lang.Unified.Infer
+import Lang.Expr.AST
+import Lang.Analysis.Infer
 import Test.Hspec
 import qualified Circuit
-import Lang.Unified.Constant
-import Lang.Unified.Derivation
+import Lang.Expr.Constant
+import Lang.Analysis.Derivation
     ( emptyEnv, makeEnv, makeEnvForall, TypeError, TypingEnvironment )
 import Solving.CVC5 (withSolver, SolverHandle)
-import Lang.Unified.Pattern
+import Lang.Expr.Pattern
 
 -- | Helper function used specifically in a test environment. @runInferenceForTesting env expr qfh@ runs inference
 -- on @expr@ under environment @env@ using @qfh@ to access the solver. It returns 'Either' a 'TypeError' ('Left') or

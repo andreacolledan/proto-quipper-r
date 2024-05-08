@@ -1,4 +1,4 @@
-module Lang.Unified.Infer
+module Lang.Analysis.Infer
   ( runTypeInference,
     runTypeInferenceWith,
   )
@@ -14,10 +14,10 @@ import qualified Data.HashMap.Strict as Map
 import Index.AST
 import Lang.Type.AST
 import Lang.Type.Semantics
-import Lang.Unified.AST
-import Lang.Unified.Constant
-import Lang.Unified.Derivation
-import Lang.Unified.Pre
+import Lang.Expr.AST
+import Lang.Expr.Constant
+import Lang.Analysis.Derivation
+import Lang.Analysis.Pre
 import Control.Monad.Except
 import Solving.CVC5 (SolverHandle)
 import Control.Monad.IO.Class (liftIO)

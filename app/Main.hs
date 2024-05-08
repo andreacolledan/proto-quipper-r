@@ -3,8 +3,8 @@ module Main (main) where
 import Control.Monad (when)
 import Index.Semantics
 import Lang.Type.Semantics (simplifyType)
-import Lang.Unified.Infer
-import qualified Lang.Unified.Parse as U
+import Lang.Analysis.Infer
+import Lang.Expr.Parse
 import Options.Applicative
 import PrettyPrinter
 import Solving.CVC5
@@ -51,7 +51,7 @@ main = do
   CommandLineArguments {filepath = file, verbose = verb, debug = deb} <- execParser interface
   when verb $ putStrLn $ "Parsing " ++ file ++ "..."
   contents <- readFile file
-  case parse U.parseProgram "" contents of
+  case parse parseProgram "" contents of
     Left err -> print err
     Right ast -> do
       when verb $ do

@@ -1,5 +1,5 @@
 {-# LANGUAGE InstanceSigs #-}
-module Lang.Unified.AST (
+module Lang.Expr.AST (
   Expr(..),
   VariableId
 ) where
@@ -9,8 +9,8 @@ import Index.AST
 import Lang.Type.AST
 import Circuit ( Circuit )
 import PrettyPrinter (Pretty(..))
-import Lang.Unified.Constant
-import Lang.Unified.Pattern
+import Lang.Expr.Constant
+import Lang.Expr.Pattern
 import Lang.Type.Unify (HasType (..), TypeSubstitution, toBundleTypeSubstitution)
 import qualified Data.HashSet as Set
 import Data.List (intercalate)

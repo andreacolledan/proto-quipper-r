@@ -1,14 +1,14 @@
-module Lang.Unified.ParseSpec (spec) where
+module Lang.Expr.ParseSpec (spec) where
 
 import Bundle.AST (WireType (..), BundleType (..))
 import Index.AST
 import Lang.Type.AST
-import Lang.Unified.AST
-import Lang.Unified.Parse
+import Lang.Expr.AST
+import Lang.Expr.Parse
 import Test.Hspec
 import Text.Parsec
-import Lang.Unified.Constant
-import Lang.Unified.Pattern
+import Lang.Expr.Constant
+import Lang.Expr.Pattern
 
 spec :: Spec
 spec = do

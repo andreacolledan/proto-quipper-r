@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
-module Lang.Unified.Derivation
+module Lang.Analysis.Derivation
   ( TypeDerivation,
     TypeError (..),
     DerivationResult,
@@ -37,7 +37,7 @@ where
 import Bundle.AST ( Wide(..), Bundle, WireType, LabelId )
 import Bundle.Infer
 import Circuit
-import Control.Monad (unless, when)
+import Control.Monad ( unless, when, zipWithM, zipWithM_ )
 import Control.Monad.Error.Class
 import Control.Monad.State
 import qualified Data.HashMap.Strict as Map
@@ -45,16 +45,14 @@ import qualified Data.HashSet as Set
 import Index.AST
 import Lang.Type.AST
 import Lang.Type.Unify
-import Lang.Unified.AST
+import Lang.Expr.AST
 import PrettyPrinter
 import Control.Monad.Except
 import Control.Monad.Identity
 import Lang.Type.Semantics (checkSubtype)
 import Index.Semantics
 import Solving.CVC5 (SolverHandle)
-import Control.Monad.Extra (zipWithM_)
-import Lang.Unified.Pattern
-import Control.Monad (zipWithM)
+import Lang.Expr.Pattern
 
 --- TYPE DERIVATIONS MODULE --------------------------------------------------------------
 ---
@@ -316,7 +314,7 @@ makePatternBindings mqfh pat typ = unzip <$> go mqfh pat typ
       bindings1 <- go mqfh p1 typ1
       bindings2 <- go mqfh p2 (TList i typ1)
       return $ bindings1 ++ bindings2
-        
+
     go _ p t = throwLocalError $ PatternMismatch p t
 
 

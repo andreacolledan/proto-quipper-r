@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
-module Lang.Unified.Parse
+module Lang.Expr.Parse
   ( parseProgram
   )
 where
@@ -12,15 +12,15 @@ import Bundle.Parse
 import Data.Char
 import Index.Parse
 import Lang.Type.Parse
-import Lang.Unified.AST
-import Lang.Unified.Constant
+import Lang.Expr.AST
+import Lang.Expr.Constant
 import Text.Parsec
 import Text.Parsec.Expr
 import Text.Parsec.Language
 import Text.Parsec.String
 import Text.Parsec.Token
 import Control.Monad
-import Lang.Unified.Pattern
+import Lang.Expr.Pattern
 import PrettyPrinter
 import Data.List (intercalate)
 import Lang.Type.AST

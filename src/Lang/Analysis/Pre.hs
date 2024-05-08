@@ -1,4 +1,4 @@
-module Lang.Unified.Pre
+module Lang.Analysis.Pre
   ( annotateNil,
   )
 where
@@ -10,9 +10,9 @@ import Data.Either.Extra
 import Index.AST
 import Lang.Type.AST
 import Lang.Type.Unify
-import Lang.Unified.AST
-import Lang.Unified.Constant
-import Lang.Unified.Derivation
+import Lang.Expr.AST
+import Lang.Expr.Constant
+import Lang.Analysis.Derivation
 import Control.Monad.Error.Class
 import Data.Foldable
 import Control.Monad.Extra

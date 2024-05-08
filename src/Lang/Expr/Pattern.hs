@@ -1,4 +1,4 @@
-module Lang.Unified.Pattern where
+module Lang.Expr.Pattern where
 import PrettyPrinter
 import Data.List (intercalate)
 import Lang.Type.AST
